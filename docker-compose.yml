@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: risk_platform
+      POSTGRES_USER: risk_user
+      POSTGRES_PASSWORD: risk_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U risk_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ray-head:
+    build: .
+    command: ray start --head --port=6379 --dashboard-host=0.0.0.0
+    ports:
+      - "8265:8265"  # Ray dashboard
+      - "10001:10001"  # Ray client
+    environment:
+      - RAY_ADDRESS=ray://ray-head:10001
+    depends_on:
+      - redis
+
+  reg-calculator-api:
+    build:
+      context: .
+      dockerfile: apps/reg-calculator/Dockerfile
+    command: python -m apps.reg_calculator.api
+    ports:
+      - "8080:8080"
+    environment:
+      - RAY_ADDRESS=ray://ray-head:10001
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - postgres
+      - redis
+      - ray-head
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: apps/api-gateway/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://risk_user:risk_password@postgres:5432/risk_platform
+      - REDIS_URL=redis://redis:6379
+      - REG_CALCULATOR_URL=http://reg-calculator-api:8080
+      - USE_HTTP=true
+      - JWT_SECRET=change-me-in-production
+    depends_on:
+      - postgres
+      - redis
+      - reg-calculator-api
+
+volumes:
+  redis-data:
+  postgres-data:

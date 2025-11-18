@@ -1,0 +1,69 @@
+metadata:
+  scenario_id: "liquidity_stress"
+  name: "Liquidity Stress Scenario"
+  description: "Stress test for LCR and NSFR under liquidity stress"
+  author: "Liquidity Risk Team"
+  created_at: "2024-01-15T10:00:00Z"
+  tags:
+    - "liquidity"
+    - "lcr"
+    - "nsfr"
+  version: "1.0.0"
+
+portfolio:
+  portfolio_id: "demo_portfolio"
+  as_of_date: "2024-01-15T00:00:00Z"
+
+market_shocks:
+  - type: fx
+    asset_class: "eur_usd"
+    shock_value: -0.15
+    shock_type: "relative"
+    description: "15% EUR depreciation causing deposit outflows"
+    effective_date: "2024-01-15T00:00:00Z"
+
+regulatory_rules:
+  - framework: LCR
+    jurisdiction: US_FED
+    rule_version: "latest"
+    parameters:
+      min_lcr: 1.0
+    enabled: true
+  
+  - framework: NSFR
+    jurisdiction: US_FED
+    rule_version: "latest"
+    parameters:
+      min_nsfr: 1.0
+    enabled: true
+
+calculation_steps:
+  - step_id: "apply_liquidity_shocks"
+    step_type: "market_shock"
+    inputs: []
+    parameters: {}
+  
+  - step_id: "lcr_calc"
+    step_type: "regulatory_calculation"
+    inputs: ["apply_liquidity_shocks"]
+    parameters: {}
+    rule:
+      framework: LCR
+      jurisdiction: US_FED
+      rule_version: "latest"
+      enabled: true
+  
+  - step_id: "nsfr_calc"
+    step_type: "regulatory_calculation"
+    inputs: ["apply_liquidity_shocks"]
+    parameters: {}
+    rule:
+      framework: NSFR
+      jurisdiction: US_FED
+      rule_version: "latest"
+      enabled: true
+
+outputs:
+  - "lcr_calc"
+  - "nsfr_calc"
+

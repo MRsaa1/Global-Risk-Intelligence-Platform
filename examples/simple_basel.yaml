@@ -1,0 +1,39 @@
+metadata:
+  scenario_id: "simple_basel"
+  name: "Simple Basel IV Calculation"
+  description: "Basic Basel IV capital ratio calculation"
+  author: "Risk Team"
+  created_at: "2024-01-15T10:00:00Z"
+  tags:
+    - "basel"
+    - "capital"
+  version: "1.0.0"
+
+portfolio:
+  portfolio_id: "demo_portfolio"
+  as_of_date: "2024-01-15T00:00:00Z"
+
+market_shocks: []
+
+regulatory_rules:
+  - framework: BASEL_IV
+    jurisdiction: US_FED
+    rule_version: "latest"
+    parameters:
+      min_cet1_ratio: 0.045
+    enabled: true
+
+calculation_steps:
+  - step_id: "basel_iv_calc"
+    step_type: "regulatory_calculation"
+    inputs: []
+    parameters: {}
+    rule:
+      framework: BASEL_IV
+      jurisdiction: US_FED
+      rule_version: "latest"
+      enabled: true
+
+outputs:
+  - "basel_iv_calc"
+

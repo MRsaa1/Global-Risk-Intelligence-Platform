@@ -1,0 +1,48 @@
+{
+  "common": {
+    "dashboard": "Dashboard",
+    "scenarios": "Scenarios",
+    "calculations": "Calculations",
+    "portfolios": "Portfolios",
+    "settings": "Settings",
+    "logout": "Logout",
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "cancel": "Cancel",
+    "save": "Save",
+    "create": "Create",
+    "refresh": "Refresh"
+  },
+  "dashboard": {
+    "title": "Risk Intelligence Dashboard",
+    "welcome": "Welcome to Global Risk Platform",
+    "activeScenarios": "Active Scenarios",
+    "runningCalculations": "Running Calculations",
+    "completedCalculations": "Completed Calculations",
+    "portfolios": "Portfolios",
+    "metricsTrend": "Metrics Trend",
+    "recentActivity": "Recent Activity"
+  },
+  "scenarios": {
+    "title": "Scenarios",
+    "create": "Create Scenario",
+    "edit": "Edit Scenario",
+    "delete": "Delete",
+    "run": "Run",
+    "name": "Name",
+    "description": "Description",
+    "status": "Status",
+    "noScenarios": "No scenarios found",
+    "confirmDelete": "Are you sure you want to delete this scenario?"
+  },
+  "calculations": {
+    "create": "New Calculation",
+    "scenario": "Scenario",
+    "portfolio": "Portfolio",
+    "status": "Status",
+    "noCalculations": "No calculations found",
+    "cancel": "Cancel Calculation"
+  }
+}
+

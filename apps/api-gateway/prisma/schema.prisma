@@ -1,0 +1,86 @@
+// Prisma schema for API Gateway
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ScenarioStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum CalculationStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model Scenario {
+  scenarioId   String           @id @default(uuid()) @map("scenario_id")
+  name         String
+  description  String?          @db.Text
+  status       ScenarioStatus   @default(DRAFT)
+  scenarioData Json?            @map("scenario_data")
+  createdAt    DateTime         @default(now()) @map("created_at")
+  updatedAt    DateTime         @updatedAt @map("updated_at")
+  createdBy   String?          @map("created_by")
+
+  calculations Calculation[]
+
+  @@map("scenarios")
+}
+
+model Calculation {
+  calculationId String            @id @default(uuid()) @map("calculation_id")
+  scenarioId    String            @map("scenario_id")
+  portfolioId   String            @map("portfolio_id")
+  status       CalculationStatus @default(PENDING)
+  results      Json?
+  errorMessage String?           @db.Text @map("error_message")
+  createdAt    DateTime          @default(now()) @map("created_at")
+  startedAt    DateTime?         @map("started_at")
+  completedAt  DateTime?        @map("completed_at")
+  createdBy    String?          @map("created_by")
+
+  scenario Scenario @relation(fields: [scenarioId], references: [scenarioId], onDelete: Cascade)
+
+  @@map("calculations")
+}
+
+model Portfolio {
+  portfolioId      String   @id @default(uuid()) @map("portfolio_id")
+  portfolioName    String   @map("portfolio_name")
+  asOfDate        DateTime @map("as_of_date")
+  currency        String   @default("USD")
+  totalNotional   Float    @default(0) @map("total_notional")
+  totalMarketValue Float   @default(0) @map("total_market_value")
+  totalRwa        Float    @default(0) @map("total_rwa")
+  positionCount   Int      @default(0) @map("position_count")
+  portfolioData   Json?    @map("portfolio_data")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("portfolios")
+}
+
+model User {
+  userId        String   @id @default(uuid()) @map("user_id")
+  username      String   @unique
+  email         String   @unique
+  hashedPassword String? @map("hashed_password")
+  role          String   @default("user")
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
