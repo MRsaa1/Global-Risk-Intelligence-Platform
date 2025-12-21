@@ -10,7 +10,7 @@
 
 ## 🎯 Platform Overview
 
-**Global Risk Intelligence Platform** - The world's most comprehensive, auditable, and regulator-grade risk intelligence platform, rivaling Bloomberg Risk / MSCI RiskManager / Ortec. 
+**Global Risk Intelligence Platform** - The world's most comprehensive, auditable, and regulator-grade risk intelligence platform, comparable to institutional risk platforms such as Bloomberg Risk, MSCI RiskManager, and Ortec.
 
 **Targeting:** G-SIBs, multinational banks, central banks, insurers, asset managers, and cross-border fintechs.
 
@@ -18,7 +18,7 @@
 
 ## Vision
 
-Build the world's most comprehensive, auditable, and regulator-grade risk intelligence platform, rivaling Bloomberg Risk / MSCI RiskManager / Ortec. Targeting G-SIBs, multinational banks, central banks, insurers, asset managers, and cross-border fintechs.
+Build the world's most comprehensive, auditable, and regulator-grade risk intelligence platform, aligned with institutional-grade risk analytics standards. Targeting G-SIBs, multinational banks, central banks, insurers, asset managers, and cross-border fintechs.
 
 ## 🚀 Key Capabilities
 
@@ -115,6 +115,20 @@ CI/CD: GitHub Actions, ArgoCD, trunk-based + feature flags
     /data-cards      - Data lineage & quality cards
 ```
 
+## 🌐 Production Deployment
+
+**Production URL:** https://risk.saa-alliance.com
+
+### Access
+
+- **Web UI:** https://risk.saa-alliance.com
+- **API:** https://risk.saa-alliance.com/api
+- **Health Check:** https://risk.saa-alliance.com/health
+
+For production credentials and server management, contact system administrator.
+
+---
+
 ## Quick Start
 
 ### Prerequisites
@@ -177,27 +191,4 @@ print(results["lcr"])            # Post-stress LCR
 - CECL vs IFRS 9 parallel; Entity Resolution v1
 - AI Scenario Studio v1; Calc Graph Engine v1
 - **Exit**: Report parity ≥99.8%, p95 ≤90s
-
-### Phase 2 (Months 7-12) - Advanced Risk Stack
-- FRTB SA/IMA (PLA/NMRF), SA-CCR/IMM
-- Intraday Liquidity (BCBS 248), Payments/CLS
-- Model Risk Gov 3.0; RU i18n complete
-- **Exit**: 5+ concurrent regimes, p95 ≤60s, SOC 2 in progress
-
-### Phase 3 (Months 13-18) - Systemic & Optimization
-- Global Systemic Monitor; Cross-Jurisdiction Optimizer
-- **Exit**: 3-7% capital efficiency uplift, 99.95% availability
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development workflow, code standards, and testing requirements.
-
-## License
-
-Proprietary - All rights reserved
-
----
-
-**Owner:** Core Platform Team  
-**Contact:** platform-team@global-risk-intelligence.com
 
