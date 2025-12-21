@@ -10,7 +10,7 @@
 
 ## 🎯 Platform Overview
 
-**Global Risk Intelligence Platform** - The world's most comprehensive, auditable, and regulator-grade risk intelligence platform, comparable to institutional risk platforms such as Bloomberg Risk, MSCI RiskManager, and Ortec.
+**Global Risk Intelligence Platform** - The world's most comprehensive, auditable, and regulator-grade risk intelligence platform, comparable to institutional risk platforms such as Risk, MSCI RiskManager, and Ortec.
 
 **Targeting:** G-SIBs, multinational banks, central banks, insurers, asset managers, and cross-border fintechs.
 
