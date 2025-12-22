@@ -1,194 +1,155 @@
-# 🌐 Global Risk Intelligence Platform
+🌐 Global Risk Intelligence Platform
+Institutional-Grade Risk Analytics (Controlled Preview)
+Global Risk Intelligence Platform is an institutional-grade risk analytics and regulatory intelligence system designed to support advanced risk analysis, stress testing, and regulatory reporting workflows for financial institutions.
+The platform is part of the Scientific Analytics Alliance (SAA) ecosystem and operates in a controlled analytical preview mode.
 
-**Institutional-Grade Risk Analytics & Regulatory Compliance**
 
-**Version:** 1.0.0 (Phase 1 - MVP)  
-**Status:** Production Ready  
-**Languages:** EN (primary), RU (secondary in UI & docs)
+🔹 Platform Status
+Status: Production Analytics Engine (Controlled Access)
+Public Access: Read-only analytical preview
+Execution & Regulatory Runs: Restricted
+Target Users: Banks, financial institutions, regulators, professional risk teams
+Public access is provided for demonstration and evaluation of analytical capabilities only.
+Regulatory execution, stress testing, and distributed calculations are available under controlled institutional access.
 
----
 
-## 🎯 Platform Overview
+🎯 Platform Overview
+The Global Risk Intelligence Platform delivers a modular, auditable, and regulator-aligned framework for institutional risk analytics.
+It is architected to support:
+capital and liquidity analytics
+stress scenario modeling
+model governance and explainability
+multi-jurisdiction regulatory logic
+The platform is conceptually comparable to institutional risk solutions such as MSCI RiskManager and Ortec Financial, while emphasizing modern cloud-native and AI-enabled design.
 
-**Global Risk Intelligence Platform** - The world's most comprehensive, auditable, and regulator-grade risk intelligence platform, comparable to institutional risk platforms such as Risk, MSCI RiskManager, and Ortec.
 
-**Targeting:** G-SIBs, multinational banks, central banks, insurers, asset managers, and cross-border fintechs.
+🚀 Core Capabilities (Analytical Scope)
+📊 Regulatory Analytics Framework
+Basel-oriented capital and liquidity analytics (conceptual alignment)
+Stress-testing and scenario-based analysis
+Parallel analytical comparison of accounting and risk frameworks
+Multi-jurisdiction analytical logic (rules-as-code approach)
+⚠️ Regulatory calculations in public mode are illustrative and non-binding.
 
----
 
-## Vision
+🤖 AI-Assisted Scenario Design
+Natural-language-assisted scenario structuring
+AI-supported scenario description and validation
+Scenario versioning and analytical comparison
+AI components operate as decision-support tools, not autonomous decision makers.
 
-Build the world's most comprehensive, auditable, and regulator-grade risk intelligence platform, aligned with institutional-grade risk analytics standards. Targeting G-SIBs, multinational banks, central banks, insurers, asset managers, and cross-border fintechs.
 
-## 🚀 Key Capabilities
+🛡️ Model Risk & Explainability
+Model documentation and explainability concepts
+Transparent analytical logic and assumptions
+Versioned model artifacts and audit-friendly structure
 
-### 📊 **Regulatory Depth 3.0**
-Comprehensive regulatory framework support with multi-jurisdiction compliance.
-* Basel IV, FRTB SA/IMA, IRRBB+CSRBB, LCR/NSFR calculations
-* CECL vs IFRS 9 parallel processing
-* Multi-jurisdiction rules (FED/ECB/PRA/MAS/FINMA)
-* Hot-switchable regulatory regimes
 
-### 🤖 **AI Scenario Studio**
-Intelligent scenario generation with natural language processing.
-* Natural language → Structured scenarios
-* GPT-4 powered generation with fact-checking
-* Automated validation and consistency checks
-* Scenario versioning and management
+🔍 Entity & Relationship Analytics
+Conceptual entity resolution workflows
+Graph-based relationship modeling
+Compliance-oriented analytical views
 
-### 🛡️ **Model Risk Governance 3.0**
-Enterprise-grade model risk management and compliance.
-* SR 11-7 / ECB TRIM compliant registry
-* Model validation and documentation
-* Model cards and explainability (SHAP)
-* Audit trail and lineage tracking
 
-### 🔍 **Global Entity Resolution**
-Advanced entity identification and compliance screening.
-* LEI resolution and validation
-* Sanctions screening (OFAC/HMT/EU/UN)
-* UBO graph construction
-* Entity relationship mapping
+⚡ Distributed Risk Computation (Controlled)
+Parallelized analytical computation framework
+Deterministic and reproducible analytical runs
+Scalable architecture designed for large portfolios
+⚠️ Distributed execution is restricted and not publicly accessible.
 
-### ⚡ **Distributed Calculation Engine**
-High-performance distributed computing for large-scale risk calculations.
-* Ray/Dask on Kubernetes
-* Content-addressable caching
-* Deterministic & reproducible results
-* Sub-45s p95 latency for 100k positions
 
-### 🌍 **Multi-Jurisdiction Support**
-Seamless switching between regulatory regimes.
-* Rules-as-code architecture
-* Runtime jurisdiction switching
-* Versioned regulatory logic
-* Testable and auditable rules
+🏗 Architecture Principles
+Institution-first design: regulatory alignment and auditability
+Rules-as-code: versioned, testable analytical logic
+Deterministic analytics: reproducible results and lineage
+Security-aware architecture: access-controlled, zero-trust ready
+Observability: traceability of analytical workflows
 
-## Architecture Principles
 
-- **Global by default**: multi-jurisdiction, multi-entity, multi-currency
-- **Rules-as-code**: regulatory logic versioned, testable, runtime-switchable
-- **Deterministic & reproducible**: content-addressable cache, hash-pinned runs
-- **Security first**: zero-trust, BYOK/HSM, SOC 2 Type II / ISO 27001 pathway
-- **Observability**: golden signals (latency, errors, saturation, cost) + lineage
+🧠 Technology Overview (High-Level)
+Languages: Python (analytics), TypeScript (APIs), React (UI)
+Compute: Distributed task execution frameworks (controlled access)
+Data: Columnar data formats, analytical databases
+Observability: Metrics, logging, analytical lineage
+Security: Role-based access, audit trails, encrypted storage
+CI/CD: Automated testing and deployment pipelines
 
-## Technology Stack
 
-```yaml
-Languages: Python (calc, ML), TypeScript/Node (APIs), React + i18next (UI)
-Compute: Ray/Dask, Kubernetes, Redis/Memcached
-Data: Delta/Iceberg, Parquet, Kafka, Postgres
-Observability: OpenTelemetry, Prometheus, Grafana, Loki
-Security: OIDC/SAML, RBAC/ABAC, Vault/HSM
-CI/CD: GitHub Actions, ArgoCD, trunk-based + feature flags
-```
+Detailed infrastructure and deployment configurations are available only to authorized partners.
 
-## Directory Structure
+🌐 Analytical Preview Access
+Preview URL:
+https://risk.saa-alliance.com
+The public preview provides:
+Conceptual analytical dashboards
+Sample risk analytics outputs
+Visualization of analytical frameworks
+❗ No live regulatory execution, stress testing, or batch processing is exposed publicly.
 
-```
-/global-risk-platform
-  /apps              - Microservices & applications
-    /api-gateway     - FastAPI gateway with auth & routing
-    /reg-calculator  - Core regulatory calculations
-    /payments-risk   - Payment & settlement risk (Phase 2)
-    /scenario-studio - AI scenario generation & management
-    /control-tower   - Main UI (React + i18next)
-  /libs              - Shared libraries
-    /dsl-schema      - Scenario DSL v2 schemas & validators
-    /reg-rules       - Regulatory rules engine (Basel/FRTB/IRRBB/LCR)
-    /risk-models     - PD/LGD/EAD models, behavioral models
-    /xai             - Explainability (SHAP, model cards)
-    /entity-resolution - LEI/sanctions resolver
-  /infra             - Infrastructure as code
-    /k8s             - Kubernetes manifests
-    /terraform       - Cloud resources (multi-region)
-    /secrets         - Vault/HSM configs (gitignored)
-  /data              - Data schemas & quality
-    /schemas         - Data models (Parquet/Arrow/Iceberg)
-    /dq-rules        - BCBS 239 data quality rules
-  /tests             - Testing & validation
-    /backtesting     - Historical stress backtests
-    /conformance     - Regulatory report conformance tests
-  /docs              - Documentation
-    /runbooks        - Operational runbooks
-    /model-cards     - Model risk documentation
-    /data-cards      - Data lineage & quality cards
-```
 
-## 🌐 Production Deployment
+🔐 Access Model
+Public (Read-Only Preview)
+Viewing analytical dashboards
+Sample analytical outputs
+Platform overview and health status
+Restricted (Institutional Access)
+Regulatory stress testing
+Distributed risk calculations
+Scenario execution and comparison
+Model configuration and validation
+API write and execution operations
+Restricted access is granted only under institutional pilot agreements.
 
-**Production URL:** https://risk.saa-alliance.com
 
-### Access
+📡 API Access (Controlled)
+The platform is API-driven by design.
+Public API exposure is limited to status and informational endpoints
+Analytical execution endpoints are not publicly accessible
+Full API documentation is provided under NDA for pilots
 
-- **Web UI:** https://risk.saa-alliance.com
-- **API:** https://risk.saa-alliance.com/api
-- **Health Check:** https://risk.saa-alliance.com/health
 
-For production credentials and server management, contact system administrator.
+🧪 Performance Orientation (Design Targets)
+The platform is designed to support:
+interactive analytical workflows
+large-scale portfolio simulations
+multi-region deployment scenarios
+All performance figures referenced in internal documentation represent design targets, not public service guarantees.
 
----
 
-## Quick Start
+🔐 Security & Compliance Orientation
+Access-controlled architecture
+Data isolation and encryption
+Audit-ready analytical workflows
+Compliance alignment roadmap (SOC 2 / ISO-oriented)
 
-### Prerequisites
 
-- Python 3.11+
-- Node.js 20+ (for API gateway & UI)
-- Docker & Kubernetes (for distributed compute)
-- Ray cluster or local Ray instance
+🧭 Roadmap (High-Level)
+Phase 1 — Institutional Pilot
+Capital & liquidity analytics
+Scenario-based stress testing
+AI-assisted scenario structuring
+Explainability and lineage
+Phase 2 — Expanded Risk Domains
+Payment & settlement risk
+Cross-entity contagion analytics
+Advanced scenario orchestration
 
-### Installation
 
-```bash
-# Python dependencies
-cd global-risk-platform
-pip install -e ".[dev]"
+⚠️ Important Disclaimer
+This platform is provided for analytical, educational, and research purposes only.
+It does not provide regulatory advice, regulatory reporting, or binding compliance decisions in public preview mode.
 
-# Node dependencies (API Gateway)
-cd apps/api-gateway
-npm install
 
-# Start Ray cluster (local dev)
-ray start --head --port=6379
-```
+🌐 Part of the SAA Ecosystem
+The Global Risk Intelligence Platform is a core component of Scientific Analytics Alliance (SAA) —
+an ecosystem combining:
+institutional financial expertise
+quantitative risk analytics
+AI-assisted modeling
+enterprise-oriented system architecture
 
-### Run First Scenario
 
-```python
-from libs.dsl_schema import ScenarioDSL
-from apps.reg_calculator import DistributedCalculationEngine
-
-# Load scenario
-scenario = ScenarioDSL.from_yaml("examples/comprehensive_stress.yaml")
-
-# Execute
-engine = DistributedCalculationEngine(backend="ray")
-results = engine.execute(scenario, portfolio_id="demo_portfolio")
-
-print(results["capital_ratio"])  # Post-stress capital
-print(results["lcr"])            # Post-stress LCR
-```
-
-## Performance Targets (SLOs)
-
-- **Interactive Stress**: p95 ≤ 45s (100k positions)
-- **Regulatory Batch**: 10M positions ≤ 3.5h
-- **Availability**: 99.95% (multi-region active-active)
-- **RTO/RPO**: 30 min / 5 min (critical reports)
-
-## Security & Compliance
-
-- Zero-trust architecture, network micro-segmentation
-- BYOK/HSM support, optional confidential computing (SGX/SEV)
-- GDPR/CCPA/PIPL/LGPD data residency
-- SOC 2 Type II / ISO 27001 roadmap
-
-## Roadmap
-
-### Phase 1 (Months 1-6) - US & EU Pilot
-- CCAR/DFAST, ECB/EBA; IRRBB+CSRBB; LCR/NSFR
-- CECL vs IFRS 9 parallel; Entity Resolution v1
-- AI Scenario Studio v1; Calc Graph Engine v1
-- **Exit**: Report parity ≥99.8%, p95 ≤90s
+📬 Institutional Access
+For institutional pilots, technical discussions, or partnership inquiries:
+🌐 https://saa-alliance.com
 
