@@ -1,0 +1,131 @@
+# NVIDIA NIM Services for Earth-2 Climate Models
+# ================================================
+# 
+# ⚠️ IMPORTANT: These services require NVIDIA GPU with CUDA support!
+# - Works on: Linux/Windows servers with NVIDIA GPU
+# - Does NOT work on: Apple Silicon Macs (M1/M2/M3)
+#
+# For Apple Silicon Macs, use: ./scripts/setup-apple-silicon.sh
+# This will install PyTorch with MPS backend (Metal Performance Shaders)
+#
+# Requires: Docker with NVIDIA runtime, GPU with CUDA support
+
+services:
+  # FourCastNet - Weather Forecasting
+  fourcastnet:
+    image: nvcr.io/nim/nvidia/fourcastnet:latest
+    runtime: nvidia
+    ports:
+      - "8001:8000"
+    environment:
+      - NGC_API_KEY=${NGC_API_KEY}
+    shm_size: "4g"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/v1/health/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # CorrDiff - High-Resolution Climate Downscaling
+  corrdiff:
+    image: nvcr.io/nim/nvidia/corrdiff:latest
+    runtime: nvidia
+    ports:
+      - "8000:8000"
+    environment:
+      - NGC_API_KEY=${NGC_API_KEY}
+    shm_size: "4g"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/v1/health/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # FLUX.1-dev - Image Generation for REPORTER agent
+  flux:
+    image: nvcr.io/nim/black-forest-labs/flux.1-dev:latest
+    runtime: nvidia
+    ports:
+      - "8002:8000"
+    environment:
+      - NGC_API_KEY=${NGC_API_KEY}
+      - HF_TOKEN=${HF_TOKEN}
+      - NIM_MODEL_VARIANT=base
+    shm_size: "4g"
+    volumes:
+      - nim-cache:/opt/nim/.cache/
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/v1/health/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 180s  # FLUX takes longer to warm up
+
+  # DGL - Deep Graph Library for Graph Neural Networks
+  # Used for: Cascade prediction, Risk propagation, Network analysis
+  dgl:
+    image: nvcr.io/nvidia/dgl:25.08-py3
+    container_name: pfrp-dgl
+    runtime: nvidia
+    ports:
+      - "8888:8888"  # JupyterLab
+      - "8003:8003"  # API endpoint
+    environment:
+      - NGC_API_KEY=${NGC_API_KEY}
+      - NVIDIA_VISIBLE_DEVICES=all
+    shm_size: "8g"
+    volumes:
+      - dgl-models:/workspace/models
+      - dgl-data:/workspace/data
+      - ./apps/api/src/layers/gnn:/workspace/gnn  # GNN models source
+    working_dir: /workspace
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    # Start JupyterLab by default for development
+    command: >
+      bash -c "source /usr/local/nvm/nvm.sh && 
+               pip install fastapi uvicorn neo4j &&
+               jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8888"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+volumes:
+  nim-cache:
+  dgl-models:
+  dgl-data:
+
+networks:
+  default:
+    name: pfrp-nvidia
