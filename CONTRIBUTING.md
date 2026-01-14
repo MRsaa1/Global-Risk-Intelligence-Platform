@@ -1,132 +1,83 @@
-# Contributing to Global Risk Platform
+# Contributing to PHYSICAL-FINANCIAL RISK PLATFORM
 
-Thank you for your interest in contributing to the Global Risk Platform!
-
-## Development Workflow
+## Development Setup
 
 ### Prerequisites
-
 - Python 3.11+
 - Node.js 20+
 - Docker & Docker Compose
-- Kubernetes (for local testing)
-- Ray cluster (for distributed calculations)
+- Git
 
-### Setup
+### Initial Setup
 
-1. Clone the repository:
 ```bash
-git clone https://github.com/global-risk-platform/global-risk-platform.git
-cd global-risk-platform
-```
+# Clone repository
+git clone <repository-url>
+cd physical-financial-risk-platform
 
-2. Install Python dependencies:
-```bash
+# Create virtual environment
+python3 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install dependencies
 pip install -e ".[dev]"
+
+# Install Node dependencies
+cd apps/api-gateway && npm install && cd ../..
+cd apps/control-tower && npm install && cd ../..
 ```
 
-3. Install Node.js dependencies:
-```bash
-cd apps/api-gateway && npm install
-cd ../control-tower && npm install
-```
+### Running Locally
 
-4. Start local services:
 ```bash
+# Start infrastructure
 docker-compose up -d
-ray start --head --port=6379
+
+# Start services
+./start-local.sh
 ```
 
-### Code Standards
+## Code Standards
 
-#### Python
+### Python
+- Follow PEP 8
+- Use type hints
+- Format with Black
+- Lint with Ruff
+- Type check with mypy
 
-- Follow PEP 8 style guide
-- Use type hints for all functions
-- Maximum line length: 100 characters
-- Use `black` for formatting
-- Use `ruff` for linting
-- Use `mypy` for type checking
-
-```bash
-# Format code
-black .
-
-# Lint
-ruff check .
-
-# Type check
-mypy libs apps
-```
-
-#### TypeScript/JavaScript
-
-- Use TypeScript for all new code
+### TypeScript/JavaScript
+- Use TypeScript for new code
 - Follow ESLint rules
-- Use Prettier for formatting
-- Maximum line length: 100 characters
+- Format with Prettier
 
-```bash
-# Format
-npm run format
-
-# Lint
-npm run lint
-```
-
-### Testing
-
-All code must include tests:
+## Testing
 
 ```bash
 # Run Python tests
 pytest
 
 # Run with coverage
-pytest --cov=libs --cov=apps --cov-report=html
+pytest --cov
+
+# Run TypeScript tests
+cd apps/api-gateway && npm test
 ```
 
-### Commit Messages
+## Git Workflow
 
-Follow conventional commits:
-
-- `feat:` New feature
-- `fix:` Bug fix
-- `docs:` Documentation changes
-- `style:` Code style changes (formatting, etc.)
-- `refactor:` Code refactoring
-- `test:` Adding or updating tests
-- `chore:` Maintenance tasks
-
-Example:
-```
-feat(reg-rules): add FRTB IMA calculation support
-```
-
-### Pull Request Process
-
-1. Create a feature branch from `develop`
-2. Make your changes
+1. Create feature branch from `main`
+2. Make changes
 3. Write/update tests
 4. Ensure all tests pass
-5. Update documentation if needed
-6. Submit PR with clear description
+5. Submit pull request
 
-### Security
+## Commit Messages
 
-- Never commit secrets or credentials
-- Use environment variables for sensitive data
-- Follow zero-trust security principles
-- Report security issues to security@global-risk-intelligence.com
-
-## Architecture Guidelines
-
-- **Microservices**: Keep services independent and loosely coupled
-- **Rules-as-code**: All regulatory rules must be versioned and testable
-- **Deterministic**: All calculations must be reproducible
-- **Observable**: Include logging, metrics, and tracing
-
-## Questions?
-
-Contact the platform team at platform-team@global-risk-intelligence.com
-
+Use conventional commits:
+- `feat:` New feature
+- `fix:` Bug fix
+- `docs:` Documentation
+- `refactor:` Code refactoring
+- `test:` Tests
+- `chore:` Maintenance

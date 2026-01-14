@@ -1,178 +1,206 @@
-# 🌐 Global Risk Intelligence Platform
+# 🌍 PHYSICAL-FINANCIAL RISK PLATFORM
 
-> **NVIDIA Inception Program Approved** - Institutional-Grade Risk Analytics & Regulatory Compliance
-
-**Global Risk Intelligence Platform** is the world's most comprehensive, auditable, and regulator-grade risk intelligence platform. It provides institutional-grade risk analytics and regulatory compliance features with NVIDIA services integration for enhanced AI capabilities. Production-ready with advanced data quality rules and comprehensive risk intelligence framework.
-
-## 🎯 Overview
-
-Global Risk Intelligence Platform enables comprehensive risk management through:
-
-- **Comprehensive Risk Analytics** - Multi-dimensional risk assessment
-- **Regulatory Compliance** - Regulator-grade compliance features
-- **Data Quality Rules** - Advanced data validation and quality assurance
-- **NVIDIA AI Integration** - Enhanced AI capabilities for risk analysis
-- **Auditable Framework** - Complete audit trails and compliance reporting
-
-**Performance**: Production-ready, scalable architecture, 99.8% uptime.
-
-## 🚀 Core Capabilities
-
-### 📊 Risk Analytics
-
-- **Multi-Dimensional Risk Assessment** - Comprehensive risk evaluation
-- **Regulatory Compliance** - Regulator-grade compliance features
-- **Data Quality Assurance** - Advanced validation rules
-- **Risk Intelligence** - Comprehensive risk framework
-- **Audit Trails** - Complete compliance reporting
-
-### 🤖 AI-Powered Features
-
-- **NVIDIA API Integration** - Enhanced AI capabilities
-- **NVIDIA NIM** - Multiple NVIDIA models integration
-- **Advanced Analytics** - AI-powered risk insights
-- **Pattern Recognition** - Automated risk pattern detection
-
-## 🏗️ Architecture
-
-### Backend (Python)
-
-- **FastAPI** - Modern async web framework
-- **PostgreSQL** - Primary database
-- **Redis** - Caching and session management
-- **NVIDIA Services** - AI integration layer
-
-**Tech Stack**: Python, FastAPI, PostgreSQL, Redis, NVIDIA API, NVIDIA NIM
-
-### Frontend
-
-- **React** - Modern UI framework
-- **TypeScript** - Type-safe development
-- **Interactive Dashboards** - Risk visualization
-
-**Tech Stack**: React, TypeScript, Modern Web APIs
-
-### NVIDIA Technologies Integration
-
-- **NVIDIA API** - Primary AI provider
-- **NVIDIA NIM** - Multiple model integration
-- **Enhanced Analytics** - AI-powered risk insights
-
-## 🔧 Tech Stack
-
-### Backend Core
-- **Python 3.10+** - Modern Python
-- **FastAPI** - Web framework
-- **PostgreSQL** - Database
-- **Redis** - Caching
-
-### Frontend
-- **React** - UI library
-- **TypeScript** - Type safety
-
-### Infrastructure
-- **Docker** - Containerization
-- **Nginx** - Reverse proxy
-- **Systemd** - Service management
-
-## 🌐 Platform Access
-
-**Production URL**: [https://risk.saa-alliance.com](https://risk.saa-alliance.com)
-
-The platform provides:
-- Comprehensive risk analytics dashboard
-- Regulatory compliance interface
-- Data quality management
-- Audit and reporting tools
-
-## 📊 Features
-
-### Risk Management
-
-- **Comprehensive Risk Assessment** - Multi-dimensional analysis
-- **Regulatory Compliance** - Regulator-grade features
-- **Data Quality Rules** - Advanced validation
-- **Audit Framework** - Complete compliance reporting
-
-### AI Analytics
-
-- **NVIDIA AI Integration** - Enhanced capabilities
-- **Pattern Recognition** - Automated detection
-- **Risk Insights** - AI-powered analysis
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-- Python 3.10+
-- PostgreSQL 15+
-- Redis 7+
-- NVIDIA API Key (for AI features)
-
-### Installation
-
-```bash
-# Clone repository
-git clone https://github.com/MRsaa1/Global-Risk-Intelligence-Platform.git
-cd Global-Risk-Intelligence-Platform
-
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Configure environment
-cp .env.example .env
-# Set NVIDIA_API_KEY and database credentials
-
-# Initialize database
-alembic upgrade head
-
-# Start services
-uvicorn main:app --reload
-```
-
-## 📚 Documentation
-
-- [Architecture Overview](docs/ARCHITECTURE.md)
-- [API Documentation](docs/API.md)
-- [NVIDIA Integration](docs/NVIDIA.md)
-- [Deployment Guide](docs/DEPLOYMENT.md)
-
-## 🔒 Security
-
-- **Environment Variables** - All sensitive data in `.env` files
-- **No Hardcoded Keys** - All credentials are environment-based
-- **Input Validation** - Comprehensive data validation
-- **Audit Trails** - Complete compliance logging
-
-## ⚠️ Important Notice
-
-This platform is intended for research and analytical purposes. It does not provide investment advice or trading recommendations. All outputs require independent validation.
-
-## 🧩 SAA Ecosystem Integration
-
-Global Risk Intelligence Platform integrates with other SAA research platforms:
-
-- **ARIN Platform** - Multi-agent risk system
-- **SAA Risk Analyzer** - Portfolio risk management
-- **News Analytics AI** - News intelligence
-
-## 📬 Contact & Access
-
-For research collaboration, pilot access, or technical discussions:
-
-- **Website**: [https://saa-alliance.com](https://saa-alliance.com)
-- **GitHub**: [https://github.com/MRsaa1/Global-Risk-Intelligence-Platform](https://github.com/MRsaa1/Global-Risk-Intelligence-Platform)
-
-## 📄 License
-
-MIT License
+## The Operating System for the Physical Economy
 
 ---
 
-**Status**: Production Ready | **NVIDIA Inception Program**: Approved | **Version**: 1.0.0
+## 🎯 Vision
 
-**Made with ❤️ by Scientific Analytics Alliance**
+> **Каждому изменению в физической реальности ДОЛЖНО соответствовать изменение в финансовой модели. И наоборот. В реальном времени. Автоматически. Верифицируемо.**
+
+Платформа объединяет **3D Digital Twins** с **климатическими симуляциями**, **финансовыми моделями** и **сетью зависимостей** — впервые создавая непрерывную, верифицируемую связь между физической реальностью и финансовыми решениями.
+
+---
+
+## 🏗️ Architecture: Five Layers of Reality
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        LAYER 5: PROTOCOL (PARS)                      │
+│         Open standard for physical-financial data exchange           │
+└─────────────────────────────────────────────────────────────────────┘
+                                    ↑
+┌─────────────────────────────────────────────────────────────────────┐
+│                     LAYER 4: AUTONOMOUS AGENTS                       │
+│          AI agents: monitoring, prediction, recommendation           │
+└─────────────────────────────────────────────────────────────────────┘
+                                    ↑
+┌─────────────────────────────────────────────────────────────────────┐
+│                   LAYER 3: SIMULATION ENGINE                         │
+│        Physics + Climate + Economics + Cascade propagation           │
+└─────────────────────────────────────────────────────────────────────┘
+                                    ↑
+┌─────────────────────────────────────────────────────────────────────┐
+│                   LAYER 2: NETWORK INTELLIGENCE                      │
+│          Knowledge Graph of dependencies and relationships           │
+└─────────────────────────────────────────────────────────────────────┘
+                                    ↑
+┌─────────────────────────────────────────────────────────────────────┐
+│                 LAYER 1: LIVING DIGITAL TWINS                        │
+│            3D models with complete temporal history                  │
+└─────────────────────────────────────────────────────────────────────┘
+                                    ↑
+┌─────────────────────────────────────────────────────────────────────┐
+│                    LAYER 0: VERIFIED TRUTH                           │
+│           Cryptographic proofs of physical state                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🚀 Key Capabilities
+
+### Layer 0: Verified Truth
+- Cryptographically signed data provenance
+- Immutable audit trail
+- Court-admissible digital evidence
+
+### Layer 1: Living Digital Twins
+- 3D BIM model ingestion (IFC format)
+- Complete temporal history (past → present → futures)
+- Real-time IoT integration
+- Geometry, condition, exposures, financials
+
+### Layer 2: Network Intelligence
+- Knowledge Graph (Neo4j)
+- Hidden dependency discovery
+- Cascade risk modeling
+- Infrastructure interconnections
+
+### Layer 3: Simulation Engine
+- **Physics Engine**: Flood, structural, thermal, fire
+- **Climate Engine**: CMIP6 scenarios, acute/chronic hazards
+- **Economics Engine**: PD, LGD, climate-adjusted DCF
+- **Cascade Engine**: Monte Carlo propagation
+
+### Layer 4: Autonomous Agents
+- SENTINEL: 24/7 monitoring, anomaly detection
+- ANALYST: Deep dive, root cause analysis
+- ADVISOR: Recommendations, ROI evaluation
+- REPORTER: Automated report generation
+
+### Layer 5: Protocol (PARS)
+- Physical Asset Risk Schema
+- Industry standard (future ISO)
+- Interoperability across systems
+
+---
+
+## 🛠️ Technology Stack
+
+| Layer | Technology |
+|-------|------------|
+| **Frontend** | React 18 + TypeScript, Three.js/R3F, Deck.gl, TailwindCSS |
+| **Backend** | Python FastAPI, Celery + Redis, GraphQL |
+| **3D/BIM** | IFC.js, IfcOpenShell, Open3D |
+| **Database** | PostgreSQL + PostGIS, TimescaleDB, Neo4j, Redis, MinIO |
+| **AI/ML** | PyTorch, PyG (Graph Neural Networks), LangChain |
+| **Climate** | CMIP6, FEMA, NOAA, Copernicus |
+| **Infrastructure** | Docker, Kubernetes |
+
+---
+
+## 📁 Project Structure
+
+```
+/physical-financial-risk-platform
+├── apps/
+│   ├── api/                    # FastAPI Backend
+│   │   ├── src/
+│   │   │   ├── layers/         # 5 Layer implementations
+│   │   │   │   ├── verified_truth/
+│   │   │   │   ├── digital_twins/
+│   │   │   │   ├── network_intelligence/
+│   │   │   │   ├── simulation/
+│   │   │   │   └── agents/
+│   │   │   ├── api/            # REST + GraphQL endpoints
+│   │   │   ├── models/         # Database models
+│   │   │   ├── services/       # Business logic
+│   │   │   └── core/           # Config, security
+│   │   └── tests/
+│   │
+│   └── web/                    # React Frontend
+│       ├── src/
+│       │   ├── components/
+│       │   ├── features/
+│       │   ├── lib/
+│       │   └── pages/
+│       └── public/
+│
+├── libs/
+│   ├── pars-schema/            # PARS Protocol definitions
+│   ├── physics-engine/         # Physics simulations
+│   ├── climate-engine/         # Climate data & models
+│   ├── financial-models/       # PD, LGD, DCF
+│   └── graph-models/           # Network analysis
+│
+├── infra/
+│   ├── docker/
+│   ├── k8s/
+│   └── terraform/
+│
+├── data/
+│   ├── climate/                # Climate data cache
+│   ├── schemas/                # Data schemas
+│   └── samples/                # Sample BIM files
+│
+└── docs/
+    ├── architecture/
+    ├── api/
+    └── guides/
+```
+
+---
+
+## 🏃 Quick Start
+
+```bash
+# Clone
+git clone <repo>
+cd physical-financial-risk-platform
+
+# Start infrastructure
+docker-compose up -d
+
+# Backend
+cd apps/api
+pip install -e ".[dev]"
+uvicorn src.main:app --reload --port 9002
+
+# Frontend
+cd apps/web
+npm install
+npm run dev
+```
+
+---
+
+## 🌐 Access
+
+- **Web UI:** http://localhost:5173
+- **API:** http://localhost:9002
+- **API Docs:** http://localhost:9002/docs
+- **Neo4j Browser:** http://localhost:7474
+
+---
+
+## 📊 Market Opportunity
+
+- **TAM:** €4.7B/year
+- **Target:** €500M-1B ARR in 10 years
+- **Customers:** G-SIBs, Regional Banks, Insurance, Infrastructure Funds, REITs
+
+---
+
+## 🎯 Milestones
+
+- [ ] Month 1-2: Foundation + 3D Viewer
+- [ ] Month 3-4: Climate + Physics Simulation
+- [ ] Month 5-6: MVP + Alpha Users
+- [ ] Month 7-8: First Paying Customers
+- [ ] Month 9-12: Enterprise Features
+
+---
+
+**Version:** 0.1.0  
+**Status:** In Development

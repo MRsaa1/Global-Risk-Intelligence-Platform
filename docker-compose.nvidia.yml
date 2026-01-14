@@ -1,13 +1,4 @@
 # NVIDIA NIM Services for Earth-2 Climate Models
-# ================================================
-# 
-# ⚠️ IMPORTANT: These services require NVIDIA GPU with CUDA support!
-# - Works on: Linux/Windows servers with NVIDIA GPU
-# - Does NOT work on: Apple Silicon Macs (M1/M2/M3)
-#
-# For Apple Silicon Macs, use: ./scripts/setup-apple-silicon.sh
-# This will install PyTorch with MPS backend (Metal Performance Shaders)
-#
 # Requires: Docker with NVIDIA runtime, GPU with CUDA support
 
 services:
@@ -84,11 +75,11 @@ services:
       retries: 3
       start_period: 180s  # FLUX takes longer to warm up
 
-  # DGL - Deep Graph Library for Graph Neural Networks
+  # PyG - PyTorch Geometric for Graph Neural Networks
   # Used for: Cascade prediction, Risk propagation, Network analysis
-  dgl:
-    image: nvcr.io/nvidia/dgl:25.08-py3
-    container_name: pfrp-dgl
+  pyg:
+    image: nvcr.io/nvidia/pyg:25.11-py3
+    container_name: pfrp-pyg
     runtime: nvidia
     ports:
       - "8888:8888"  # JupyterLab
@@ -98,8 +89,8 @@ services:
       - NVIDIA_VISIBLE_DEVICES=all
     shm_size: "8g"
     volumes:
-      - dgl-models:/workspace/models
-      - dgl-data:/workspace/data
+      - pyg-models:/workspace/models
+      - pyg-data:/workspace/data
       - ./apps/api/src/layers/gnn:/workspace/gnn  # GNN models source
     working_dir: /workspace
     deploy:
@@ -109,10 +100,8 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-    # Start JupyterLab by default for development
     command: >
-      bash -c "source /usr/local/nvm/nvm.sh && 
-               pip install fastapi uvicorn neo4j &&
+      bash -c "pip install fastapi uvicorn neo4j &&
                jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8888"]
@@ -123,8 +112,8 @@ services:
 
 volumes:
   nim-cache:
-  dgl-models:
-  dgl-data:
+  pyg-models:
+  pyg-data:
 
 networks:
   default:

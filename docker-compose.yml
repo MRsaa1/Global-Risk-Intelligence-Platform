@@ -1,73 +1,142 @@
 version: '3.8'
 
 services:
+  # PostgreSQL with PostGIS for spatial data
+  postgres:
+    image: postgis/postgis:16-3.4-alpine
+    container_name: pfrp-postgres
+    environment:
+      POSTGRES_DB: physical_financial_risk
+      POSTGRES_USER: pfrp_user
+      POSTGRES_PASSWORD: pfrp_secret_2024
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/docker/init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pfrp_user -d physical_financial_risk"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # TimescaleDB for time-series data (IoT, sensors, history)
+  timescale:
+    image: timescale/timescaledb:latest-pg16
+    container_name: pfrp-timescale
+    environment:
+      POSTGRES_DB: timeseries
+      POSTGRES_USER: pfrp_user
+      POSTGRES_PASSWORD: pfrp_secret_2024
+    ports:
+      - "5433:5432"
+    volumes:
+      - timescale-data:/var/lib/postgresql/data
+
+  # Neo4j for Knowledge Graph (Network Intelligence)
+  neo4j:
+    image: neo4j:5.15-community
+    container_name: pfrp-neo4j
+    environment:
+      NEO4J_AUTH: neo4j/pfrp_graph_2024
+      NEO4J_PLUGINS: '["apoc", "graph-data-science"]'
+      NEO4J_dbms_security_procedures_unrestricted: apoc.*,gds.*
+    ports:
+      - "7474:7474"  # HTTP
+      - "7687:7687"  # Bolt
+    volumes:
+      - neo4j-data:/data
+      - neo4j-logs:/logs
+
+  # Redis for caching and Celery
   redis:
     image: redis:7-alpine
+    container_name: pfrp-redis
     ports:
       - "6379:6379"
     volumes:
       - redis-data:/data
     command: redis-server --appendonly yes
 
-  postgres:
-    image: postgres:16-alpine
+  # MinIO for object storage (BIM files, 3D models, reports)
+  minio:
+    image: minio/minio:latest
+    container_name: pfrp-minio
     environment:
-      POSTGRES_DB: risk_platform
-      POSTGRES_USER: risk_user
-      POSTGRES_PASSWORD: risk_password
+      MINIO_ROOT_USER: pfrp_minio
+      MINIO_ROOT_PASSWORD: pfrp_minio_secret_2024
     ports:
-      - "5432:5432"
+      - "9000:9000"   # API
+      - "9001:9001"   # Console
     volumes:
-      - postgres-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U risk_user"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - minio-data:/data
+    command: server /data --console-address ":9001"
 
-  ray-head:
-    build: .
-    command: ray start --head --port=6379 --dashboard-host=0.0.0.0
-    ports:
-      - "8265:8265"  # Ray dashboard
-      - "10001:10001"  # Ray client
-    environment:
-      - RAY_ADDRESS=ray://ray-head:10001
-    depends_on:
-      - redis
-
-  reg-calculator-api:
+  # API Gateway (FastAPI)
+  api:
     build:
       context: .
-      dockerfile: apps/reg-calculator/Dockerfile
-    command: python -m apps.reg_calculator.api
+      dockerfile: apps/api/Dockerfile
+    container_name: pfrp-api
     ports:
-      - "8080:8080"
+      - "9002:9002"
     environment:
-      - RAY_ADDRESS=ray://ray-head:10001
-      - REDIS_URL=redis://redis:6379
+      DATABASE_URL: postgresql://pfrp_user:pfrp_secret_2024@postgres:5432/physical_financial_risk
+      TIMESCALE_URL: postgresql://pfrp_user:pfrp_secret_2024@timescale:5432/timeseries
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: pfrp_graph_2024
+      REDIS_URL: redis://redis:6379
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: pfrp_minio
+      MINIO_SECRET_KEY: pfrp_minio_secret_2024
     depends_on:
-      - postgres
-      - redis
-      - ray-head
+      postgres:
+        condition: service_healthy
+      neo4j:
+        condition: service_started
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
+    volumes:
+      - ./apps/api:/app
+    command: uvicorn src.main:app --host 0.0.0.0 --port 9002 --reload
 
-  api-gateway:
+  # Celery Worker for background tasks
+  celery-worker:
     build:
       context: .
-      dockerfile: apps/api-gateway/Dockerfile
-    ports:
-      - "8000:8000"
+      dockerfile: apps/api/Dockerfile
+    container_name: pfrp-celery-worker
     environment:
-      - DATABASE_URL=postgresql://risk_user:risk_password@postgres:5432/risk_platform
-      - REDIS_URL=redis://redis:6379
-      - REG_CALCULATOR_URL=http://reg-calculator-api:8080
-      - USE_HTTP=true
-      - JWT_SECRET=change-me-in-production
+      DATABASE_URL: postgresql://pfrp_user:pfrp_secret_2024@postgres:5432/physical_financial_risk
+      REDIS_URL: redis://redis:6379
+      MINIO_ENDPOINT: minio:9000
     depends_on:
-      - postgres
       - redis
-      - reg-calculator-api
+      - postgres
+    volumes:
+      - ./apps/api:/app
+    command: celery -A src.core.celery_app worker --loglevel=info
+
+  # Web Frontend (React + Vite)
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: pfrp-web
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./apps/web:/app
+      - /app/node_modules
+    command: npm run dev -- --host 0.0.0.0
 
 volumes:
-  redis-data:
   postgres-data:
+  timescale-data:
+  neo4j-data:
+  neo4j-logs:
+  redis-data:
+  minio-data:

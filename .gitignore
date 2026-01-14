@@ -16,8 +16,6 @@ parts/
 sdist/
 var/
 wheels/
-pip-wheel-metadata/
-share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
@@ -26,17 +24,23 @@ MANIFEST
 .coverage
 htmlcov/
 .tox/
-.mypy_cache/
-.dmypy.json
-dmypy.json
-.pyre/
-.pytype/
-
-# Virtual environments
+.venv
 venv/
-env/
 ENV/
-.venv/
+env/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.npm
+.eslintcache
+dist/
+build/
+.next/
+out/
 
 # IDEs
 .vscode/
@@ -46,65 +50,29 @@ ENV/
 *~
 .DS_Store
 
-# Node.js
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-.npm/
-.yarn/
-dist/
-build/
-
-# Environment variables & Secrets
+# Environment
 .env
 .env.local
-.env.*
-*.env
-*.key
-*.pem
-*.crt
-*.p12
-*.secret
-secrets/
-**/secrets/
-config/secrets/
-infra/secrets/*
-!infra/secrets/.gitkeep
-*.jwt
-jwt_secret*
-
-# Data
-*.parquet
-*.arrow
-*.delta
-data/raw/
-data/processed/
-*.db
-*.sqlite
+.env.*.local
 
 # Logs
 *.log
 logs/
-*.log.*
+*.pid
 
-# Ray
-ray_results/
-ray-*.log
+# Database
+*.db
+*.sqlite
+*.sqlite3
 
-# Jupyter
-.ipynb_checkpoints/
-*.ipynb
+# Docker
+.dockerignore
 
-# Terraform
-.terraform/
-*.tfstate
-*.tfstate.*
-.terraform.lock.hcl
-
-# Kubernetes
-*.kubeconfig
+# Secrets
+secrets/
+*.key
+*.pem
+*.cert
 
 # Temporary files
 tmp/
@@ -114,4 +82,3 @@ temp/
 # OS
 Thumbs.db
 .DS_Store
-
