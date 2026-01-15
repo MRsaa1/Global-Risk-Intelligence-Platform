@@ -354,11 +354,11 @@ export default function RiskFlowDiagram({
   )
 }
 
-// Compact version for inline display
+// Compact version for inline display (doubled height for better visibility)
 export function RiskFlowMini({ 
   riskZones,
   stressTestResults,
-  height = 200 
+  height = 400 
 }: { 
   riskZones?: Array<{ name: string; risk: number; exposure: number }>
   stressTestResults?: {
