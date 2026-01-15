@@ -73,6 +73,7 @@ python3 -m venv .venv 2>/dev/null || python -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
 pip install -e . --quiet
+pip install aiosqlite email-validator --quiet
 echo "Backend dependencies installed"
 
 # Frontend
