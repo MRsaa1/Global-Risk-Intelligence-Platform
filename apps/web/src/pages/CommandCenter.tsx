@@ -3893,6 +3893,20 @@ export default function CommandCenter() {
         }}
         onDigitalTwin={() => {
           console.log('Action: Digital Twin')
+          // If no city is selected, use focused hotspot or set a default
+          if (!selectedZoneAsset && focusedHotspot) {
+            const coords = findCityCoordinates(focusedHotspot.id)
+            if (coords) {
+              setSelectedZoneAsset({
+                id: focusedHotspot.id,
+                name: focusedHotspot.name,
+                type: 'city',
+                latitude: coords.lat,
+                longitude: coords.lng,
+                impactSeverity: focusedHotspot.intensity,
+              })
+            }
+          }
           setShowDigitalTwin(true)
         }}
         onResetView={() => {

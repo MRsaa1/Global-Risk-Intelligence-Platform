@@ -17,6 +17,10 @@ from .endpoints import (
     geodata,
     stress_tests,
     historical_events,
+    platform,
+    alerts,
+    predictions,
+    whatif,
 )
 
 api_router = APIRouter()
@@ -121,4 +125,32 @@ api_router.include_router(
 api_router.include_router(
     historical_events.router,
     tags=["Historical Events"],
+)
+
+# Platform Status (all layers)
+api_router.include_router(
+    platform.router,
+    prefix="/platform",
+    tags=["Platform Status"],
+)
+
+# Real-time Alerts (SENTINEL)
+api_router.include_router(
+    alerts.router,
+    prefix="/alerts",
+    tags=["Real-time Alerts"],
+)
+
+# Predictive Analytics (ML)
+api_router.include_router(
+    predictions.router,
+    prefix="/predictions",
+    tags=["Predictive Analytics"],
+)
+
+# What-If Simulator & Cascade Analysis
+api_router.include_router(
+    whatif.router,
+    prefix="/whatif",
+    tags=["What-If Simulator"],
 )

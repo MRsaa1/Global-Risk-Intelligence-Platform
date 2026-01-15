@@ -45,6 +45,15 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"Knowledge Graph initialization failed: {e}")
         
+        # Start SENTINEL monitoring (optional - can be started via API)
+        try:
+            from src.api.v1.endpoints.alerts import start_monitoring
+            # Uncomment to auto-start monitoring on startup:
+            # await start_monitoring()
+            logger.info("SENTINEL monitoring service ready")
+        except Exception as e:
+            logger.warning(f"SENTINEL initialization failed: {e}")
+        
     except Exception as e:
         logger.error("Failed to initialize databases", error=str(e))
         # Continue anyway for development
@@ -53,6 +62,14 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     logger.info("Shutting down...")
+    
+    # Stop SENTINEL monitoring
+    try:
+        from src.api.v1.endpoints.alerts import stop_monitoring
+        await stop_monitoring()
+    except Exception as e:
+        logger.warning(f"SENTINEL shutdown error: {e}")
+    
     await close_databases()
 
 

@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.database import get_db
 from src.services.nvidia_llm import llm_service, LLMModel
 from src.services.risk_zone_calculator import risk_zone_calculator, EventCategory
+from src.services.nvidia_stress_pipeline import nvidia_stress_pipeline, NVIDIAEnhancedResult
 from src.models.stress_test import (
     StressTest,
     StressTestType,
@@ -496,6 +497,7 @@ class QuickStressTestRequest(BaseModel):
     event_id: str = Field(..., description="Event identifier (e.g., 'flood-scenario', 'basel-liquidity')")
     severity: float = Field(0.5, ge=0.0, le=1.0, description="Severity multiplier")
     use_llm: bool = Field(True, description="Generate LLM-powered executive summary")
+    use_nvidia_pipeline: bool = Field(False, description="Use full NVIDIA pipeline (Earth-2 + PhysicsNeMo)")
 
 
 class QuickZoneResponse(BaseModel):
@@ -510,12 +512,54 @@ class QuickZoneResponse(BaseModel):
     recommendations: List[str]
 
 
+class NVIDIAPipelineInfo(BaseModel):
+    """NVIDIA pipeline execution info."""
+    stages_completed: List[str]
+    services_used: List[str]
+    execution_time_ms: int
+    all_mock: bool
+    confidence_score: float
+    weather_adjusted_severity: Optional[float] = None
+
+
 class MitigationActionResponse(BaseModel):
     """Mitigation action in response."""
     action: str
     priority: str
     cost: Optional[float] = None
     risk_reduction: Optional[float] = None
+
+
+class NVIDIAEnhancedRequest(BaseModel):
+    """Request for NVIDIA-enhanced stress test."""
+    city_name: str = Field(..., description="Name of the city")
+    center_latitude: float = Field(..., ge=-90, le=90)
+    center_longitude: float = Field(..., ge=-180, le=180)
+    event_type: str = Field(..., description="Event type: flood, seismic, fire, financial, etc.")
+    severity: float = Field(0.5, ge=0.0, le=1.0)
+    run_physics: bool = Field(True, description="Run physics simulations")
+    run_llm: bool = Field(True, description="Generate LLM analysis")
+
+
+class NVIDIAEnhancedResponse(BaseModel):
+    """Response for NVIDIA-enhanced stress test."""
+    id: str
+    event_name: str
+    event_type: str
+    city_name: str
+    severity: float
+    adjusted_severity: float
+    timestamp: str
+    total_loss: float
+    total_buildings_affected: int
+    total_population_affected: int
+    zones: List[QuickZoneResponse]
+    executive_summary: Optional[str] = None
+    mitigation_actions: List[MitigationActionResponse]
+    data_sources: List[str]
+    nvidia_pipeline: NVIDIAPipelineInfo
+    weather_context: Optional[dict] = None
+    physics_context: Optional[dict] = None
 
 
 class QuickStressTestResponse(BaseModel):
@@ -755,6 +799,187 @@ Write in English only."""
         ],
         data_sources=result.data_sources,
         llm_generated=llm_generated,
+    )
+
+
+@router.post("/execute/nvidia", response_model=NVIDIAEnhancedResponse)
+async def execute_nvidia_enhanced_stress_test(
+    request: NVIDIAEnhancedRequest,
+    session: AsyncSession = Depends(get_db),
+):
+    """
+    Execute NVIDIA-enhanced stress test with full pipeline.
+    
+    This endpoint uses the complete NVIDIA stack:
+    1. **Earth-2 FourCastNet** - Weather forecast for location
+    2. **PhysicsNeMo** - Physics-based simulations (flood/seismic/fire)
+    3. **LLM (Llama 3.1)** - Intelligent analysis and recommendations
+    
+    All services have automatic fallback to mock data if API unavailable.
+    The response includes detailed pipeline execution info.
+    """
+    from src.services.risk_zone_calculator import get_event_category
+    logger = logging.getLogger(__name__)
+    
+    # Determine event category
+    event_type = get_event_category(request.event_type)
+    
+    # Run NVIDIA pipeline
+    pipeline_result = await nvidia_stress_pipeline.execute(
+        latitude=request.center_latitude,
+        longitude=request.center_longitude,
+        event_type=event_type,
+        severity=request.severity,
+        city_name=request.city_name,
+        run_physics=request.run_physics,
+        run_llm=request.run_llm,
+    )
+    
+    # Use adjusted severity from pipeline
+    adjusted_severity = pipeline_result.weather_adjusted_severity
+    
+    # Calculate risk zones with adjusted severity
+    zones_result = risk_zone_calculator.calculate(
+        center_lat=request.center_latitude,
+        center_lng=request.center_longitude,
+        event_id=request.event_type,
+        severity=adjusted_severity,
+        city_name=request.city_name,
+    )
+    
+    # Merge pipeline data sources with zone data sources
+    all_data_sources = list(set(zones_result.data_sources + pipeline_result.data_sources))
+    
+    # Use LLM summary if available, otherwise use default
+    executive_summary = pipeline_result.executive_summary
+    
+    # Use LLM recommendations if available
+    if pipeline_result.mitigation_recommendations:
+        mitigation_actions = [
+            {
+                "action": action,
+                "priority": "urgent" if i < 2 else "high" if i < 4 else "medium",
+                "cost": round(10 - i * 1.5, 1),
+                "risk_reduction": round(35 - i * 5),
+            }
+            for i, action in enumerate(pipeline_result.mitigation_recommendations)
+        ]
+    else:
+        mitigation_actions = zones_result.mitigation_actions
+    
+    # Save to database
+    test_id = str(uuid4())
+    
+    stress_test = StressTest(
+        id=test_id,
+        name=zones_result.event_name,
+        description=f"NVIDIA-enhanced stress test for {request.city_name}",
+        test_type=event_type.value,
+        status=StressTestStatus.COMPLETED.value,
+        center_latitude=request.center_latitude,
+        center_longitude=request.center_longitude,
+        radius_km=max(z.radius for z in zones_result.zones) / 1000 if zones_result.zones else 1.0,
+        region_name=request.city_name,
+        severity=adjusted_severity,
+        probability=0.5,
+        time_horizon_months=12,
+        affected_assets_count=zones_result.total_buildings_affected,
+        total_exposure=zones_result.total_loss * 1000000,
+        expected_loss=zones_result.total_loss * 1000000,
+    )
+    session.add(stress_test)
+    
+    # Create risk zones
+    for zone in zones_result.zones:
+        risk_zone = RiskZone(
+            id=str(uuid4()),
+            stress_test_id=test_id,
+            zone_level=zone.risk_level.value,
+            center_latitude=zone.position["lat"],
+            center_longitude=zone.position["lng"],
+            radius_km=zone.radius / 1000,
+            risk_score={"critical": 0.9, "high": 0.7, "medium": 0.5, "low": 0.3}.get(zone.risk_level.value, 0.5),
+            affected_assets_count=zone.affected_buildings,
+            total_exposure=zone.estimated_loss * 1000000,
+            expected_loss=zone.estimated_loss * 1000000,
+            name=zone.label,
+        )
+        session.add(risk_zone)
+    
+    await session.commit()
+    
+    logger.info(
+        "NVIDIA-enhanced stress test completed",
+        city=request.city_name,
+        event_type=event_type.value,
+        services_used=len(pipeline_result.nvidia_services_used),
+        all_mock=pipeline_result.all_mock,
+    )
+    
+    # Prepare weather context dict
+    weather_ctx = None
+    if pipeline_result.weather_context:
+        wc = pipeline_result.weather_context
+        weather_ctx = {
+            "temperature_c": wc.temperature_c,
+            "precipitation_mm": wc.precipitation_mm,
+            "wind_speed_ms": wc.wind_speed_ms,
+            "humidity_percent": wc.humidity_percent,
+            "extreme_weather": wc.extreme_weather,
+            "is_mock": wc.is_mock,
+        }
+    
+    # Prepare physics context dict
+    physics_ctx = None
+    if pipeline_result.physics_context:
+        pc = pipeline_result.physics_context
+        physics_ctx = {
+            "flood_depth_m": pc.flood_depth_m,
+            "flood_velocity_ms": pc.flood_velocity_ms,
+            "seismic_magnitude": pc.seismic_magnitude,
+            "seismic_damage_ratio": pc.seismic_damage_ratio,
+            "is_mock": pc.is_mock,
+        }
+    
+    return NVIDIAEnhancedResponse(
+        id=test_id,
+        event_name=zones_result.event_name,
+        event_type=event_type.value,
+        city_name=request.city_name,
+        severity=request.severity,
+        adjusted_severity=adjusted_severity,
+        timestamp=zones_result.timestamp,
+        total_loss=zones_result.total_loss,
+        total_buildings_affected=zones_result.total_buildings_affected,
+        total_population_affected=zones_result.total_population_affected,
+        zones=[
+            QuickZoneResponse(
+                label=z.label,
+                risk_level=z.risk_level.value,
+                position=z.position,
+                radius=z.radius,
+                affected_buildings=z.affected_buildings,
+                estimated_loss=z.estimated_loss,
+                population_affected=z.population_affected,
+                recommendations=z.recommendations,
+            )
+            for z in zones_result.zones
+        ],
+        executive_summary=executive_summary,
+        mitigation_actions=[
+            MitigationActionResponse(**action) for action in mitigation_actions
+        ],
+        data_sources=all_data_sources,
+        nvidia_pipeline=NVIDIAPipelineInfo(
+            stages_completed=pipeline_result.pipeline_stages,
+            services_used=pipeline_result.nvidia_services_used,
+            execution_time_ms=pipeline_result.execution_time_ms,
+            all_mock=pipeline_result.all_mock,
+            confidence_score=pipeline_result.confidence_score,
+            weather_adjusted_severity=adjusted_severity,
+        ),
+        weather_context=weather_ctx,
+        physics_context=physics_ctx,
     )
 
 

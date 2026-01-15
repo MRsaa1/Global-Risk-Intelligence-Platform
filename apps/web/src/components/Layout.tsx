@@ -7,6 +7,7 @@ import {
   ArrowRightOnRectangleIcon,
   ChartBarIcon,
   GlobeAltIcon,
+  CpuChipIcon,
 } from '@heroicons/react/24/outline'
 import { authService } from '../lib/auth'
 import FeedbackButton from './FeedbackButton'
@@ -14,6 +15,7 @@ import FeedbackButton from './FeedbackButton'
 const navigation = [
   { name: 'Command Center', href: '/command', icon: GlobeAltIcon },
   { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
+  { name: 'Analytics', href: '/analytics', icon: CpuChipIcon },
   { name: 'Risk Flow', href: '/visualizations', icon: ChartBarIcon },
   { name: 'Settings', href: '/settings', icon: Cog6ToothIcon },
 ]

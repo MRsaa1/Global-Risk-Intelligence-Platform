@@ -233,6 +233,7 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
   const [showTestSelector, setShowTestSelector] = useState(false)
   const [selectedTestType, setSelectedTestType] = useState<'current' | 'forecast'>('current')
   const [selectedScenario, setSelectedScenario] = useState<string>('')
+  const [isExportingPDF, setIsExportingPDF] = useState(false)
   
   // Available stress test scenarios
   const currentScenarios = [
@@ -273,15 +274,18 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
   // Check if city has premium 3D model
   const isPremiumCity = normalizedCityId && PREMIUM_CITIES.has(normalizedCityId)
   
-  // Log for debugging
-  console.log('DigitalTwin Mode Detection:', {
-    dynamicAsset: dynamicAsset ? { id: dynamicAsset.id, name: dynamicAsset.name, lat: dynamicAsset.latitude, lng: dynamicAsset.longitude } : null,
-    assetId,
-    effectiveCityId,
-    normalizedCityId,
-    isPremiumCity,
-    premiumCities: Array.from(PREMIUM_CITIES),
-  })
+  // Log for debugging (only when panel is open to avoid spam)
+  useEffect(() => {
+    if (isOpen) {
+      console.log('DigitalTwin Mode Detection:', {
+        dynamicAsset: dynamicAsset ? { id: dynamicAsset.id, name: dynamicAsset.name, lat: dynamicAsset.latitude, lng: dynamicAsset.longitude } : null,
+        assetId,
+        effectiveCityId,
+        normalizedCityId,
+        isPremiumCity,
+      })
+    }
+  }, [isOpen, dynamicAsset, assetId, effectiveCityId, normalizedCityId, isPremiumCity])
   
   // Mode determination:
   // - useCesiumMode: Use dedicated Cesium Ion 3D photogrammetry model (premium cities)
@@ -296,7 +300,7 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
       // Check if this dynamic asset is for a premium city
       if (isPremiumCity && CITY_DATA[normalizedCityId]) {
         const premiumCity = CITY_DATA[normalizedCityId]
-        console.log('Using PREMIUM city model for:', normalizedCityId, 'Asset ID:', premiumCity.cesiumAssetId)
+        // Premium city model - logged via useEffect when panel opens
         return {
           city: {
             ...premiumCity,
@@ -309,7 +313,6 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
       }
       
       // Non-premium city - use OSM Buildings with dynamic coordinates
-      console.log('Using OSM Buildings for:', dynamicAsset.name, 'at', dynamicAsset.latitude, dynamicAsset.longitude)
       return {
         city: {
           id: dynamicAsset.id,
@@ -345,14 +348,12 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
     if (assetId) {
       const key = assetId.toLowerCase().replace(/[^a-z]/g, '')
       if (CITY_DATA[key]) {
-        console.log('Using PREMIUM city from assetId:', key)
         return { city: CITY_DATA[key] }
       }
-      // Non-premium city by assetId - use default
-      console.log('assetId not in CITY_DATA, using default:', key)
+      // Non-premium city by assetId - falls through to default
     }
     
-    console.log('Using DEFAULT_CITY (New York)')
+    // Only log when panel is actually open (handled in useEffect above)
     return { city: DEFAULT_CITY }
   })()
 
@@ -569,6 +570,67 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
     }
   }, [isOpen, dynamicAsset?.id, assetId])
 
+  // Function to export stress test report to PDF
+  const exportToPDF = useCallback(async () => {
+    if (!stressTestReport) return
+    
+    setIsExportingPDF(true)
+    
+    try {
+      // Prepare data for PDF API
+      const pdfRequest = {
+        test_name: stressTestReport.eventName,
+        city_name: stressTestReport.cityName,
+        test_type: stressTestReport.eventType,
+        severity: stressTestReport.zones.length > 0 
+          ? Math.max(...stressTestReport.zones.map(z => z.riskLevel === 'critical' ? 0.9 : z.riskLevel === 'high' ? 0.7 : z.riskLevel === 'medium' ? 0.5 : 0.3))
+          : 0.5,
+        zones: stressTestReport.zones.map(z => ({
+          name: z.name,
+          zone_level: z.riskLevel,
+          affected_assets_count: z.buildingsAffected,
+          expected_loss: z.estimatedLoss,
+          population_affected: z.populationAffected,
+        })),
+        actions: stressTestReport.mitigationActions.map(a => ({
+          title: a.action,
+          priority: a.priority,
+          estimated_cost: a.cost,
+          risk_reduction: a.riskReduction,
+          timeline: a.priority === 'urgent' ? 'Immediate' : a.priority === 'high' ? '1-2 months' : '3-6 months',
+        })),
+        executive_summary: stressTestReport.executiveSummary,
+      }
+      
+      const response = await fetch('/api/v1/stress/report/pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(pdfRequest),
+      })
+      
+      if (!response.ok) {
+        throw new Error(`PDF generation failed: ${response.statusText}`)
+      }
+      
+      // Download the PDF
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `stress_test_${stressTestReport.cityName.replace(/\s+/g, '_')}_${stressTestReport.eventType}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      
+    } catch (error) {
+      console.error('PDF export failed:', error)
+      alert('PDF export failed. Please try again.')
+    } finally {
+      setIsExportingPDF(false)
+    }
+  }, [stressTestReport])
+  
   // Function to run stress test and highlight risk zones
   // NOW USES BACKEND API for calculation and LLM integration
   const runStressTest = useCallback(async () => {

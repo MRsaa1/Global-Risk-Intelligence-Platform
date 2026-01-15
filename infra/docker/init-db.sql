@@ -1,8 +1,11 @@
 -- Initialize Physical-Financial Risk Platform Database
+-- PostGIS enabled for spatial risk zone queries
 
 -- Enable extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "postgis";
+CREATE EXTENSION IF NOT EXISTS "postgis_topology";
+CREATE EXTENSION IF NOT EXISTS "fuzzystrmatch";  -- For geocoding
 
 -- Create schemas
 CREATE SCHEMA IF NOT EXISTS core;

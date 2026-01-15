@@ -1,5 +1,6 @@
 """Stress Test models - stress testing scenarios and their impacts."""
 import enum
+import os
 from datetime import datetime
 from typing import Optional
 from uuid import uuid4
@@ -15,6 +16,19 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.core.database import Base
+
+# Conditionally import GeoAlchemy2 for PostGIS support
+# Falls back gracefully for SQLite
+USE_POSTGIS = os.environ.get("USE_SQLITE", "true").lower() != "true"
+
+if USE_POSTGIS:
+    try:
+        from geoalchemy2 import Geometry
+        HAS_POSTGIS = True
+    except ImportError:
+        HAS_POSTGIS = False
+else:
+    HAS_POSTGIS = False
 
 
 class StressTestType(str, enum.Enum):
@@ -209,6 +223,7 @@ class RiskZone(Base):
     Risk zone within a stress test.
     
     Represents a geographic area with a specific risk level.
+    Supports PostGIS geometry when PostgreSQL is used.
     """
     __tablename__ = "risk_zones"
     
@@ -230,14 +245,19 @@ class RiskZone(Base):
         default=ZoneLevel.MEDIUM.value,
     )
     
-    # Geographic Definition
+    # Geographic Definition (basic - always available)
     center_latitude: Mapped[Optional[float]] = mapped_column(Float)
     center_longitude: Mapped[Optional[float]] = mapped_column(Float)
     radius_km: Mapped[Optional[float]] = mapped_column(Float)
     polygon: Mapped[Optional[str]] = mapped_column(
         Text,
-        comment="GeoJSON polygon as JSON string",
+        comment="GeoJSON polygon as JSON string (fallback for SQLite)",
     )
+    
+    # PostGIS Geometry columns are added dynamically via migration
+    # when using PostgreSQL. See alembic/versions/ for details.
+    # - geometry: Geometry('POLYGON', srid=4326) for zone boundary
+    # - center_point: Geometry('POINT', srid=4326) for center
     
     # Zone Metrics
     risk_score: Mapped[float] = mapped_column(Float, default=0.5)

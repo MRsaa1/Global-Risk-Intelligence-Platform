@@ -3,10 +3,12 @@ Stress Testing API Endpoints
 =============================
 
 Production-level stress testing with CPU-optimized Monte Carlo.
+Includes PDF report generation.
 """
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from src.services.stress_testing import (
     stress_testing_service,
     StressScenario,
@@ -17,6 +19,86 @@ import structlog
 
 logger = structlog.get_logger()
 router = APIRouter()
+
+
+# ==================== PDF REPORT ====================
+
+class PDFReportRequest(BaseModel):
+    """Request for PDF report generation."""
+    test_name: str = Field(default="Stress Test Report")
+    city_name: str = Field(default="New York")
+    test_type: str = Field(default="climate")
+    severity: float = Field(default=0.5, ge=0.0, le=1.0)
+    zones: List[Dict[str, Any]] = Field(default_factory=list)
+    actions: Optional[List[Dict[str, Any]]] = None
+    executive_summary: Optional[str] = None
+
+
+@router.post("/report/pdf")
+async def generate_pdf_report(request: PDFReportRequest):
+    """
+    Generate PDF report for a stress test.
+    
+    Returns a downloadable PDF file with:
+    - Executive Summary
+    - Risk Zone Analysis
+    - Impact Metrics
+    - Recommended Actions
+    - Methodology
+    """
+    try:
+        from src.services.pdf_report import generate_pdf_report, HAS_WEASYPRINT
+        
+        if not HAS_WEASYPRINT:
+            raise HTTPException(
+                status_code=503,
+                detail="PDF generation is not available. WeasyPrint not installed."
+            )
+        
+        # Prepare stress test data
+        stress_test = {
+            "name": request.test_name,
+            "region_name": request.city_name,
+            "test_type": request.test_type,
+            "severity": request.severity,
+        }
+        
+        # Generate PDF
+        pdf_bytes = generate_pdf_report(
+            stress_test=stress_test,
+            zones=request.zones,
+            actions=request.actions,
+            executive_summary=request.executive_summary,
+        )
+        
+        # Create filename
+        filename = f"stress_test_{request.city_name.replace(' ', '_')}_{request.test_type}.pdf"
+        
+        logger.info(
+            "PDF report generated",
+            city=request.city_name,
+            test_type=request.test_type,
+            zones=len(request.zones),
+            size_kb=len(pdf_bytes) / 1024
+        )
+        
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}"
+            }
+        )
+        
+    except ImportError as e:
+        logger.error("PDF generation failed - missing dependency", error=str(e))
+        raise HTTPException(
+            status_code=503,
+            detail="PDF generation is not available. Install weasyprint."
+        )
+    except Exception as e:
+        logger.error("PDF generation failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 class StressTestRequest(BaseModel):

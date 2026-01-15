@@ -16,6 +16,7 @@ const Settings = lazy(() => import('./pages/Settings'))
 const Login = lazy(() => import('./pages/Login'))
 const Visualizations = lazy(() => import('./pages/Visualizations'))
 const CommandCenter = lazy(() => import('./pages/CommandCenter'))
+const Analytics = lazy(() => import('./pages/Analytics'))
 
 function App() {
   const [showOnboarding, setShowOnboarding] = useState(false)
@@ -105,6 +106,14 @@ function App() {
             element={
               <Suspense fallback={<LoadingScreen />}>
                 <Visualizations />
+              </Suspense>
+            }
+          />
+          <Route
+            path="analytics"
+            element={
+              <Suspense fallback={<LoadingScreen />}>
+                <Analytics />
               </Suspense>
             }
           />

@@ -135,65 +135,91 @@ NVIDIA_FLUX_API_KEY=nvapi--VIS...  # FLUX (для NIM)
 [x] Frontend обновлён для использования backend API
 ```
 
-#### 3. PostgreSQL/PostGIS (2 дня)
+#### 3. ✅ PostgreSQL/PostGIS (ВЫПОЛНЕНО)
 ```
-[ ] stress_tests table
-[ ] risk_zones table (PostGIS geometry)
-[ ] historical_events table
-[ ] Миграции с Alembic
+[x] stress_tests table with PostGIS boundary geometry
+[x] risk_zones table with PostGIS geometry + spatial indexes
+[x] historical_events table with PostGIS support
+[x] Миграции с Alembic (alembic/versions/001_initial_schema.py)
+[x] Spatial utilities (src/core/spatial.py)
+[x] Migration helper script (migrate.sh)
 ```
 
 ### 🟡 P1 — Важные (MVP)
 
-#### 4. PDF Export отчётов (2 дня)
+#### 4. ✅ PDF Export отчётов (ВЫПОЛНЕНО)
 ```
-[ ] Установить WeasyPrint или ReportLab
-[ ] GET /api/v1/stress-tests/{id}/report/pdf
-[ ] Карты, графики, метрики в PDF
-[ ] Брендированный шаблон
-```
-
-#### 5. Real-time Alerts (WebSocket) (3 дня)
-```
-[ ] WebSocket endpoint /ws/alerts
-[ ] SENTINEL агент в real-time
-[ ] Push notifications (опционально)
-[ ] Dashboard с live alerts
+[x] WeasyPrint установлен в pyproject.toml
+[x] POST /api/v1/stress/report/pdf
+[x] Карты, графики, метрики в PDF (SVG charts)
+[x] Брендированный шаблон с header/footer
+[x] Jinja2 templates для генерации
 ```
 
-#### 6. Связка Stress Tests + NVIDIA (2-3 дня)
+#### 5. ✅ Real-time Alerts (WebSocket) (ВЫПОЛНЕНО)
 ```
-[ ] При запуске теста:
+[x] WebSocket endpoint /api/v1/alerts/ws
+[x] SENTINEL агент в real-time (background monitoring)
+[x] REST API для управления алертами
+[x] AlertPanel компонент на Dashboard
+[x] Acknowledge/Resolve функциональность
+[x] Фильтрация по severity
+```
+
+#### 6. ✅ Связка Stress Tests + NVIDIA (ВЫПОЛНЕНО)
+```
+[x] NVIDIA Stress Pipeline сервис (nvidia_stress_pipeline.py)
+[x] POST /api/v1/stress-tests/execute/nvidia endpoint
+[x] При запуске теста:
     1. Earth-2 → Weather forecast для города
     2. PhysicsNeMo → Симуляция по типу события
     3. LLM → Генерация рекомендаций
-    4. FLUX → Визуализация для отчёта
-[ ] Fallback на mock если API недоступен
+[x] Fallback на mock если API недоступен
+[x] Pipeline execution info в response
+[x] Weather/Physics context в отчёте
 ```
 
-### 🟢 P2 — Улучшения
+### 🟢 P2 — Улучшения (ВЫПОЛНЕНО)
 
-#### 7. AI/ML Предиктивные модели (5+ дней)
+#### 7. ✅ AI/ML Предиктивные модели (ВЫПОЛНЕНО)
 ```
-[ ] Модель раннего предупреждения
-[ ] Предсказание каскадов
-[ ] ML feature engineering
-[ ] Training pipeline
-```
-
-#### 8. Каскады событий (PyG) (5+ дней)
-```
-[ ] Graph Neural Network модель
-[ ] Моделирование зависимостей
-[ ] Визуализация каскадов
-[ ] Сценарный анализ
+[x] Модель раннего предупреждения (predictive_ml.py)
+[x] Предсказание каскадов
+[x] ML feature engineering (scikit-learn)
+[x] API endpoints (/api/v1/predictions/*)
+    - POST /early-warning - генерация раннего предупреждения
+    - POST /forecast - прогноз рисков
+    - POST /cascade - предсказание каскадов
+    - POST /anomaly - детекция аномалий
+    - POST /batch-warnings - пакетный анализ
 ```
 
-#### 9. What-If симулятор (3 дня)
+#### 8. ✅ Каскады событий (PyG/NetworkX) (ВЫПОЛНЕНО)
 ```
-[ ] UI для настройки параметров
-[ ] Сравнение сценариев
-[ ] Чувствительность к параметрам
+[x] Graph Neural Network модель (cascade_gnn.py)
+[x] Моделирование зависимостей (GraphNode, GraphEdge)
+[x] Cascade simulation (BFS + GNN)
+[x] Vulnerability analysis
+[x] API endpoints (/api/v1/whatif/cascade/*)
+    - POST /cascade/sample - создание тестового графа
+    - POST /cascade/simulate - симуляция каскада
+    - GET /cascade/vulnerability - анализ уязвимостей
+```
+
+#### 9. ✅ What-If симулятор (ВЫПОЛНЕНО)
+```
+[x] Predefined scenarios (Baseline, Optimistic, Pessimistic, Stress)
+[x] Monte Carlo simulation (до 100K итераций)
+[x] Сравнение сценариев
+[x] Sensitivity analysis (эластичность параметров)
+[x] Optimization (оптимизация митигации)
+[x] API endpoints (/api/v1/whatif/*)
+    - GET /parameters - параметры симуляции
+    - POST /scenarios/predefined - создание сценариев
+    - POST /run - запуск симуляции
+    - POST /sensitivity - анализ чувствительности
+    - POST /compare - сравнение сценариев
+    - POST /optimize - оптимизация митигации
 ```
 
 ---
