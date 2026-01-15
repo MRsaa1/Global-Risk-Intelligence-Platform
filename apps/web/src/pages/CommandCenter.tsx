@@ -61,13 +61,7 @@ interface ActiveScenario {
 // HELPER FUNCTIONS
 // ============================================
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function getRiskLevel(risk: number): 'critical' | 'high' | 'medium' | 'low' {
-  if (risk > 0.8) return 'critical'
-  if (risk > 0.6) return 'high'
-  if (risk > 0.4) return 'medium'
-  return 'low'
-}
+// getRiskLevel removed - using inline conditions instead
 
 function getRiskColor(risk: number): string {
   if (risk > 0.8) return 'text-red-400'
@@ -1844,9 +1838,7 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
     ]},
   ]
   
-  // Event categories for Current events (with SVG icons)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const eventCategories = currentEvents
+  // Event categories = currentEvents (used directly in JSX)
   
   // Category icon component
   const CategoryIcon = ({ id }: { id: string }) => {
@@ -2647,6 +2639,7 @@ export default function CommandCenter() {
       government: ['Bundesbank', 'Federal Ministry', 'State Office', 'Municipal HQ'],
       military: ['NATO Base', 'Bundeswehr HQ', 'Defense Center'],
       school: ['Technical University', 'Business School', 'Research Institute'],
+      city: ['City Center', 'Downtown District', 'Metro Area', 'Urban Core'],
     }
     
     const assets: ZoneAsset[] = []
@@ -2944,22 +2937,7 @@ export default function CommandCenter() {
   // Track if user manually deselected zone (to prevent auto-zoom loop)
   const userDeselectedZoneRef = useRef(false)
   
-  // Handle stress test selection from StressTestSelector
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const handleStressTestSelect = useCallback((scenario: typeof selectedStressTest) => {
-    userDeselectedZoneRef.current = false  // Reset on new selection
-    setSelectedStressTest(scenario)
-    if (scenario) {
-      setActiveScenario({
-        type: scenario.name,
-        severity: scenario.severity,
-        active: true,
-      })
-    } else {
-      setActiveScenario(null)
-      setSelectedZone(null)
-    }
-  }, [])
+  // Stress test selection is handled via Digital Twin panel
   
   // Auto-zoom to first zone ONLY when stress test is first selected
   useEffect(() => {

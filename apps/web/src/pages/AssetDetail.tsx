@@ -125,7 +125,7 @@ export default function AssetDetail() {
               />
             ) : (
               <BIMViewer
-                ifcUrl={asset.bim_file_path ? `/api/v1/assets/${asset.id}/bim` : undefined}
+                ifcUrl={(asset as any).bim_file_path ? `/api/v1/assets/${asset.id}/bim` : undefined}
                 onLoad={(metadata) => console.log('BIM loaded:', metadata)}
                 onError={(error) => console.error('BIM error:', error)}
               />
@@ -143,26 +143,26 @@ export default function AssetDetail() {
             </h3>
             <div className="space-y-4">
               {[
-                { label: 'Climate Risk', value: asset.climate_risk_score },
-                { label: 'Physical Risk', value: asset.physical_risk_score },
-                { label: 'Network Risk', value: asset.network_risk_score },
+                { label: 'Climate Risk', value: asset.climate_risk_score || 0 },
+                { label: 'Physical Risk', value: asset.physical_risk_score || 0 },
+                { label: 'Network Risk', value: asset.network_risk_score || 0 },
               ].map((risk) => (
                 <div key={risk.label}>
                   <div className="flex justify-between text-sm mb-1">
                     <span>{risk.label}</span>
                     <span className={
-                      risk.value > 60 ? 'text-risk-high' :
-                      risk.value > 40 ? 'text-risk-medium' : 'text-risk-low'
-                    }>{risk.value}</span>
+                      (risk.value || 0) > 60 ? 'text-risk-high' :
+                      (risk.value || 0) > 40 ? 'text-risk-medium' : 'text-risk-low'
+                    }>{risk.value || 0}</span>
                   </div>
                   <div className="h-2 bg-dark-bg rounded-full overflow-hidden">
                     <motion.div
                       initial={{ width: 0 }}
-                      animate={{ width: `${risk.value}%` }}
+                      animate={{ width: `${risk.value || 0}%` }}
                       transition={{ duration: 1 }}
                       className={`h-full rounded-full ${
-                        risk.value > 60 ? 'bg-risk-high' :
-                        risk.value > 40 ? 'bg-risk-medium' : 'bg-risk-low'
+                        (risk.value || 0) > 60 ? 'bg-risk-high' :
+                        (risk.value || 0) > 40 ? 'bg-risk-medium' : 'bg-risk-low'
                       }`}
                     />
                   </div>
@@ -189,15 +189,15 @@ export default function AssetDetail() {
               </div>
               <div className="flex justify-between">
                 <span className="text-dark-muted">Floors</span>
-                <span>{asset.floors_above_ground}</span>
+                <span>{(asset as any).floors_above_ground || 'N/A'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-dark-muted">Area</span>
-                <span>{(asset.gross_floor_area_m2).toLocaleString()} m²</span>
+                <span>{(asset.gross_floor_area_m2 || 0).toLocaleString()} m²</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-dark-muted">Valuation</span>
-                <span className="font-semibold">€{(asset.current_valuation / 1000000).toFixed(0)}M</span>
+                <span className="font-semibold">€{((asset.current_valuation || 0) / 1000000).toFixed(0)}M</span>
               </div>
             </div>
           </div>

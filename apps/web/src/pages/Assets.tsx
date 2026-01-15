@@ -11,8 +11,8 @@ import { useQuery } from '@tanstack/react-query'
 import { assetsApi } from '../lib/api'
 import EmptyState from '../components/EmptyState'
 
-// Mock data
-const mockAssets = [
+// Mock data (for development/demo purposes)
+const _mockAssets = [
   {
     id: '1',
     pars_id: 'PARS-EU-DE-MUC-A1B2C3D4',
@@ -221,7 +221,7 @@ export default function Assets() {
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
                   <p className="text-xs text-dark-muted">Valuation</p>
-                  <p className="text-lg font-semibold">{formatCurrency(asset.current_valuation)}</p>
+                  <p className="text-lg font-semibold">{formatCurrency(asset.current_valuation || 0)}</p>
                 </div>
                 <div>
                   <p className="text-xs text-dark-muted">Area</p>
