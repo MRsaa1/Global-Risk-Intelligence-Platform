@@ -229,6 +229,36 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
   const [showReport, setShowReport] = useState(false)
   const riskEntitiesRef = useRef<Cesium.Entity[]>([])
   
+  // Stress test type selection
+  const [showTestSelector, setShowTestSelector] = useState(false)
+  const [selectedTestType, setSelectedTestType] = useState<'current' | 'forecast'>('current')
+  const [selectedScenario, setSelectedScenario] = useState<string>('')
+  
+  // Available stress test scenarios
+  const currentScenarios = [
+    { id: 'seismic_shock', name: 'Seismic Activity', category: 'climate' },
+    { id: 'flood_event', name: 'Flood Event', category: 'climate' },
+    { id: 'hurricane', name: 'Hurricane/Typhoon', category: 'climate' },
+    { id: 'credit_crunch', name: 'Credit Crunch', category: 'financial' },
+    { id: 'market_crash', name: 'Market Crash', category: 'financial' },
+    { id: 'liquidity_crisis', name: 'Liquidity Crisis', category: 'financial' },
+    { id: 'conflict_escalation', name: 'Conflict Escalation', category: 'geopolitical' },
+    { id: 'supply_chain', name: 'Supply Chain Disruption', category: 'operational' },
+    { id: 'cyber_attack', name: 'Cyber Attack', category: 'operational' },
+    { id: 'pandemic', name: 'Pandemic Outbreak', category: 'health' },
+  ]
+  
+  const forecastScenarios = [
+    { id: 'climate_5yr', name: 'Climate Risk 5yr', category: 'climate', horizon: '5yr' },
+    { id: 'climate_10yr', name: 'Climate Risk 10yr', category: 'climate', horizon: '10yr' },
+    { id: 'climate_25yr', name: 'Climate Risk 25yr', category: 'climate', horizon: '25yr' },
+    { id: 'sea_level_10yr', name: 'Sea Level Rise 10yr', category: 'climate', horizon: '10yr' },
+    { id: 'sea_level_25yr', name: 'Sea Level Rise 25yr', category: 'climate', horizon: '25yr' },
+    { id: 'financial_stress_5yr', name: 'Basel Stress 5yr', category: 'financial', horizon: '5yr' },
+    { id: 'tech_disruption_10yr', name: 'Tech Disruption 10yr', category: 'operational', horizon: '10yr' },
+    { id: 'demographic_25yr', name: 'Demographic Shift 25yr', category: 'operational', horizon: '25yr' },
+  ]
+  
   // ============================================
   // SMART MODE DETECTION
   // ============================================
@@ -1250,31 +1280,105 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
                       Risk: {(city.risk_score * 100).toFixed(0)}%
                     </div>
                     
-                    {/* Stress Test Button - Always visible when not complete */}
+                    {/* Stress Test Button with Selector - Always visible when not complete */}
                     {!stressTestComplete && (
-                      <button
-                        onClick={runStressTest}
-                        disabled={stressTestRunning || isLoading}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-all ${
-                          stressTestRunning 
-                            ? 'bg-amber-500/30 text-amber-300 cursor-wait'
-                            : 'bg-amber-500/20 text-amber-400 border border-amber-500/40 hover:bg-amber-500/30 hover:scale-105'
-                        }`}
-                      >
+                      <div className="relative">
                         {stressTestRunning ? (
-                          <>
+                          <button
+                            disabled
+                            className="px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 bg-amber-500/30 text-amber-300 cursor-wait"
+                          >
                             <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
                             <span>Analyzing... {stressTestProgress}%</span>
-                          </>
+                          </button>
                         ) : (
-                          <>
+                          <button
+                            onClick={() => setShowTestSelector(!showTestSelector)}
+                            disabled={isLoading}
+                            className="px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-all bg-amber-500/20 text-amber-400 border border-amber-500/40 hover:bg-amber-500/30 hover:scale-105"
+                          >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
                             </svg>
-                            <span>Run Stress Test</span>
-                          </>
+                            <span>Select Stress Test</span>
+                            <svg className={`w-3 h-3 transition-transform ${showTestSelector ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </button>
                         )}
-                      </button>
+                        
+                        {/* Stress Test Selector Dropdown */}
+                        {showTestSelector && !stressTestRunning && (
+                          <div className="absolute bottom-full right-0 mb-2 w-80 bg-black/95 backdrop-blur-xl rounded-xl border border-white/20 shadow-2xl overflow-hidden">
+                            {/* Tabs */}
+                            <div className="flex border-b border-white/10">
+                              <button
+                                onClick={() => setSelectedTestType('current')}
+                                className={`flex-1 py-2.5 text-xs font-medium transition-all ${
+                                  selectedTestType === 'current' 
+                                    ? 'bg-cyan-500/20 text-cyan-400 border-b-2 border-cyan-400' 
+                                    : 'text-white/50 hover:text-white hover:bg-white/5'
+                                }`}
+                              >
+                                Current Events
+                              </button>
+                              <button
+                                onClick={() => setSelectedTestType('forecast')}
+                                className={`flex-1 py-2.5 text-xs font-medium transition-all ${
+                                  selectedTestType === 'forecast' 
+                                    ? 'bg-purple-500/20 text-purple-400 border-b-2 border-purple-400' 
+                                    : 'text-white/50 hover:text-white hover:bg-white/5'
+                                }`}
+                              >
+                                Forecast
+                              </button>
+                            </div>
+                            
+                            {/* Scenario List */}
+                            <div className="max-h-64 overflow-y-auto p-2">
+                              {(selectedTestType === 'current' ? currentScenarios : forecastScenarios).map((scenario) => (
+                                <button
+                                  key={scenario.id}
+                                  onClick={() => {
+                                    setSelectedScenario(scenario.id)
+                                    setShowTestSelector(false)
+                                    // Run stress test with selected scenario
+                                    runStressTest()
+                                  }}
+                                  className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-all hover:bg-white/10 flex items-center justify-between ${
+                                    selectedScenario === scenario.id ? 'bg-white/10' : ''
+                                  }`}
+                                >
+                                  <div>
+                                    <div className="text-white/90">{scenario.name}</div>
+                                    <div className="text-[10px] text-white/40">
+                                      {scenario.category}
+                                      {'horizon' in scenario && ` • ${scenario.horizon}`}
+                                    </div>
+                                  </div>
+                                  <div className={`w-2 h-2 rounded-full ${
+                                    scenario.category === 'climate' ? 'bg-cyan-500' :
+                                    scenario.category === 'financial' ? 'bg-amber-500' :
+                                    scenario.category === 'geopolitical' ? 'bg-red-500' :
+                                    scenario.category === 'health' ? 'bg-green-500' :
+                                    'bg-purple-500'
+                                  }`} />
+                                </button>
+                              ))}
+                            </div>
+                            
+                            {/* Close button */}
+                            <div className="p-2 border-t border-white/10">
+                              <button
+                                onClick={() => setShowTestSelector(false)}
+                                className="w-full py-1.5 text-xs text-white/40 hover:text-white/60 transition-all"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     )}
                     
                     {/* Test Complete indicator + View Report button */}

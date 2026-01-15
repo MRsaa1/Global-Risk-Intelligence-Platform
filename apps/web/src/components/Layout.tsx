@@ -2,9 +2,6 @@ import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   HomeIcon,
-  BuildingOffice2Icon,
-  MapIcon,
-  BeakerIcon,
   Cog6ToothIcon,
   CubeTransparentIcon,
   ArrowRightOnRectangleIcon,
@@ -17,10 +14,7 @@ import FeedbackButton from './FeedbackButton'
 const navigation = [
   { name: 'Command Center', href: '/command', icon: GlobeAltIcon },
   { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
-  { name: 'Assets', href: '/assets', icon: BuildingOffice2Icon },
-  { name: 'Map', href: '/map', icon: MapIcon },
-  { name: 'Simulations', href: '/simulations', icon: BeakerIcon },
-  { name: 'Visualizations', href: '/visualizations', icon: ChartBarIcon },
+  { name: 'Risk Flow', href: '/visualizations', icon: ChartBarIcon },
   { name: 'Settings', href: '/settings', icon: Cog6ToothIcon },
 ]
 
