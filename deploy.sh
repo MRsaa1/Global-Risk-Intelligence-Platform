@@ -56,8 +56,12 @@ DATABASE_URL=sqlite:///./prod.db
 USE_SQLITE=true
 DEBUG=false
 CORS_ORIGINS=["https://risk.saa-alliance.com","http://localhost:5180"]
-NVIDIA_API_KEY=
-NVIDIA_LLM_API_KEY=
+NVIDIA_API_KEY=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
+NVIDIA_LLM_API_URL=https://integrate.api.nvidia.com/v1
+NVIDIA_FOURCASTNET_API_KEY=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
+NVIDIA_FLUX_API_KEY=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
+NGC_API_KEY=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
+NVIDIA_MODE=cloud
 EOF
 
 echo "Environment configured"
@@ -73,7 +77,7 @@ python3 -m venv .venv 2>/dev/null || python -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
 pip install -e . --quiet
-pip install aiosqlite email-validator --quiet
+pip install aiosqlite email-validator scipy networkx --quiet
 echo "Backend dependencies installed"
 
 # Frontend
