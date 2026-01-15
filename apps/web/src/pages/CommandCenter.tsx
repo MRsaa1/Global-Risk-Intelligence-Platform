@@ -14,13 +14,15 @@
  * Reference: IDENTITY.md
  */
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { CubeTransparentIcon } from '@heroicons/react/24/outline'
+import { CubeTransparentIcon, ChartBarIcon, Cog6ToothIcon, HomeIcon } from '@heroicons/react/24/outline'
 import CesiumGlobe, { RiskZone, ZoneAsset } from '../components/CesiumGlobe'
 import DigitalTwinPanel from '../components/DigitalTwinPanel'
 import { useSimulatedWebSocket, RiskUpdate } from '../lib/useWebSocket'
 import { StressTestSelector, ActionPlanModal, ZoneDetailPanel } from '../components/stress'
 import HistoricalEventPanel from '../components/HistoricalEventPanel'
+import { RiskFlowMini } from '../components/RiskFlowDiagram'
 
 const API_BASE = '/api/v1'
 
@@ -96,7 +98,7 @@ interface RiskLevelRowProps {
   onHistoricalSelect?: (eventId: string) => void
   onCurrentSelect?: (zoneId: string, category: string) => void
   onForecastSelect?: (zoneId: string, horizon: number) => void
-  onOpenDigitalTwin?: (cityId: string, cityName: string, eventId?: string) => void
+  onOpenDigitalTwin?: (cityId: string, cityName: string, eventId?: string, eventName?: string, eventCategory?: string, timeHorizon?: string) => void
 }
 
 function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZoneClick, onHistoricalSelect, onCurrentSelect, onForecastSelect, onOpenDigitalTwin }: RiskLevelRowProps) {
@@ -2111,14 +2113,25 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                   <div className="text-white/30 text-[10px] px-2 py-1 uppercase tracking-wider">
                     {affectedRegions[selectedEventId]?.countries.find(c => c.id === selectedCountry)?.name || 'Cities'}
                   </div>
-                  {affectedRegions[selectedEventId]?.countries.find(c => c.id === selectedCountry)?.cities.map((city) => (
+                  {affectedRegions[selectedEventId]?.countries.find(c => c.id === selectedCountry)?.cities.map((city) => {
+                    // Find event name from currentEvents
+                    const eventInfo = currentEvents.flatMap(c => c.events).find(e => e.id === selectedEventId)
+                    const categoryInfo = currentEvents.find(c => c.events.some(e => e.id === selectedEventId))
+                    return (
                     <button
                       key={city.id}
                       onClick={() => {
                         // IMMEDIATELY open Digital Twin when city is clicked
                         setSelectedCity(city)
-                        onOpenDigitalTwin?.(city.id, city.name, selectedEventId)
-                        console.log('City clicked:', city.name, '- Opening Digital Twin for event:', selectedEventId)
+                        onOpenDigitalTwin?.(
+                          city.id, 
+                          city.name, 
+                          selectedEventId,
+                          eventInfo?.name,
+                          categoryInfo?.id,
+                          'current'
+                        )
+                        console.log('City clicked:', city.name, '- Opening Digital Twin for event:', eventInfo?.name)
                       }}
                       className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/10 transition-all text-left group"
                     >
@@ -2130,7 +2143,7 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                         {(city.risk * 100).toFixed(0)}%
                       </span>
                     </button>
-                  ))}
+                  )})}
                 </div>
               )}
               
@@ -2266,14 +2279,24 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                   <div className="text-white/30 text-[10px] px-2 py-1 uppercase tracking-wider">
                     {affectedRegions[selectedEventId]?.countries.find(c => c.id === selectedCountry)?.name || 'Cities'} - {selectedHorizon}yr
                   </div>
-                  {affectedRegions[selectedEventId]?.countries.find(c => c.id === selectedCountry)?.cities.map((city) => (
+                  {affectedRegions[selectedEventId]?.countries.find(c => c.id === selectedCountry)?.cities.map((city) => {
+                    // Find scenario name from forecastScenarios
+                    const scenarioInfo = forecastScenarios.flatMap(h => h.scenarios).find(s => s.id === selectedEventId)
+                    return (
                     <button
                       key={city.id}
                       onClick={() => {
                         // IMMEDIATELY open Digital Twin when city is clicked
                         setSelectedCity(city)
-                        onOpenDigitalTwin?.(city.id, city.name, selectedEventId)
-                        console.log('City clicked:', city.name, '- Opening Digital Twin for forecast:', selectedEventId)
+                        onOpenDigitalTwin?.(
+                          city.id, 
+                          city.name, 
+                          selectedEventId,
+                          scenarioInfo?.name,
+                          scenarioInfo?.type,
+                          selectedHorizon ? `${selectedHorizon}yr` : undefined
+                        )
+                        console.log('City clicked:', city.name, '- Opening Digital Twin for forecast:', scenarioInfo?.name, selectedHorizon + 'yr')
                       }}
                       className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/10 transition-all text-left group"
                     >
@@ -2285,7 +2308,7 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                         {(city.risk * 100).toFixed(0)}%
                       </span>
                     </button>
-                  ))}
+                  )})}
                 </div>
               )}
               
@@ -2540,7 +2563,20 @@ const CITY_COORDINATES: Record<string, { lat: number; lng: number; exposure?: nu
   lisbon: { lat: 38.7223, lng: -9.1393, exposure: 18.5, risk: 0.55 },
   lyon: { lat: 45.7640, lng: 4.8357, exposure: 18.5, risk: 0.58 },
   marseille: { lat: 43.2965, lng: 5.3698, exposure: 15.8, risk: 0.62 },
-  // Add more as needed
+  // Conflict zones (2024-2025)
+  damascus: { lat: 33.5138, lng: 36.2765, exposure: 5.2, risk: 0.98 },
+  aleppo: { lat: 36.2021, lng: 37.1343, exposure: 3.5, risk: 0.98 },
+  caracas: { lat: 10.4806, lng: -66.9036, exposure: 8.5, risk: 0.95 },
+  sanaa: { lat: 15.3694, lng: 44.1910, exposure: 2.5, risk: 0.98 },
+  khartoum: { lat: 15.5007, lng: 32.5599, exposure: 4.2, risk: 0.95 },
+  tripoli: { lat: 32.8872, lng: 13.1913, exposure: 6.5, risk: 0.88 },
+  kabul: { lat: 34.5553, lng: 69.2075, exposure: 3.8, risk: 0.95 },
+  minsk: { lat: 53.9006, lng: 27.5590, exposure: 12.5, risk: 0.82 },
+  pyongyang: { lat: 39.0392, lng: 125.7625, exposure: 0.5, risk: 0.95 },
+  donetskluhansk: { lat: 48.0159, lng: 37.8028, exposure: 5.2, risk: 0.98 },
+  kharkiv: { lat: 49.9935, lng: 36.2304, exposure: 8.5, risk: 0.95 },
+  odesa: { lat: 46.4825, lng: 30.7233, exposure: 10.5, risk: 0.88 },
+  gaza: { lat: 31.5017, lng: 34.4668, exposure: 2.0, risk: 0.99 },
 }
 
 function findCityCoordinates(cityId: string): { lat: number; lng: number; exposure?: number; risk?: number } | null {
@@ -2587,6 +2623,9 @@ export default function CommandCenter() {
   const [selectedZone, setSelectedZone] = useState<RiskZone | null>(null)
   const [selectedZoneAsset, setSelectedZoneAsset] = useState<ZoneAsset | null>(null)
   const [selectedDigitalTwinEvent, setSelectedDigitalTwinEvent] = useState<string | null>(null)
+  const [selectedDigitalTwinEventName, setSelectedDigitalTwinEventName] = useState<string | null>(null)
+  const [selectedDigitalTwinEventCategory, setSelectedDigitalTwinEventCategory] = useState<string | null>(null)
+  const [selectedDigitalTwinTimeHorizon, setSelectedDigitalTwinTimeHorizon] = useState<string | null>(null)
   
   // Historical event state
   const [selectedHistoricalEvent, setSelectedHistoricalEvent] = useState<string | null>(null)
@@ -2769,16 +2808,96 @@ export default function CommandCenter() {
     loadData()
   }, [])
 
-  // Hotspot data for cities with 3D Tiles
-  const HOTSPOT_DATA: Record<string, FocusedHotspot> = {
-    newyork: { id: 'newyork', name: 'New York City', region: 'North America', risk: 0.75, exposure: 52.3, trend: 'up', factors: { climate: 0.65, credit: 0.35, operational: 0.25 } },
-    tokyo: { id: 'tokyo', name: 'Tokyo', region: 'Asia Pacific', risk: 0.92, exposure: 45.2, trend: 'up', factors: { climate: 0.75, credit: 0.45, operational: 0.55 } },
-    melbourne: { id: 'melbourne', name: 'Melbourne', region: 'Australia', risk: 0.58, exposure: 28.5, trend: 'down', factors: { climate: 0.45, credit: 0.30, operational: 0.35 } },
-    boston: { id: 'boston', name: 'Boston', region: 'North America', risk: 0.62, exposure: 31.2, trend: 'up', factors: { climate: 0.55, credit: 0.28, operational: 0.30 } },
-    sydney: { id: 'sydney', name: 'Sydney', region: 'Australia', risk: 0.52, exposure: 38.7, trend: 'down', factors: { climate: 0.40, credit: 0.22, operational: 0.28 } },
-    denver: { id: 'denver', name: 'Denver', region: 'North America', risk: 0.45, exposure: 18.9, trend: 'down', factors: { climate: 0.25, credit: 0.18, operational: 0.20 } },
-    washington: { id: 'washington', name: 'Washington DC', region: 'North America', risk: 0.48, exposure: 42.1, trend: 'up', factors: { climate: 0.45, credit: 0.20, operational: 0.22 } },
-    montreal: { id: 'montreal', name: 'Montreal', region: 'North America', risk: 0.55, exposure: 22.4, trend: 'up', factors: { climate: 0.50, credit: 0.25, operational: 0.28 } },
+  // Hotspot data for cities - auto-generated from CITY_COORDINATES
+  const HOTSPOT_DATA: Record<string, FocusedHotspot> = useMemo(() => {
+    const data: Record<string, FocusedHotspot> = {}
+    
+    // Generate from CITY_COORDINATES
+    Object.entries(CITY_COORDINATES).forEach(([id, coords]) => {
+      const risk = coords.risk || 0.5
+      const isConflict = risk > 0.9
+      const isHighRisk = risk > 0.7
+      
+      data[id] = {
+        id,
+        name: id.charAt(0).toUpperCase() + id.slice(1).replace(/([A-Z])/g, ' $1'),
+        region: getRegionForCity(id),
+        risk,
+        exposure: coords.exposure || 10,
+        trend: isHighRisk ? 'up' : 'down',
+        factors: {
+          climate: isConflict ? 0.3 : (risk * 0.8),
+          credit: isConflict ? 0.2 : (risk * 0.6),
+          operational: isConflict ? 0.95 : (risk * 0.5),
+        },
+      }
+    })
+    
+    // Override with specific known data
+    const overrides: Partial<Record<string, Partial<FocusedHotspot>>> = {
+      newyork: { name: 'New York City', region: 'North America' },
+      tokyo: { name: 'Tokyo', region: 'Asia Pacific' },
+      london: { name: 'London', region: 'Europe' },
+      kyiv: { name: 'Kyiv', region: 'Eastern Europe', factors: { climate: 0.2, credit: 0.1, operational: 0.95 } },
+      gaza: { name: 'Gaza City', region: 'Middle East', factors: { climate: 0.1, credit: 0.05, operational: 0.99 } },
+      damascus: { name: 'Damascus', region: 'Middle East', factors: { climate: 0.2, credit: 0.1, operational: 0.95 } },
+      caracas: { name: 'Caracas', region: 'South America', factors: { climate: 0.3, credit: 0.9, operational: 0.85 } },
+      taipei: { name: 'Taipei', region: 'Asia Pacific', factors: { climate: 0.85, credit: 0.4, operational: 0.75 } },
+      kharkiv: { name: 'Kharkiv', region: 'Eastern Europe', factors: { climate: 0.2, credit: 0.1, operational: 0.92 } },
+      telaviv: { name: 'Tel Aviv', region: 'Middle East', factors: { climate: 0.3, credit: 0.5, operational: 0.85 } },
+    }
+    
+    Object.entries(overrides).forEach(([id, override]) => {
+      if (data[id]) {
+        data[id] = { ...data[id], ...override }
+      }
+    })
+    
+    return data
+  }, [])
+  
+  // Helper function to get region for a city
+  function getRegionForCity(cityId: string): string {
+    const regionMap: Record<string, string> = {
+      // North America
+      newyork: 'North America', losangeles: 'North America', chicago: 'North America',
+      sanfrancisco: 'North America', boston: 'North America', washington: 'North America',
+      miami: 'North America', houston: 'North America', denver: 'North America',
+      seattle: 'North America', vancouver: 'North America', toronto: 'North America',
+      montreal: 'North America', mexicocity: 'North America',
+      // Europe
+      london: 'Europe', paris: 'Europe', frankfurt: 'Europe', berlin: 'Europe',
+      munich: 'Europe', amsterdam: 'Europe', brussels: 'Europe', zurich: 'Europe',
+      geneva: 'Europe', rome: 'Europe', milan: 'Europe', madrid: 'Europe',
+      barcelona: 'Europe', lisbon: 'Europe', vienna: 'Europe', stockholm: 'Europe',
+      oslo: 'Europe', helsinki: 'Europe', copenhagen: 'Europe', dublin: 'Europe',
+      athens: 'Europe', warsaw: 'Europe', lyon: 'Europe', marseille: 'Europe',
+      cologne: 'Europe', dusseldorf: 'Europe', rotterdam: 'Europe',
+      // Eastern Europe
+      moscow: 'Eastern Europe', kyiv: 'Eastern Europe', minsk: 'Eastern Europe',
+      kharkiv: 'Eastern Europe', odesa: 'Eastern Europe', donetskluhansk: 'Eastern Europe',
+      // Asia Pacific
+      tokyo: 'Asia Pacific', shanghai: 'Asia Pacific', beijing: 'Asia Pacific',
+      hongkong: 'Asia Pacific', singapore: 'Asia Pacific', seoul: 'Asia Pacific',
+      taipei: 'Asia Pacific', bangkok: 'Asia Pacific', jakarta: 'Asia Pacific',
+      manila: 'Asia Pacific', hochiminh: 'Asia Pacific', hanoi: 'Asia Pacific',
+      mumbai: 'Asia Pacific', delhi: 'Asia Pacific', dhaka: 'Asia Pacific',
+      karachi: 'Asia Pacific', pyongyang: 'Asia Pacific',
+      // Middle East
+      dubai: 'Middle East', tehran: 'Middle East', istanbul: 'Middle East',
+      telaviv: 'Middle East', cairo: 'Middle East', damascus: 'Middle East',
+      aleppo: 'Middle East', sanaa: 'Middle East', gaza: 'Middle East',
+      // Africa
+      lagos: 'Africa', johannesburg: 'Africa', capetown: 'Africa',
+      khartoum: 'Africa', tripoli: 'Africa',
+      // South America
+      saopaulo: 'South America', riodejaneiro: 'South America', caracas: 'South America',
+      // Central Asia
+      kabul: 'Central Asia',
+      // Australia
+      sydney: 'Australia', melbourne: 'Australia',
+    }
+    return regionMap[cityId] || 'Global'
   }
 
   // Handle hotspot focus
@@ -2893,6 +3012,7 @@ export default function CommandCenter() {
             }
           }}
           paused={showDigitalTwin}
+          activeRiskFilter={expandedRiskLevel}
         />
       </div>
 
@@ -2902,6 +3022,38 @@ export default function CommandCenter() {
       <AnimatePresence>
         {isSceneReady && entryComplete && (
           <>
+            {/* TOP RIGHT - Quick Navigation */}
+            <motion.div 
+              className="absolute top-6 right-8 pointer-events-auto z-50"
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.5 }}
+            >
+              <div className="flex items-center gap-2 bg-black/40 backdrop-blur-sm rounded-full px-2 py-1.5 border border-white/10">
+                <Link 
+                  to="/"
+                  className="p-2 rounded-full text-white/50 hover:text-white hover:bg-white/10 transition-all"
+                  title="Dashboard"
+                >
+                  <HomeIcon className="w-4 h-4" />
+                </Link>
+                <Link 
+                  to="/visualizations"
+                  className="p-2 rounded-full text-white/50 hover:text-white hover:bg-white/10 transition-all"
+                  title="Visualizations & Risk Flow"
+                >
+                  <ChartBarIcon className="w-4 h-4" />
+                </Link>
+                <Link 
+                  to="/settings"
+                  className="p-2 rounded-full text-white/50 hover:text-white hover:bg-white/10 transition-all"
+                  title="Settings"
+                >
+                  <Cog6ToothIcon className="w-4 h-4" />
+                </Link>
+              </div>
+            </motion.div>
+            
             {/* TOP LEFT - Core Metrics (HUD style, clickable) */}
             <motion.div 
               className="absolute top-8 left-8 pointer-events-auto"
@@ -2951,10 +3103,13 @@ export default function CommandCenter() {
                     setShowHistoricalPanel(true)
                     setExpandedRiskLevel(null)
                   }}
-                  onOpenDigitalTwin={(cityId, cityName, eventId) => {
+                  onOpenDigitalTwin={(cityId, cityName, eventId, eventName, eventCategory, timeHorizon) => {
                     // Find city coordinates from affectedRegions or use default
                     const cityCoords = findCityCoordinates(cityId)
+                    console.log('onOpenDigitalTwin called:', { cityId, cityName, eventName, eventCategory, timeHorizon })
                     if (cityCoords) {
+                      // Clear focused hotspot to avoid conflicts
+                      setFocusedHotspot(null)
                       setSelectedZoneAsset({
                         id: cityId,
                         name: cityName,
@@ -2964,8 +3119,13 @@ export default function CommandCenter() {
                         exposure: cityCoords.exposure || 10,
                         impactSeverity: cityCoords.risk || 0.8,
                       })
+                    } else {
+                      console.warn('City coordinates not found for:', cityId)
                     }
                     setSelectedDigitalTwinEvent(eventId || null)
+                    setSelectedDigitalTwinEventName(eventName || null)
+                    setSelectedDigitalTwinEventCategory(eventCategory || null)
+                    setSelectedDigitalTwinTimeHorizon(timeHorizon || null)
                     setShowDigitalTwin(true)
                     setExpandedRiskLevel(null)
                   }}
@@ -2984,9 +3144,11 @@ export default function CommandCenter() {
                     setShowHistoricalPanel(true)
                     setExpandedRiskLevel(null)
                   }}
-                  onOpenDigitalTwin={(cityId, cityName, eventId) => {
+                  onOpenDigitalTwin={(cityId, cityName, eventId, eventName, eventCategory, timeHorizon) => {
                     const cityCoords = findCityCoordinates(cityId)
+                    console.log('onOpenDigitalTwin (High):', { cityId, cityName, eventName })
                     if (cityCoords) {
+                      setFocusedHotspot(null)
                       setSelectedZoneAsset({
                         id: cityId,
                         name: cityName,
@@ -2998,6 +3160,9 @@ export default function CommandCenter() {
                       })
                     }
                     setSelectedDigitalTwinEvent(eventId || null)
+                    setSelectedDigitalTwinEventName(eventName || null)
+                    setSelectedDigitalTwinEventCategory(eventCategory || null)
+                    setSelectedDigitalTwinTimeHorizon(timeHorizon || null)
                     setShowDigitalTwin(true)
                     setExpandedRiskLevel(null)
                   }}
@@ -3016,9 +3181,11 @@ export default function CommandCenter() {
                     setShowHistoricalPanel(true)
                     setExpandedRiskLevel(null)
                   }}
-                  onOpenDigitalTwin={(cityId, cityName, eventId) => {
+                  onOpenDigitalTwin={(cityId, cityName, eventId, eventName, eventCategory, timeHorizon) => {
                     const cityCoords = findCityCoordinates(cityId)
+                    console.log('onOpenDigitalTwin (Medium):', { cityId, cityName, eventName })
                     if (cityCoords) {
+                      setFocusedHotspot(null)
                       setSelectedZoneAsset({
                         id: cityId,
                         name: cityName,
@@ -3030,6 +3197,9 @@ export default function CommandCenter() {
                       })
                     }
                     setSelectedDigitalTwinEvent(eventId || null)
+                    setSelectedDigitalTwinEventName(eventName || null)
+                    setSelectedDigitalTwinEventCategory(eventCategory || null)
+                    setSelectedDigitalTwinTimeHorizon(timeHorizon || null)
                     setShowDigitalTwin(true)
                     setExpandedRiskLevel(null)
                   }}
@@ -3048,9 +3218,11 @@ export default function CommandCenter() {
                     setShowHistoricalPanel(true)
                     setExpandedRiskLevel(null)
                   }}
-                  onOpenDigitalTwin={(cityId, cityName, eventId) => {
+                  onOpenDigitalTwin={(cityId, cityName, eventId, eventName, eventCategory, timeHorizon) => {
                     const cityCoords = findCityCoordinates(cityId)
+                    console.log('onOpenDigitalTwin (Low):', { cityId, cityName, eventName })
                     if (cityCoords) {
+                      setFocusedHotspot(null)
                       setSelectedZoneAsset({
                         id: cityId,
                         name: cityName,
@@ -3062,6 +3234,9 @@ export default function CommandCenter() {
                       })
                     }
                     setSelectedDigitalTwinEvent(eventId || null)
+                    setSelectedDigitalTwinEventName(eventName || null)
+                    setSelectedDigitalTwinEventCategory(eventCategory || null)
+                    setSelectedDigitalTwinTimeHorizon(timeHorizon || null)
                     setShowDigitalTwin(true)
                     setExpandedRiskLevel(null)
                   }}
@@ -3120,11 +3295,14 @@ export default function CommandCenter() {
                       </div>
                     </div>
                     
-                    {/* Stress Results */}
+                    {/* Stress Results - Monte Carlo Risk Metrics */}
                     <div className="p-4 space-y-3">
-                      {/* VaR 99% */}
+                      {/* VaR 99% - Monte Carlo */}
                       <div className="flex justify-between items-center">
-                        <span className="text-white/50 text-xs">VaR 99%</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-white/50 text-xs">VaR 99%</span>
+                          <span className="text-[8px] text-cyan-400/50 bg-cyan-400/10 px-1 rounded">MC</span>
+                        </div>
                         <motion.span 
                           className="text-red-400 font-mono text-sm"
                           initial={{ opacity: 0 }}
@@ -3135,9 +3313,12 @@ export default function CommandCenter() {
                         </motion.span>
                       </div>
                       
-                      {/* Expected Shortfall */}
+                      {/* Expected Shortfall (CVaR) */}
                       <div className="flex justify-between items-center">
-                        <span className="text-white/50 text-xs">Expected Shortfall</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-white/50 text-xs">ES (CVaR)</span>
+                          <span className="text-[8px] text-cyan-400/50 bg-cyan-400/10 px-1 rounded">Copula</span>
+                        </div>
                         <motion.span 
                           className="text-orange-400 font-mono text-sm"
                           initial={{ opacity: 0 }}
@@ -3188,11 +3369,46 @@ export default function CommandCenter() {
                       </div>
                     </div>
                     
-                    {/* Simulation Info */}
-                    <div className="px-4 py-2 bg-white/5 text-center">
-                      <span className="text-white/30 text-[10px]">
-                        Monte Carlo • 10,000 simulations
-                      </span>
+                    {/* Risk Flow Mini */}
+                    <div className="px-3 py-2 border-t border-white/5">
+                      <div className="text-white/40 text-[10px] uppercase tracking-wider mb-1">Impact Flow</div>
+                      <RiskFlowMini 
+                        riskZones={availableZones.slice(0, 4).map(z => ({
+                          name: z.name,
+                          risk: z.risk,
+                          exposure: 10 + z.risk * 40,
+                        }))}
+                        height={120}
+                      />
+                    </div>
+                    
+                    {/* Simulation Info - Monte Carlo Details */}
+                    <div className="px-3 py-2 bg-white/5 border-t border-white/5">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-white/40 text-[10px] uppercase tracking-wider">Monte Carlo Engine</span>
+                        <div className="flex items-center gap-1">
+                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                          <span className="text-emerald-400/70 text-[9px]">Active</span>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-[10px]">
+                        <div className="flex justify-between">
+                          <span className="text-white/40">Simulations</span>
+                          <span className="text-white/60 font-mono">10,000</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-white/40">Copula</span>
+                          <span className="text-cyan-400/70 font-mono">Gaussian</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-white/40">Confidence</span>
+                          <span className="text-white/60 font-mono">99%</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-white/40">Engine</span>
+                          <span className="text-cyan-400/70 font-mono">NumPy</span>
+                        </div>
+                      </div>
                     </div>
                     
                     {/* Action Plans Button */}
@@ -3451,25 +3667,58 @@ export default function CommandCenter() {
                       </div>
                     </div>
                     
-                    {/* Actions */}
+                    {/* Actions - Single button to open Digital Twin with context */}
                     <div className="space-y-2">
                       <button
-                        onClick={() => activateScenario('Climate Physical', 0.8)}
-                        className="w-full py-2.5 px-4 bg-white/5 border border-white/10 rounded-lg
-                          text-white/70 text-sm hover:bg-white/10 hover:text-white transition-all
-                          flex items-center justify-between"
+                        onClick={() => {
+                          // Open Digital Twin with stress test ready to run
+                          if (focusedHotspot) {
+                            console.log('Opening Digital Twin for stress test:', focusedHotspot.id, focusedHotspot.name)
+                            const coords = findCityCoordinates(focusedHotspot.id)
+                            if (coords) {
+                              setSelectedZoneAsset({
+                                id: focusedHotspot.id,
+                                name: focusedHotspot.name,
+                                type: 'city' as const,
+                                latitude: coords.lat,
+                                longitude: coords.lng,
+                                exposure: focusedHotspot.exposure || 10,
+                                impactSeverity: focusedHotspot.risk || 0.5,
+                              })
+                            } else {
+                              const normalizedId = focusedHotspot.id.toLowerCase().replace(/[^a-z]/g, '')
+                              const fallbackCoords = CITY_COORDINATES[normalizedId]
+                              if (fallbackCoords) {
+                                setSelectedZoneAsset({
+                                  id: focusedHotspot.id,
+                                  name: focusedHotspot.name,
+                                  type: 'city',
+                                  latitude: fallbackCoords.lat,
+                                  longitude: fallbackCoords.lng,
+                                  exposure: focusedHotspot.exposure || 10,
+                                  impactSeverity: focusedHotspot.risk || 0.5,
+                                })
+                              }
+                            }
+                            // Determine event category based on city risk factors
+                            const riskCategory = focusedHotspot.risk > 0.8 ? 'conflict' : 
+                              focusedHotspot.risk > 0.6 ? 'climate' : 'financial'
+                            
+                            setSelectedDigitalTwinEvent('stress_test_scenario')
+                            setSelectedDigitalTwinEventName(`Stress Test: ${focusedHotspot.name}`)
+                            setSelectedDigitalTwinEventCategory(riskCategory)
+                            setSelectedDigitalTwinTimeHorizon('current')
+                          }
+                          setShowDigitalTwin(true)
+                        }}
+                        className="w-full py-2.5 px-4 bg-amber-500/20 border border-amber-500/40 rounded-lg
+                          text-amber-400 text-sm hover:bg-amber-500/30 hover:text-amber-300 transition-all
+                          flex items-center justify-between font-medium"
                       >
-                        <span>Run Stress Test</span>
-                        <kbd className="text-[9px] text-white/30 bg-white/5 px-1.5 py-0.5 rounded">S</kbd>
-                      </button>
-                      <button
-                        onClick={() => setShowDigitalTwin(true)}
-                        className="w-full py-2.5 px-4 bg-white/5 border border-white/10 rounded-lg
-                          text-white/70 text-sm hover:bg-white/10 hover:text-white transition-all
-                          flex items-center justify-between"
-                      >
-                        <span>View Digital Twin</span>
-                        <kbd className="text-[9px] text-white/30 bg-white/5 px-1.5 py-0.5 rounded">D</kbd>
+                        <span>Open Digital Twin & Stress Test</span>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                        </svg>
                       </button>
                     </div>
                   </div>
@@ -3564,10 +3813,16 @@ export default function CommandCenter() {
           setShowDigitalTwin(false)
           setSelectedZoneAsset(null)
           setSelectedDigitalTwinEvent(null)
+          setSelectedDigitalTwinEventName(null)
+          setSelectedDigitalTwinEventCategory(null)
+          setSelectedDigitalTwinTimeHorizon(null)
         }}
         assetId={focusedHotspot?.id}
         dynamicAsset={selectedZoneAsset}
         eventId={selectedDigitalTwinEvent}
+        eventName={selectedDigitalTwinEventName}
+        eventCategory={selectedDigitalTwinEventCategory}
+        timeHorizon={selectedDigitalTwinTimeHorizon}
       />
 
       {/* ============================================ */}

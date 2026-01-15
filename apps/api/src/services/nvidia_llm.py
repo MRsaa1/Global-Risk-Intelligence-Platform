@@ -22,8 +22,11 @@ logger = logging.getLogger(__name__)
 
 class LLMModel(str, Enum):
     """Available LLM models on NVIDIA API."""
+    # Llama models
     LLAMA_70B = "meta/llama-3.1-70b-instruct"
     LLAMA_8B = "meta/llama-3.1-8b-instruct"
+    # Mistral models
+    MISTRAL_LARGE = "mistralai/mistral-large-3-675b-instruct-2512"  # Most capable
     MIXTRAL_8X22B = "mistralai/mixtral-8x22b-instruct-v0.1"
     MIXTRAL_8X7B = "mistralai/mixtral-8x7b-instruct-v0.1"
     

@@ -93,7 +93,8 @@ pkill -f "npm run preview" 2>/dev/null || true
 # Start backend
 cd apps/api
 source .venv/bin/activate
-nohup USE_SQLITE=true python -m uvicorn src.main:app --host 0.0.0.0 --port 9002 > /tmp/api.log 2>&1 &
+export USE_SQLITE=true
+nohup python -m uvicorn src.main:app --host 0.0.0.0 --port 9002 > /tmp/api.log 2>&1 &
 echo "Backend started on port 9002"
 
 # Start frontend (production build)

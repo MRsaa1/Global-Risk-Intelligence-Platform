@@ -48,7 +48,10 @@ class NVIDIAFluxService:
     def __init__(self):
         self.api_key = getattr(settings, 'nvidia_flux_api_key', None) or ""
         self.nim_url = getattr(settings, 'flux_nim_url', 'http://localhost:8002')
-        self.cloud_url = "https://ai.api.nvidia.com/v1/genai/black-forest-labs/flux-1-dev"
+        # FLUX.1-dev cloud endpoint (may require local NIM for production)
+        # Try Black Forest Labs API directly or NVIDIA NIM
+        self.cloud_url = "https://api.bfl.ai/v1/flux-1-dev"  # Black Forest Labs
+        self.nvidia_cloud_url = "https://integrate.api.nvidia.com/v1/genai/black-forest-labs/flux-1-dev"
         
         # Build headers
         headers = {'Content-Type': 'application/json', 'Accept': 'application/json'}

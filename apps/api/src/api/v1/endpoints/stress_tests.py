@@ -2,8 +2,10 @@
 Stress Tests API endpoints.
 
 CRUD operations for stress tests, risk zones, and reports.
+Integrates with NVIDIA LLM for intelligent report generation.
 """
 import json
+import logging
 from typing import List, Optional
 from uuid import uuid4
 
@@ -13,6 +15,8 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
+from src.services.nvidia_llm import llm_service, LLMModel
+from src.services.risk_zone_calculator import risk_zone_calculator, EventCategory
 from src.models.stress_test import (
     StressTest,
     StressTestType,
@@ -481,8 +485,278 @@ async def list_zone_assets(
 
 
 # =============================================================================
+# Quick Execution Schemas
+# =============================================================================
+
+class QuickStressTestRequest(BaseModel):
+    """Request for quick stress test execution."""
+    city_name: str = Field(..., description="Name of the city")
+    center_latitude: float = Field(..., ge=-90, le=90)
+    center_longitude: float = Field(..., ge=-180, le=180)
+    event_id: str = Field(..., description="Event identifier (e.g., 'flood-scenario', 'basel-liquidity')")
+    severity: float = Field(0.5, ge=0.0, le=1.0, description="Severity multiplier")
+    use_llm: bool = Field(True, description="Generate LLM-powered executive summary")
+
+
+class QuickZoneResponse(BaseModel):
+    """Zone in quick stress test response."""
+    label: str
+    risk_level: str
+    position: dict
+    radius: float
+    affected_buildings: int
+    estimated_loss: float
+    population_affected: int
+    recommendations: List[str]
+
+
+class MitigationActionResponse(BaseModel):
+    """Mitigation action in response."""
+    action: str
+    priority: str
+    cost: Optional[float] = None
+    risk_reduction: Optional[float] = None
+
+
+class QuickStressTestResponse(BaseModel):
+    """Response for quick stress test execution."""
+    id: str
+    event_name: str
+    event_type: str
+    city_name: str
+    severity: float
+    timestamp: str
+    total_loss: float
+    total_buildings_affected: int
+    total_population_affected: int
+    zones: List[QuickZoneResponse]
+    executive_summary: Optional[str] = None
+    mitigation_actions: List[MitigationActionResponse]
+    data_sources: List[str]
+    llm_generated: bool = False
+
+
+# =============================================================================
 # Execution Endpoints
 # =============================================================================
+
+@router.post("/execute", response_model=QuickStressTestResponse)
+async def execute_quick_stress_test(
+    request: QuickStressTestRequest,
+    session: AsyncSession = Depends(get_db),
+):
+    """
+    Execute a quick stress test with smart risk zone calculation.
+    
+    This endpoint:
+    1. Calculates risk zones using the smart algorithm (based on event type)
+    2. Optionally generates LLM-powered executive summary
+    3. Saves results to database
+    4. Returns complete report
+    
+    Use this for on-demand stress testing from the UI.
+    """
+    import re
+    logger = logging.getLogger(__name__)
+    
+    # Calculate risk zones using the smart algorithm
+    result = risk_zone_calculator.calculate(
+        center_lat=request.center_latitude,
+        center_lng=request.center_longitude,
+        event_id=request.event_id,
+        severity=request.severity,
+        city_name=request.city_name,
+    )
+    
+    executive_summary = None
+    llm_generated = False
+    mitigation_actions = result.mitigation_actions
+    
+    # Generate LLM-powered executive summary if requested
+    if request.use_llm:
+        try:
+            zones_text = "\n".join([
+                f"- {z.label}: {z.risk_level.value.upper()} "
+                f"(Buildings: {z.affected_buildings}, Loss: €{z.estimated_loss}M)"
+                for z in result.zones[:5]
+            ])
+            
+            summary_prompt = f"""Analyze this stress test scenario and provide a professional executive summary (2-3 paragraphs).
+
+Stress Test: {result.event_name}
+Type: {result.event_type.value}
+Location: {result.city_name}
+Severity: {result.severity:.0%}
+
+Impact Assessment:
+- Total Expected Loss: €{result.total_loss:,.0f}M
+- Buildings Affected: {result.total_buildings_affected:,}
+- Population Impacted: {result.total_population_affected:,}
+
+Identified Risk Zones:
+{zones_text}
+
+Provide:
+1. Executive summary of the risk scenario and its implications
+2. Key findings with quantitative metrics
+3. Immediate priorities for stakeholders
+
+IMPORTANT: Write in plain text only. Do NOT use any markdown formatting such as asterisks, bold, headers, or bullet points with dashes.
+Use professional risk management language. Be concise but comprehensive. Write in English."""
+
+            summary_response = await llm_service.generate(
+                prompt=summary_prompt,
+                model=LLMModel.LLAMA_70B,
+                max_tokens=600,
+                temperature=0.3,
+            )
+            
+            if summary_response.finish_reason != "mock" and summary_response.content:
+                # Remove markdown formatting
+                executive_summary = summary_response.content
+                executive_summary = re.sub(r'\*\*([^*]+)\*\*', r'\1', executive_summary)
+                executive_summary = re.sub(r'\*([^*]+)\*', r'\1', executive_summary)
+                executive_summary = re.sub(r'^#{1,6}\s*', '', executive_summary, flags=re.MULTILINE)
+                executive_summary = re.sub(r'\n{3,}', '\n\n', executive_summary).strip()
+                llm_generated = True
+                logger.info(f"LLM generated summary for {request.city_name}")
+            
+            # Generate LLM mitigation actions
+            actions_prompt = f"""Generate 5 specific mitigation actions for this {result.event_type.value} risk scenario in {request.city_name}.
+
+Event: {result.event_name}
+Severity: {request.severity:.0%}
+Expected Loss: €{result.total_loss:,.0f}M
+
+Provide exactly 5 concise action items, each on a new line. Start each with a verb.
+Write in plain text only. Do NOT use markdown formatting, asterisks, or special symbols.
+Write in English only."""
+
+            actions_response = await llm_service.generate(
+                prompt=actions_prompt,
+                model=LLMModel.LLAMA_8B,
+                max_tokens=250,
+                temperature=0.4,
+            )
+            
+            if actions_response.finish_reason != "mock" and actions_response.content:
+                lines = []
+                for line in actions_response.content.split('\n'):
+                    line = line.strip().lstrip('•-1234567890. ')
+                    line = re.sub(r'\*\*([^*]+)\*\*', r'\1', line)
+                    line = re.sub(r'\*([^*]+)\*', r'\1', line)
+                    if line and len(line) > 10:
+                        lines.append(line)
+                
+                if len(lines) >= 3:
+                    mitigation_actions = [
+                        {
+                            "action": action,
+                            "priority": "urgent" if i < 2 else "high" if i < 4 else "medium",
+                            "cost": round((10 - i * 1.5), 1),
+                            "risk_reduction": round(35 - i * 5),
+                        }
+                        for i, action in enumerate(lines[:5])
+                    ]
+                    logger.info(f"LLM generated {len(mitigation_actions)} actions")
+                    
+        except Exception as e:
+            logger.error(f"LLM error: {e}")
+    
+    # Save to database
+    test_id = str(uuid4())
+    
+    # Create stress test record
+    stress_test = StressTest(
+        id=test_id,
+        name=result.event_name,
+        description=f"Quick stress test for {request.city_name}",
+        test_type=result.event_type.value if hasattr(result.event_type, 'value') else str(result.event_type),
+        status=StressTestStatus.COMPLETED.value,
+        center_latitude=request.center_latitude,
+        center_longitude=request.center_longitude,
+        radius_km=max(z.radius for z in result.zones) / 1000 if result.zones else 1.0,
+        region_name=request.city_name,
+        severity=request.severity,
+        probability=0.5,
+        time_horizon_months=12,
+        affected_assets_count=result.total_buildings_affected,
+        total_exposure=result.total_loss * 1000000,  # Convert to €
+        expected_loss=result.total_loss * 1000000,
+    )
+    session.add(stress_test)
+    
+    # Create risk zones
+    for zone in result.zones:
+        risk_zone = RiskZone(
+            id=str(uuid4()),
+            stress_test_id=test_id,
+            zone_level=zone.risk_level.value,
+            center_latitude=zone.position["lat"],
+            center_longitude=zone.position["lng"],
+            radius_km=zone.radius / 1000,
+            risk_score={"critical": 0.9, "high": 0.7, "medium": 0.5, "low": 0.3}.get(zone.risk_level.value, 0.5),
+            affected_assets_count=zone.affected_buildings,
+            total_exposure=zone.estimated_loss * 1000000,
+            expected_loss=zone.estimated_loss * 1000000,
+            name=zone.label,
+        )
+        session.add(risk_zone)
+    
+    # Create report
+    report = StressTestReport(
+        id=str(uuid4()),
+        stress_test_id=test_id,
+        summary=executive_summary or f"Stress test completed for {request.city_name}",
+        report_data=json.dumps({
+            "zones": [
+                {
+                    "label": z.label,
+                    "risk_level": z.risk_level.value,
+                    "affected_buildings": z.affected_buildings,
+                    "estimated_loss": z.estimated_loss,
+                }
+                for z in result.zones
+            ],
+            "mitigation_actions": mitigation_actions,
+            "data_sources": result.data_sources,
+        }),
+    )
+    session.add(report)
+    
+    await session.commit()
+    
+    return QuickStressTestResponse(
+        id=test_id,
+        event_name=result.event_name,
+        event_type=result.event_type.value,
+        city_name=result.city_name,
+        severity=result.severity,
+        timestamp=result.timestamp,
+        total_loss=result.total_loss,
+        total_buildings_affected=result.total_buildings_affected,
+        total_population_affected=result.total_population_affected,
+        zones=[
+            QuickZoneResponse(
+                label=z.label,
+                risk_level=z.risk_level.value,
+                position=z.position,
+                radius=z.radius,
+                affected_buildings=z.affected_buildings,
+                estimated_loss=z.estimated_loss,
+                population_affected=z.population_affected,
+                recommendations=z.recommendations,
+            )
+            for z in result.zones
+        ],
+        executive_summary=executive_summary,
+        mitigation_actions=[
+            MitigationActionResponse(**action) for action in mitigation_actions
+        ],
+        data_sources=result.data_sources,
+        llm_generated=llm_generated,
+    )
+
 
 @router.post("/{test_id}/run", response_model=StressTestResponse)
 async def run_stress_test(
@@ -575,9 +849,16 @@ async def run_stress_test(
 @router.post("/{test_id}/reports", response_model=StressTestReportResponse, status_code=201)
 async def generate_report(
     test_id: str,
+    use_llm: bool = Query(True, description="Use NVIDIA LLM for intelligent analysis"),
     session: AsyncSession = Depends(get_db),
 ):
-    """Generate a detailed report for a stress test."""
+    """
+    Generate a detailed report for a stress test.
+    
+    Uses NVIDIA LLM (Llama 3.1) for intelligent summary and recommendations.
+    """
+    logger = logging.getLogger(__name__)
+    
     result = await session.execute(
         select(StressTest).where(StressTest.id == test_id)
     )
@@ -586,69 +867,171 @@ async def generate_report(
     if not test:
         raise HTTPException(status_code=404, detail="Stress test not found")
     
+    # Get zones for context
+    zones_result = await session.execute(
+        select(RiskZone).where(RiskZone.stress_test_id == test_id)
+    )
+    zones = zones_result.scalars().all()
+    
+    # Generate summary using LLM if enabled
+    summary = f"Stress test '{test.name}' analysis complete. Affected assets: {test.affected_assets_count or 0}, Expected loss: €{test.expected_loss or 0:,.0f}"
+    
+    if use_llm:
+        try:
+            # Prepare context for LLM
+            prompt = f"""Analyze this stress test and provide a professional executive summary (2-3 paragraphs):
+
+**Stress Test:** {test.name}
+**Type:** {test.test_type}
+**Region:** {test.region_name or 'N/A'}
+**Severity:** {test.severity:.0%}
+**Probability:** {test.probability:.0%}
+**Time Horizon:** {test.time_horizon_months} months
+
+**Impact:**
+- Affected Assets: {test.affected_assets_count or 0}
+- Total Exposure: €{test.total_exposure or 0:,.0f}
+- Expected Loss: €{test.expected_loss or 0:,.0f}
+- Valuation Impact: {test.valuation_impact_pct:.1f}%
+
+**Risk Zones:** {len(zones)} zones identified
+{chr(10).join([f"- {z.zone_level.upper()}: {z.name or 'Zone'} (risk score: {z.risk_score:.2f})" for z in zones[:5]])}
+
+Provide:
+1. Executive summary of the risk scenario
+2. Key findings and metrics
+3. Immediate implications for stakeholders
+
+Use professional risk management language. Be concise but comprehensive."""
+
+            llm_response = await llm_service.generate(
+                prompt=prompt,
+                model=LLMModel.LLAMA_70B,  # Best quality
+                max_tokens=800,
+                temperature=0.3,  # More deterministic
+            )
+            
+            if llm_response.finish_reason != "mock":
+                summary = llm_response.content
+                logger.info(f"LLM generated summary for stress test {test_id}")
+            else:
+                logger.warning("LLM returned mock response, using default summary")
+                
+        except Exception as e:
+            logger.error(f"LLM error: {e}, using default summary")
+    
     # Create report
     report = StressTestReport(
         id=str(uuid4()),
         stress_test_id=test_id,
-        summary=f"Stress test '{test.name}' analysis complete. "
-                f"Affected assets: {test.affected_assets_count or 0}, "
-                f"Expected loss: €{test.expected_loss or 0:,.0f}",
+        summary=summary,
     )
     session.add(report)
     
     # Generate action plans for each organization type
-    org_plans = [
+    # Use LLM to generate context-aware recommendations
+    org_plans = []
+    
+    base_plans = [
         {
             "type": OrganizationType.DEVELOPER,
-            "actions": [
-                "Пересмотреть проекты в зоне риска",
-                "Обновить страхование строительства",
-                "Разработать план эвакуации стройплощадок",
-            ],
             "priority": "high",
             "timeline": "72h",
+            "default_actions": [
+                "Review all projects in affected risk zones",
+                "Update construction insurance coverage",
+                "Develop emergency evacuation plans for construction sites",
+            ],
         },
         {
             "type": OrganizationType.INSURER,
-            "actions": [
-                "Обновить резервы на выплаты",
-                "Активировать перестраховочные договоры",
-                "Подготовить команды оценщиков",
-            ],
             "priority": "critical",
             "timeline": "24h",
+            "default_actions": [
+                "Increase loss reserves for expected claims",
+                "Activate reinsurance treaty agreements",
+                "Deploy damage assessment teams to affected areas",
+            ],
         },
         {
             "type": OrganizationType.BANK,
-            "actions": [
-                "Пересмотреть кредитные лимиты для заёмщиков в зоне",
-                "Обновить оценку залогового обеспечения",
-                "Подготовить программы реструктуризации",
-            ],
             "priority": "high",
             "timeline": "week",
+            "default_actions": [
+                "Review credit limits for borrowers in risk zones",
+                "Update collateral valuations for affected assets",
+                "Prepare loan restructuring programs",
+            ],
         },
         {
             "type": OrganizationType.ENTERPRISE,
-            "actions": [
-                "Активировать план непрерывности бизнеса",
-                "Защитить критическое оборудование",
-                "Обеспечить резервные коммуникации",
-            ],
             "priority": "high",
             "timeline": "immediate",
+            "default_actions": [
+                "Activate business continuity plan",
+                "Secure and protect critical equipment",
+                "Establish backup communication channels",
+            ],
         },
         {
             "type": OrganizationType.MILITARY,
-            "actions": [
-                "Подготовить силы для помощи населению",
-                "Обеспечить защиту критической инфраструктуры",
-                "Координация с гражданскими службами",
-            ],
             "priority": "high",
             "timeline": "24h",
+            "default_actions": [
+                "Prepare forces for civilian assistance operations",
+                "Secure critical infrastructure protection",
+                "Coordinate with civil emergency services",
+            ],
         },
     ]
+    
+    # For the most critical organization (Insurer), use LLM for tailored recommendations
+    if use_llm:
+        try:
+            actions_prompt = f"""Generate 5 specific action items for an INSURANCE COMPANY responding to this risk event:
+
+Event: {test.name}
+Type: {test.test_type}
+Severity: {test.severity:.0%}
+Expected Loss: €{test.expected_loss or 0:,.0f}
+Affected Assets: {test.affected_assets_count or 0}
+
+Provide exactly 5 concise, actionable recommendations in English. Each should be a single sentence.
+Format: One action per line, starting with a verb. English only."""
+
+            llm_actions = await llm_service.generate(
+                prompt=actions_prompt,
+                model=LLMModel.LLAMA_8B,  # Fast model for actions
+                max_tokens=300,
+                temperature=0.4,
+            )
+            
+            if llm_actions.finish_reason != "mock":
+                # Parse LLM response into action items
+                llm_action_lines = [
+                    line.strip().lstrip('•-123456789. ')
+                    for line in llm_actions.content.split('\n')
+                    if line.strip() and len(line.strip()) > 10
+                ][:5]
+                
+                if len(llm_action_lines) >= 3:
+                    # Update insurer actions with LLM-generated ones
+                    for plan in base_plans:
+                        if plan["type"] == OrganizationType.INSURER:
+                            plan["default_actions"] = llm_action_lines
+                            break
+                    logger.info(f"LLM generated {len(llm_action_lines)} action items")
+        except Exception as e:
+            logger.error(f"LLM action generation error: {e}")
+    
+    # Convert to final format
+    for plan in base_plans:
+        org_plans.append({
+            "type": plan["type"],
+            "actions": plan["default_actions"],
+            "priority": plan["priority"],
+            "timeline": plan["timeline"],
+        })
     
     for plan_data in org_plans:
         action_plan = ActionPlan(

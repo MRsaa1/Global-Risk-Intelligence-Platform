@@ -132,6 +132,7 @@ interface CesiumGlobeProps {
   onZoneClick?: (zone: RiskZone | null) => void  // Callback when zone is clicked
   onZoneAssetClick?: (asset: ZoneAsset | null) => void  // Callback when asset in zone is clicked
   paused?: boolean  // Pause rendering (when Digital Twin is open)
+  activeRiskFilter?: 'critical' | 'high' | 'medium' | 'low' | null  // Filter hotspots by risk level
 }
 
 // Asset type to icon color mapping
@@ -160,13 +161,15 @@ export default function CesiumGlobe({
   selectedZone = null,
   onZoneClick,
   onZoneAssetClick,
-  paused = false
+  paused = false,
+  activeRiskFilter = null
 }: CesiumGlobeProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const viewerRef = useRef<Cesium.Viewer | null>(null)
   const [isReady, setIsReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hotspots, setHotspots] = useState<Hotspot[]>([])
+  const hotspotEntitiesRef = useRef<Map<string, Cesium.Entity[]>>(new Map())
   const zoneEntitiesRef = useRef<Cesium.Entity[]>([])
   const assetEntitiesRef = useRef<Cesium.Entity[]>([])
   
@@ -283,16 +286,22 @@ export default function CesiumGlobe({
         }
         
         // =============================================
-        // CESIUM WORLD TERRAIN (Asset ID 1)
+        // CESIUM WORLD TERRAIN (Asset ID 1) - New API
         // =============================================
         try {
           if (!isMounted || !viewer || viewer.isDestroyed()) return
-          const terrainProvider = await Cesium.CesiumTerrainProvider.fromIonAssetId(1)
-          if (!isMounted || !viewer || viewer.isDestroyed()) return
-          viewer.terrainProvider = terrainProvider
+          
+          // Use new setTerrain API (Cesium 1.104+)
+          viewer.scene.setTerrain(
+            new Cesium.Terrain(
+              Cesium.CesiumTerrainProvider.fromIonAssetId(1)
+            )
+          )
           console.log('✅ Cesium World Terrain loaded (Asset ID 1)')
         } catch (e) {
           console.warn('Cesium World Terrain failed:', e)
+          // Fallback to ellipsoid terrain (smooth sphere)
+          console.log('ℹ️ Using ellipsoid terrain as fallback')
         }
         
         // =============================================
@@ -356,15 +365,147 @@ export default function CesiumGlobe({
         console.log('✅ Night visualization configured')
 
         // =============================================
-        // HOTSPOTS - Disabled for now (visual issues)
+        // HOTSPOTS - Glowing risk indicators
         // =============================================
         if (!isMounted || !viewer || viewer.isDestroyed()) return
         const loadedHotspots = await loadHotspots(scenario)
         if (!isMounted || !viewer || viewer.isDestroyed()) return
         setHotspots(loadedHotspots) // Save to state for parent component
-        // Hotspot visual markers disabled - uncomment to enable
-        // const hotspotEntities: { entity: Cesium.Entity; baseSize: number; spot: Hotspot }[] = []
-        // loadedHotspots.forEach((spot, index) => { ... })
+        
+        // Create glowing hotspot entities with multiple rings
+        const entityMap = new Map<string, Cesium.Entity[]>()
+        
+        loadedHotspots.forEach((spot) => {
+          const entities: Cesium.Entity[] = []
+          const baseRadius = 150000 + spot.risk * 200000 // 150-350 km
+          const color = getRiskColor(spot.risk)
+          const position = Cesium.Cartesian3.fromDegrees(spot.lng, spot.lat, 0)
+          
+          // Ring 1 - Outer glow (largest, most transparent)
+          const ring1 = viewer.entities.add({
+            id: `hotspot-ring1-${spot.id}`,
+            position,
+            ellipse: {
+              semiMajorAxis: baseRadius * 2.5,
+              semiMinorAxis: baseRadius * 2.5,
+              height: 0,
+              material: color.withAlpha(0.08),
+              outline: true,
+              outlineColor: color.withAlpha(0.15),
+              outlineWidth: 1,
+            },
+            show: false, // Hidden by default, shown when filter active
+          })
+          entities.push(ring1)
+          
+          // Ring 2 - Middle ring
+          const ring2 = viewer.entities.add({
+            id: `hotspot-ring2-${spot.id}`,
+            position,
+            ellipse: {
+              semiMajorAxis: baseRadius * 1.8,
+              semiMinorAxis: baseRadius * 1.8,
+              height: 0,
+              material: color.withAlpha(0.12),
+              outline: true,
+              outlineColor: color.withAlpha(0.25),
+              outlineWidth: 1.5,
+            },
+            show: false,
+          })
+          entities.push(ring2)
+          
+          // Ring 3 - Inner ring (brighter)
+          const ring3 = viewer.entities.add({
+            id: `hotspot-ring3-${spot.id}`,
+            position,
+            ellipse: {
+              semiMajorAxis: baseRadius * 1.2,
+              semiMinorAxis: baseRadius * 1.2,
+              height: 0,
+              material: color.withAlpha(0.20),
+              outline: true,
+              outlineColor: color.withAlpha(0.40),
+              outlineWidth: 2,
+            },
+            show: false,
+          })
+          entities.push(ring3)
+          
+          // Core - Bright center
+          const core = viewer.entities.add({
+            id: `hotspot-core-${spot.id}`,
+            position,
+            ellipse: {
+              semiMajorAxis: baseRadius * 0.6,
+              semiMinorAxis: baseRadius * 0.6,
+              height: 0,
+              material: color.withAlpha(0.45),
+              outline: true,
+              outlineColor: color.withAlpha(0.8),
+              outlineWidth: 3,
+            },
+            show: false,
+          })
+          entities.push(core)
+          
+          // Center point - Brightest
+          const center = viewer.entities.add({
+            id: `hotspot-center-${spot.id}`,
+            position: Cesium.Cartesian3.fromDegrees(spot.lng, spot.lat, 5000),
+            point: {
+              pixelSize: 12 + spot.risk * 8,
+              color: Cesium.Color.WHITE.withAlpha(0.95),
+              outlineColor: color.withAlpha(0.9),
+              outlineWidth: 3,
+              scaleByDistance: new Cesium.NearFarScalar(1e6, 1.5, 1e8, 0.5),
+            },
+            label: {
+              text: spot.name,
+              font: '13px Inter, sans-serif',
+              fillColor: Cesium.Color.WHITE,
+              outlineColor: Cesium.Color.BLACK,
+              outlineWidth: 2,
+              style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+              verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+              pixelOffset: new Cesium.Cartesian2(0, -20),
+              scaleByDistance: new Cesium.NearFarScalar(1e6, 1, 1e8, 0.3),
+              showBackground: true,
+              backgroundColor: Cesium.Color.BLACK.withAlpha(0.6),
+              backgroundPadding: new Cesium.Cartesian2(6, 4),
+            },
+            show: false,
+          })
+          entities.push(center)
+          
+          entityMap.set(spot.id, entities)
+        })
+        
+        hotspotEntitiesRef.current = entityMap
+        console.log(`✅ Created glowing hotspots for ${loadedHotspots.length} cities`)
+        
+        // Pulsing animation for hotspots
+        let pulseTime = 0
+        const pulseListener = () => {
+          pulseTime += 0.03
+          const pulseFactor = 0.85 + Math.sin(pulseTime) * 0.15 // 0.7 - 1.0
+          
+          entityMap.forEach((entities, spotId) => {
+            // Only animate visible entities
+            if (!entities[0]?.show) return
+            
+            // Animate outer ring opacity
+            const ring1 = entities[0]
+            if (ring1?.ellipse?.material) {
+              const baseColor = getRiskColor(hotspots.find(h => h.id === spotId)?.risk || 0.5)
+              ring1.ellipse.material = baseColor.withAlpha(0.08 * pulseFactor) as unknown as Cesium.MaterialProperty
+            }
+          })
+          
+          viewer.scene.requestRender()
+        }
+        
+        viewer.scene.preRender.addEventListener(pulseListener)
         
         // Use request render mode for better performance (only render when needed)
         viewer.scene.requestRenderMode = true
@@ -449,9 +590,21 @@ export default function CesiumGlobe({
               return
             }
             
-            // Regular hotspot click
+            // Regular hotspot click - extract city ID from entity ID
+            // Entity IDs have format: hotspot-center-{city_id}, hotspot-core-{city_id}, etc.
             if (entityId && !entityId.includes('-ring') && !entityId.includes('-pulse')) {
-              onAssetSelect?.(entityId)
+              let cityId = entityId
+              if (entityId.startsWith('hotspot-center-')) {
+                cityId = entityId.replace('hotspot-center-', '')
+              } else if (entityId.startsWith('hotspot-core-')) {
+                cityId = entityId.replace('hotspot-core-', '')
+              } else if (entityId.startsWith('hotspot-')) {
+                // Generic hotspot prefix
+                cityId = entityId.replace(/^hotspot-[a-z]+-/, '')
+              }
+              
+              console.log('Hotspot clicked, entity:', entityId, '-> city:', cityId)
+              onAssetSelect?.(cityId)
               
               // Fly to selected
               const hotspotEntity = viewer.entities.getById(entityId)
@@ -521,6 +674,44 @@ export default function CesiumGlobe({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hotspots])
+
+  // Handle activeRiskFilter - show/hide hotspots based on risk level
+  useEffect(() => {
+    const viewer = viewerRef.current
+    if (!viewer || viewer.isDestroyed()) return
+    
+    const entityMap = hotspotEntitiesRef.current
+    if (entityMap.size === 0) return
+    
+    // Determine which hotspots should be visible
+    const shouldShow = (risk: number): boolean => {
+      if (!activeRiskFilter) return false // Hide all when no filter
+      
+      switch (activeRiskFilter) {
+        case 'critical': return risk > 0.8
+        case 'high': return risk > 0.6 && risk <= 0.8
+        case 'medium': return risk > 0.4 && risk <= 0.6
+        case 'low': return risk <= 0.4
+        default: return false
+      }
+    }
+    
+    // Update visibility for each hotspot
+    hotspots.forEach((spot) => {
+      const entities = entityMap.get(spot.id)
+      if (!entities) return
+      
+      const visible = shouldShow(spot.risk)
+      entities.forEach((entity) => {
+        entity.show = visible
+      })
+    })
+    
+    // Request render update
+    viewer.scene.requestRender()
+    
+    console.log(`Risk filter: ${activeRiskFilter || 'none'} - showing ${hotspots.filter(s => shouldShow(s.risk)).length} hotspots`)
+  }, [activeRiskFilter, hotspots])
 
   // Handle selected zone - zoom to zone and show assets
   useEffect(() => {

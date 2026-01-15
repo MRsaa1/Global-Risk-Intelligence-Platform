@@ -38,8 +38,8 @@ export default function Layout() {
 
   return (
     <div className="flex h-screen bg-[#0a0e17]">
-      {/* Sidebar - compact for Command Center */}
-      <aside className={`${isCommandCenter ? 'w-14' : 'w-20'} flex flex-col items-center py-4 border-r border-[#1a2535] bg-[#0a0f18] transition-all`}>
+      {/* Sidebar - hidden for Command Center, visible elsewhere */}
+      <aside className={`${isCommandCenter ? 'hidden' : 'w-20'} flex flex-col items-center py-4 border-r border-[#1a2535] bg-[#0a0f18] transition-all`}>
         {/* Logo */}
         <div className="mb-6">
           <motion.div

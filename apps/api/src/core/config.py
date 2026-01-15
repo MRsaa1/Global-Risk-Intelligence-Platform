@@ -12,6 +12,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",  # Allow extra env vars
     )
     
     # Application
@@ -19,6 +20,9 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     debug: bool = False
     environment: Literal["development", "staging", "production"] = "development"
+    
+    # Database mode
+    use_sqlite: bool = False  # Use SQLite instead of PostgreSQL for simple deployments
     
     # API
     api_prefix: str = "/api/v1"
@@ -77,9 +81,14 @@ class Settings(BaseSettings):
     # Deployment mode: cloud (NVIDIA API) or local (NIM with GPU)
     nvidia_mode: str = "cloud"
     
-    # NVIDIA Cloud APIs (fallback)
-    earth2_api_url: str = "https://api.nvidia.com/v1/earth2"
-    physics_nemo_api_url: str = "https://api.nvidia.com/v1/physics-nemo"
+    # NVIDIA Cloud APIs
+    # Note: LLM works via cloud API, but Earth-2/FLUX require local NIM
+    nvidia_llm_api_url: str = "https://integrate.api.nvidia.com/v1"
+    
+    # Earth-2 and PhysicsNeMo require local NIM containers
+    # These are placeholder URLs - actual deployment needs local GPU server
+    earth2_api_url: str = "http://localhost:8001"  # Local NIM
+    physics_nemo_api_url: str = "http://localhost:8002"  # Local NIM
     
     # Use local NIM or cloud
     use_local_nim: bool = True

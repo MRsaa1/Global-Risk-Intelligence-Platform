@@ -25,14 +25,17 @@ import FinancialChart from '../components/FinancialChart'
 import HeatmapChart from '../components/HeatmapChart'
 import BIMViewer from '../components/BIMViewer'
 import Viewer3D from '../components/Viewer3D'
+import RiskFlowDiagram from '../components/RiskFlowDiagram'
+import { ArrowsRightLeftIcon } from '@heroicons/react/24/outline'
 
 // Tabs for different visualization categories
-type TabType = 'plotly' | 'd3' | 'threejs' | 'deckgl' | 'nvidia'
+type TabType = 'flow' | 'plotly' | 'd3' | 'threejs' | 'deckgl' | 'nvidia'
 
 export default function Visualizations() {
-  const [activeTab, setActiveTab] = useState<TabType>('plotly')
+  const [activeTab, setActiveTab] = useState<TabType>('flow')
 
   const tabs = [
+    { id: 'flow', name: 'Risk Flow', icon: ArrowsRightLeftIcon },
     { id: 'plotly', name: 'Plotly 3D', icon: ChartBarIcon },
     { id: 'd3', name: 'D3.js', icon: SparklesIcon },
     { id: 'threejs', name: 'Three.js', icon: CubeIcon },
@@ -78,12 +81,108 @@ export default function Visualizations() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
         >
+          {activeTab === 'flow' && <RiskFlowSection />}
           {activeTab === 'plotly' && <PlotlySection />}
           {activeTab === 'd3' && <D3Section />}
           {activeTab === 'threejs' && <ThreeJSSection />}
           {activeTab === 'deckgl' && <DeckGLSection />}
           {activeTab === 'nvidia' && <NVIDIASection />}
         </motion.div>
+      </div>
+    </div>
+  )
+}
+
+// ==================== RISK FLOW SECTION ====================
+function RiskFlowSection() {
+  // Sample stress test data for demo
+  const sampleRiskZones = [
+    { name: 'New York', risk: 0.85, exposure: 52.3 },
+    { name: 'Tokyo', risk: 0.92, exposure: 45.2 },
+    { name: 'London', risk: 0.68, exposure: 38.5 },
+    { name: 'Frankfurt', risk: 0.58, exposure: 35.2 },
+    { name: 'Shanghai', risk: 0.82, exposure: 55.8 },
+    { name: 'Singapore', risk: 0.62, exposure: 38.9 },
+    { name: 'Hong Kong', risk: 0.75, exposure: 42.5 },
+    { name: 'Sydney', risk: 0.52, exposure: 38.7 },
+  ]
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-xl font-semibold text-white">Risk Flow Visualization</h2>
+      <p className="text-dark-muted">
+        Sankey diagrams showing how risk events cascade through sectors to impact levels
+      </p>
+      
+      {/* Main Risk Flow Diagram */}
+      <RiskFlowDiagram height={450} />
+      
+      {/* Stress Test Specific Flow */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-dark-card rounded-xl p-4">
+          <h3 className="text-lg font-medium text-white mb-4">Climate Shock Flow</h3>
+          <RiskFlowDiagram 
+            stressTestName="Climate Physical Shock"
+            riskZones={sampleRiskZones}
+            height={350}
+          />
+        </div>
+        
+        <div className="bg-dark-card rounded-xl p-4">
+          <h3 className="text-lg font-medium text-white mb-4">Financial Crisis Flow</h3>
+          <RiskFlowDiagram 
+            stressTestName="Basel Full Financial Crisis"
+            riskZones={[
+              { name: 'Wall Street', risk: 0.92, exposure: 85.3 },
+              { name: 'City of London', risk: 0.88, exposure: 72.5 },
+              { name: 'Frankfurt', risk: 0.78, exposure: 45.2 },
+              { name: 'Zurich', risk: 0.65, exposure: 42.5 },
+              { name: 'Singapore', risk: 0.72, exposure: 38.9 },
+              { name: 'Hong Kong', risk: 0.82, exposure: 48.5 },
+            ]}
+            height={350}
+          />
+        </div>
+      </div>
+
+      {/* Explanation */}
+      <div className="bg-dark-card rounded-xl p-6">
+        <h3 className="text-lg font-medium text-white mb-4">How to Read Risk Flow Diagrams</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-4 h-4 rounded bg-red-500" />
+              <span className="text-white font-medium">Left Column: Risk Events</span>
+            </div>
+            <p className="text-dark-muted">
+              Source events that trigger the risk cascade (earthquakes, financial crises, pandemics, etc.)
+            </p>
+          </div>
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-4 h-4 rounded bg-blue-500" />
+              <span className="text-white font-medium">Middle Column: Sectors/Regions</span>
+            </div>
+            <p className="text-dark-muted">
+              Affected sectors or geographic regions that propagate the risk further
+            </p>
+          </div>
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-4 h-4 rounded bg-orange-500" />
+              <span className="text-white font-medium">Right Column: Impact Level</span>
+            </div>
+            <p className="text-dark-muted">
+              Final impact severity classification (Critical, High, Medium, Low)
+            </p>
+          </div>
+        </div>
+        <div className="mt-4 pt-4 border-t border-white/10">
+          <p className="text-dark-muted text-sm">
+            <strong className="text-white">Flow Width</strong> represents the exposure amount in billions of euros (€B). 
+            Thicker flows indicate higher financial exposure.
+          </p>
+        </div>
       </div>
     </div>
   )
@@ -189,15 +288,11 @@ function D3Section() {
           </div>
         </div>
 
-        {/* Flow Diagram placeholder */}
+        {/* Sankey Flow Diagram */}
         <div className="bg-dark-card rounded-xl p-4">
           <h3 className="text-lg font-medium text-white mb-4">Sankey Flow</h3>
-          <div className="h-80 flex items-center justify-center text-dark-muted">
-            <div className="text-center">
-              <ChartBarIcon className="w-16 h-16 mx-auto mb-4 text-primary-400" />
-              <p>Risk Flow Diagram</p>
-              <p className="text-sm mt-2">Cascade propagation visualization</p>
-            </div>
+          <div className="h-80">
+            <RiskFlowDiagram height={300} />
           </div>
         </div>
       </div>

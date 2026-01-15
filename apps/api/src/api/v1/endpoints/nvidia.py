@@ -687,3 +687,142 @@ async def advisor_recommendations(
         "recommendations": recommendations,
         "options_evaluated": options,
     }
+
+
+# ==================== STRESS TEST REPORT WITH LLM ====================
+
+class StressReportRequest(BaseModel):
+    """Request for LLM-generated stress test report."""
+    event_name: str
+    event_type: str
+    city_name: str
+    severity: float = Field(default=0.5, ge=0, le=1)
+    total_loss: float = Field(default=0)
+    total_buildings: int = Field(default=0)
+    total_population: int = Field(default=0)
+    zones: list[dict] = Field(default=[])
+
+
+@router.post("/llm/stress-report")
+async def generate_stress_report_llm(
+    request: StressReportRequest,
+):
+    """
+    Generate LLM-powered stress test report.
+    
+    Uses NVIDIA Llama 3.1 to generate:
+    - Executive summary
+    - Mitigation recommendations
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # Format zones for prompt
+    zones_text = "\n".join([
+        f"- {z.get('label', 'Zone')}: {z.get('risk_level', 'unknown').upper()} "
+        f"(Buildings: {z.get('affected_buildings', 0)}, Loss: €{z.get('estimated_loss', 0)}M)"
+        for z in request.zones[:5]
+    ])
+    
+    # Generate executive summary
+    summary_prompt = f"""Analyze this stress test scenario and provide a professional executive summary (2-3 paragraphs).
+
+Stress Test: {request.event_name}
+Type: {request.event_type}
+Location: {request.city_name}
+Severity: {request.severity:.0%}
+
+Impact Assessment:
+- Total Expected Loss: €{request.total_loss:,.0f}M
+- Buildings Affected: {request.total_buildings:,}
+- Population Impacted: {request.total_population:,}
+
+Identified Risk Zones:
+{zones_text}
+
+Provide:
+1. Executive summary of the risk scenario and its implications
+2. Key findings with quantitative metrics
+3. Immediate priorities for stakeholders
+
+IMPORTANT: Write in plain text only. Do NOT use any markdown formatting such as asterisks, bold, headers, or bullet points with dashes.
+Use professional risk management language. Be concise but comprehensive. Write in English."""
+
+    try:
+        summary_response = await llm_service.generate(
+            prompt=summary_prompt,
+            model=LLMModel.LLAMA_70B,
+            max_tokens=600,
+            temperature=0.3,
+        )
+        
+        executive_summary = summary_response.content
+        
+        # Remove markdown formatting
+        if executive_summary:
+            import re
+            # Remove bold/italic markers
+            executive_summary = re.sub(r'\*\*([^*]+)\*\*', r'\1', executive_summary)
+            executive_summary = re.sub(r'\*([^*]+)\*', r'\1', executive_summary)
+            executive_summary = re.sub(r'__([^_]+)__', r'\1', executive_summary)
+            executive_summary = re.sub(r'_([^_]+)_', r'\1', executive_summary)
+            # Remove markdown headers
+            executive_summary = re.sub(r'^#{1,6}\s*', '', executive_summary, flags=re.MULTILINE)
+            # Clean up multiple newlines
+            executive_summary = re.sub(r'\n{3,}', '\n\n', executive_summary)
+            executive_summary = executive_summary.strip()
+        
+        if summary_response.finish_reason == "mock":
+            executive_summary = None
+            logger.warning("LLM returned mock response")
+        else:
+            logger.info(f"LLM generated executive summary ({summary_response.tokens_used} tokens)")
+            
+    except Exception as e:
+        logger.error(f"LLM summary error: {e}")
+        executive_summary = None
+    
+    # Generate mitigation actions
+    mitigation_actions = []
+    
+    try:
+        actions_prompt = f"""Generate 5 specific mitigation actions for this {request.event_type} risk scenario in {request.city_name}.
+
+Event: {request.event_name}
+Severity: {request.severity:.0%}
+Expected Loss: €{request.total_loss:,.0f}M
+
+Provide exactly 5 concise action items, each on a new line. Start each with a verb.
+Write in plain text only. Do NOT use markdown formatting, asterisks, or special symbols.
+Write in English only."""
+
+        actions_response = await llm_service.generate(
+            prompt=actions_prompt,
+            model=LLMModel.LLAMA_8B,
+            max_tokens=250,
+            temperature=0.4,
+        )
+        
+        if actions_response.finish_reason != "mock":
+            import re
+            # Parse actions from response and remove markdown
+            lines = []
+            for line in actions_response.content.split('\n'):
+                line = line.strip().lstrip('•-1234567890. ')
+                # Remove markdown bold/italic
+                line = re.sub(r'\*\*([^*]+)\*\*', r'\1', line)
+                line = re.sub(r'\*([^*]+)\*', r'\1', line)
+                if line and len(line) > 10:
+                    lines.append(line)
+            mitigation_actions = lines[:5]
+            logger.info(f"LLM generated {len(mitigation_actions)} actions")
+            
+    except Exception as e:
+        logger.error(f"LLM actions error: {e}")
+    
+    return {
+        "executive_summary": executive_summary,
+        "mitigation_actions": mitigation_actions,
+        "llm_model": "meta/llama-3.1-70b-instruct",
+        "generated": executive_summary is not None,
+    }

@@ -68,7 +68,12 @@ class NVIDIAEarth2Service:
     """
     
     def __init__(self):
-        self.api_key = getattr(settings, 'nvidia_api_key', None) or ""
+        # Use FourCastNet-specific API key, fallback to main NVIDIA key
+        self.api_key = (
+            getattr(settings, 'nvidia_fourcastnet_api_key', None) or 
+            getattr(settings, 'nvidia_api_key', None) or 
+            ""
+        )
         self.base_url = getattr(settings, 'earth2_api_url', 'https://api.nvidia.com/v1/earth2')
         
         # Build headers - only include Authorization if API key exists

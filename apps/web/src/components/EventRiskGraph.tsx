@@ -452,8 +452,7 @@ export default function EventRiskGraph({
     <div 
       ref={containerRef}
       className={`relative rounded-xl overflow-hidden border border-white/10 bg-black/40 ${fullWidth ? 'w-full' : ''}`}
-      style={fullWidth ? { height: 450 } : undefined}
-      style={fullWidth ? { minHeight: 450 } : undefined}
+      style={fullWidth ? { height: 450, minHeight: 450 } : undefined}
     >
       {/* Header */}
       <div className="absolute top-0 left-0 right-0 z-10 p-3 bg-gradient-to-b from-black/80 to-transparent">

@@ -8,152 +8,70 @@ Prepares geographic data for client-side rendering:
 - Data optimized for CesiumJS/Deck.gl
 
 Key principle: Server computes, client renders
+
+Now uses CityRiskCalculator for dynamic risk scoring based on:
+- Seismic activity (USGS data)
+- Flood/Hurricane risk (weather data)
+- Political stability
+- Economic exposure
+- Historical events
 """
-import json
+import asyncio
 import logging
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 import numpy as np
 
+from .city_risk_calculator import CityRiskCalculator, CityRiskScore, get_city_risk_calculator
+from .external.usgs_client import USGSClient
+from .external.weather_client import WeatherClient
+from ..data.cities import get_all_cities, get_city, CITIES_DATABASE
+
 logger = logging.getLogger(__name__)
-
-
-# Risk hotspots - ONLY cities with 3D Tiles in Cesium Ion
-RISK_HOTSPOTS = [
-    {
-        "id": "newyork",
-        "name": "New York City",
-        "lat": 40.7128,
-        "lng": -74.0060,
-        "exposure": 52.3,
-        "risk_score": 0.75,
-        "risk_factors": {
-            "flood": 0.65,
-            "hurricane": 0.55,
-            "credit": 0.35,
-        },
-        "assets_count": 1834,
-        "pd_1y": 0.028,
-        "lgd": 0.42,
-    },
-    {
-        "id": "tokyo",
-        "name": "Tokyo",
-        "lat": 35.6762,
-        "lng": 139.6503,
-        "exposure": 45.2,
-        "risk_score": 0.92,
-        "risk_factors": {
-            "earthquake": 0.95,
-            "flood": 0.75,
-            "typhoon": 0.85,
-            "credit": 0.45,
-        },
-        "assets_count": 1247,
-        "pd_1y": 0.042,
-        "lgd": 0.55,
-    },
-    {
-        "id": "melbourne",
-        "name": "Melbourne",
-        "lat": -37.8136,
-        "lng": 144.9631,
-        "exposure": 28.5,
-        "risk_score": 0.58,
-        "risk_factors": {
-            "flood": 0.35,
-            "fire": 0.45,
-            "credit": 0.30,
-        },
-        "assets_count": 892,
-        "pd_1y": 0.022,
-        "lgd": 0.40,
-    },
-    {
-        "id": "boston",
-        "name": "Boston",
-        "lat": 42.3601,
-        "lng": -71.0589,
-        "exposure": 31.2,
-        "risk_score": 0.62,
-        "risk_factors": {
-            "flood": 0.55,
-            "hurricane": 0.40,
-            "credit": 0.28,
-        },
-        "assets_count": 756,
-        "pd_1y": 0.025,
-        "lgd": 0.38,
-    },
-    {
-        "id": "sydney",
-        "name": "Sydney",
-        "lat": -33.8688,
-        "lng": 151.2093,
-        "exposure": 38.7,
-        "risk_score": 0.52,
-        "risk_factors": {
-            "fire": 0.60,
-            "flood": 0.40,
-            "credit": 0.22,
-        },
-        "assets_count": 945,
-        "pd_1y": 0.020,
-        "lgd": 0.35,
-    },
-    {
-        "id": "denver",
-        "name": "Denver",
-        "lat": 39.7392,
-        "lng": -104.9903,
-        "exposure": 18.9,
-        "risk_score": 0.45,
-        "risk_factors": {
-            "fire": 0.35,
-            "flood": 0.25,
-            "credit": 0.18,
-        },
-        "assets_count": 423,
-        "pd_1y": 0.018,
-        "lgd": 0.32,
-    },
-    {
-        "id": "washington",
-        "name": "Washington DC",
-        "lat": 38.9072,
-        "lng": -77.0369,
-        "exposure": 42.1,
-        "risk_score": 0.48,
-        "risk_factors": {
-            "flood": 0.45,
-            "hurricane": 0.35,
-            "credit": 0.20,
-        },
-        "assets_count": 678,
-        "pd_1y": 0.019,
-        "lgd": 0.34,
-    },
-    {
-        "id": "montreal",
-        "name": "Montreal",
-        "lat": 45.5017,
-        "lng": -73.5673,
-        "exposure": 22.4,
-        "risk_score": 0.55,
-        "risk_factors": {
-            "flood": 0.50,
-            "cold": 0.40,
-            "credit": 0.25,
-        },
-        "assets_count": 512,
-        "pd_1y": 0.022,
-        "lgd": 0.36,
-    },
-]
 
 
 class GeoDataService:
     """Service for preparing geographic data for visualization."""
+    
+    def __init__(self):
+        """Initialize with external API clients."""
+        self.usgs_client = USGSClient()
+        self.weather_client = WeatherClient()
+        self._calculator: Optional[CityRiskCalculator] = None
+        self._cached_scores: Dict[str, CityRiskScore] = {}
+        self._cache_time: Optional[datetime] = None
+        self._cache_ttl_hours = 24
+    
+    def _get_calculator(self) -> CityRiskCalculator:
+        """Get or create risk calculator with API clients."""
+        if self._calculator is None:
+            self._calculator = CityRiskCalculator(
+                usgs_client=self.usgs_client,
+                weather_client=self.weather_client,
+            )
+        return self._calculator
+    
+    async def _ensure_risk_scores(self, force_recalculate: bool = False) -> Dict[str, CityRiskScore]:
+        """Ensure risk scores are calculated and cached."""
+        now = datetime.utcnow()
+        
+        # Check if cache is valid
+        if (not force_recalculate 
+            and self._cache_time 
+            and (now - self._cache_time).total_seconds() < self._cache_ttl_hours * 3600
+            and self._cached_scores):
+            return self._cached_scores
+        
+        # Calculate all city risks
+        calculator = self._get_calculator()
+        scores = await calculator.calculate_all_cities(force_recalculate)
+        
+        # Cache results
+        self._cached_scores = {s.city_id: s for s in scores}
+        self._cache_time = now
+        
+        logger.info(f"Calculated risk scores for {len(scores)} cities")
+        return self._cached_scores
 
     def get_risk_hotspots_geojson(
         self,
@@ -165,51 +83,86 @@ class GeoDataService:
         Returns risk hotspots as GeoJSON FeatureCollection.
         
         Optimized for Deck.gl/CesiumJS rendering.
+        Uses CityRiskCalculator for dynamic risk scoring.
         """
-        features = []
+        # Run async calculation in sync context
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # If already in async context, use cached or compute
+                scores = self._cached_scores or {}
+            else:
+                scores = loop.run_until_complete(self._ensure_risk_scores())
+        except RuntimeError:
+            # No event loop, create one
+            scores = asyncio.run(self._ensure_risk_scores())
         
-        for spot in RISK_HOTSPOTS:
-            if spot["risk_score"] < min_risk or spot["risk_score"] > max_risk:
+        features = []
+        total_exposure = 0.0
+        
+        for city_id, score in scores.items():
+            if score.risk_score < min_risk or score.risk_score > max_risk:
                 continue
             
             # Apply scenario adjustment if specified
-            adjusted_risk = spot["risk_score"]
+            adjusted_risk = score.risk_score
+            risk_factors_dict = {
+                name: factor.value 
+                for name, factor in score.risk_factors.items()
+            }
+            
             if scenario == "climate_physical":
                 climate_factor = max(
-                    spot["risk_factors"].get("flood", 0),
-                    spot["risk_factors"].get("typhoon", 0),
-                    spot["risk_factors"].get("hurricane", 0),
-                    spot["risk_factors"].get("cyclone", 0),
+                    risk_factors_dict.get("flood", 0),
+                    risk_factors_dict.get("hurricane", 0),
                 )
                 adjusted_risk = min(1.0, adjusted_risk * (1 + climate_factor * 0.3))
             elif scenario == "credit_shock":
-                credit_factor = spot["risk_factors"].get("credit", 0.3)
-                adjusted_risk = min(1.0, adjusted_risk * (1 + credit_factor * 0.5))
+                economic_factor = risk_factors_dict.get("economic", 0.3)
+                adjusted_risk = min(1.0, adjusted_risk * (1 + economic_factor * 0.5))
+            elif scenario == "seismic_event":
+                seismic_factor = risk_factors_dict.get("seismic", 0)
+                adjusted_risk = min(1.0, adjusted_risk * (1 + seismic_factor * 0.4))
+            
+            # Calculate derived metrics
+            pd_1y = 0.02 + adjusted_risk * 0.03  # 2-5% based on risk
+            lgd = 0.30 + adjusted_risk * 0.25   # 30-55% based on risk
             
             feature = {
                 "type": "Feature",
-                "id": spot["id"],
+                "id": city_id,
                 "geometry": {
                     "type": "Point",
-                    "coordinates": [spot["lng"], spot["lat"]],
+                    "coordinates": list(score.coordinates),
                 },
                 "properties": {
-                    "name": spot["name"],
-                    "exposure": spot["exposure"],
-                    "risk_score": adjusted_risk,
-                    "base_risk": spot["risk_score"],
-                    "risk_factors": spot["risk_factors"],
-                    "assets_count": spot["assets_count"],
-                    "pd_1y": spot["pd_1y"],
-                    "lgd": spot["lgd"],
-                    "expected_loss": spot["exposure"] * spot["pd_1y"] * spot["lgd"],
+                    "name": score.name,
+                    "exposure": score.exposure,
+                    "risk_score": round(adjusted_risk, 3),
+                    "base_risk": round(score.risk_score, 3),
+                    "confidence": round(score.confidence, 2),
+                    "calculation_method": score.calculation_method,
+                    "risk_factors": {
+                        name: {
+                            "value": round(factor.value, 2),
+                            "source": factor.source,
+                            "details": factor.details,
+                        }
+                        for name, factor in score.risk_factors.items()
+                    },
+                    "assets_count": score.assets_count,
+                    "pd_1y": round(pd_1y, 3),
+                    "lgd": round(lgd, 2),
+                    "expected_loss": round(score.exposure * pd_1y * lgd, 2),
+                    "data_freshness": score.data_freshness.isoformat(),
                     # Visual properties for client
-                    "radius": 200000 + adjusted_risk * 400000,  # meters
+                    "radius": 200000 + adjusted_risk * 400000,
                     "color": self._risk_to_color(adjusted_risk),
-                    "elevation": adjusted_risk * 100000,  # for 3D extrusion
+                    "elevation": adjusted_risk * 100000,
                 },
             }
             features.append(feature)
+            total_exposure += score.exposure
         
         return {
             "type": "FeatureCollection",
@@ -217,8 +170,10 @@ class GeoDataService:
             "metadata": {
                 "generated_at": datetime.utcnow().isoformat(),
                 "scenario": scenario,
-                "total_exposure": sum(s["exposure"] for s in RISK_HOTSPOTS),
+                "total_exposure": round(total_exposure, 1),
                 "hotspot_count": len(features),
+                "calculation_method": "CityRiskCalculator v1.0",
+                "data_sources": ["USGS Earthquake Catalog", "Climate Zones", "Known Risk Database"],
             },
         }
 
@@ -227,37 +182,46 @@ class GeoDataService:
         Returns risk network as nodes + edges for force-directed graph.
         
         Optimized for Deck.gl/Sigma.js rendering.
+        Uses dynamic risk scores from CityRiskCalculator.
         """
         nodes = []
         edges = []
         
-        for spot in RISK_HOTSPOTS:
+        # Use cached scores or empty
+        scores = self._cached_scores or {}
+        score_list = list(scores.values())
+        
+        for score in score_list:
             nodes.append({
-                "id": spot["id"],
-                "name": spot["name"],
-                "x": spot["lng"] * 10,  # Scaled for visualization
-                "y": spot["lat"] * 10,
-                "size": spot["exposure"] * 2,
-                "risk": spot["risk_score"],
-                "color": self._risk_to_color(spot["risk_score"]),
+                "id": score.city_id,
+                "name": score.name,
+                "x": score.coordinates[0] * 10,  # Scaled for visualization
+                "y": score.coordinates[1] * 10,
+                "size": score.exposure * 2,
+                "risk": round(score.risk_score, 2),
+                "color": self._risk_to_color(score.risk_score),
             })
         
-        # Create edges based on correlation (simplified)
-        for i, spot1 in enumerate(RISK_HOTSPOTS):
-            for spot2 in RISK_HOTSPOTS[i + 1:]:
+        # Create edges based on correlation of risk factors
+        for i, score1 in enumerate(score_list):
+            factors1 = {name: f.value for name, f in score1.risk_factors.items()}
+            
+            for score2 in score_list[i + 1:]:
+                factors2 = {name: f.value for name, f in score2.risk_factors.items()}
+                
                 # Correlation based on shared risk factors
-                shared = set(spot1["risk_factors"].keys()) & set(spot2["risk_factors"].keys())
+                shared = set(factors1.keys()) & set(factors2.keys())
                 if shared:
                     correlation = sum(
-                        spot1["risk_factors"][k] * spot2["risk_factors"][k]
+                        factors1[k] * factors2[k]
                         for k in shared
                     ) / len(shared)
                     
                     if correlation > 0.3:  # Only show significant correlations
                         edges.append({
-                            "source": spot1["id"],
-                            "target": spot2["id"],
-                            "weight": correlation,
+                            "source": score1.city_id,
+                            "target": score2.city_id,
+                            "weight": round(correlation, 2),
                             "color": self._correlation_to_color(correlation),
                         })
         
@@ -280,6 +244,7 @@ class GeoDataService:
         Returns global heatmap as grid data.
         
         Optimized for WebGL heatmap rendering.
+        Uses dynamic risk scores from CityRiskCalculator.
         """
         # Create global grid
         lons = np.linspace(-180, 180, resolution)
@@ -288,16 +253,19 @@ class GeoDataService:
         # Initialize grid with base values
         grid = np.zeros((len(lats), len(lons)))
         
-        # Add gaussian influence from each hotspot
-        for spot in RISK_HOTSPOTS:
-            lat_idx = np.abs(lats - spot["lat"]).argmin()
-            lon_idx = np.abs(lons - spot["lng"]).argmin()
+        # Use cached scores
+        scores = self._cached_scores or {}
+        
+        # Add gaussian influence from each city
+        for score in scores.values():
+            city_lat = score.coordinates[1]
+            city_lng = score.coordinates[0]
             
             # Create gaussian kernel
             for i, lat in enumerate(lats):
                 for j, lon in enumerate(lons):
-                    dist = np.sqrt((lat - spot["lat"])**2 + (lon - spot["lng"])**2)
-                    influence = spot["risk_score"] * np.exp(-dist**2 / 500)
+                    dist = np.sqrt((lat - city_lat)**2 + (lon - city_lng)**2)
+                    influence = score.risk_score * np.exp(-dist**2 / 500)
                     grid[i, j] = max(grid[i, j], influence)
         
         # Convert to list of [lon, lat, value] for Deck.gl HeatmapLayer
@@ -327,27 +295,55 @@ class GeoDataService:
         }
 
     def get_portfolio_summary(self) -> Dict[str, Any]:
-        """Returns aggregated portfolio metrics."""
-        total_exposure = sum(s["exposure"] for s in RISK_HOTSPOTS)
-        weighted_risk = sum(s["exposure"] * s["risk_score"] for s in RISK_HOTSPOTS) / total_exposure
+        """Returns aggregated portfolio metrics using dynamic risk scores."""
+        scores = self._cached_scores or {}
+        score_list = list(scores.values())
+        
+        if not score_list:
+            return {
+                "total_exposure": 0,
+                "weighted_risk": 0,
+                "total_expected_loss": 0,
+                "at_risk_exposure": 0,
+                "critical_exposure": 0,
+                "hotspot_count": 0,
+                "total_assets": 0,
+            }
+        
+        total_exposure = sum(s.exposure for s in score_list)
+        weighted_risk = sum(s.exposure * s.risk_score for s in score_list) / total_exposure if total_exposure > 0 else 0
+        
+        # Calculate expected loss
         total_expected_loss = sum(
-            s["exposure"] * s["pd_1y"] * s["lgd"]
-            for s in RISK_HOTSPOTS
+            s.exposure * (0.02 + s.risk_score * 0.03) * (0.30 + s.risk_score * 0.25)
+            for s in score_list
         )
         
-        at_risk = sum(s["exposure"] for s in RISK_HOTSPOTS if s["risk_score"] > 0.6)
-        critical = sum(s["exposure"] for s in RISK_HOTSPOTS if s["risk_score"] > 0.8)
+        at_risk = sum(s.exposure for s in score_list if s.risk_score > 0.6)
+        critical = sum(s.exposure for s in score_list if s.risk_score > 0.8)
+        
+        # Find highest risk and exposure
+        highest_risk = max(score_list, key=lambda x: x.risk_score)
+        highest_exposure = max(score_list, key=lambda x: x.exposure)
         
         return {
-            "total_exposure": total_exposure,
-            "weighted_risk": weighted_risk,
-            "total_expected_loss": total_expected_loss,
-            "at_risk_exposure": at_risk,
-            "critical_exposure": critical,
-            "hotspot_count": len(RISK_HOTSPOTS),
-            "total_assets": sum(s["assets_count"] for s in RISK_HOTSPOTS),
-            "highest_risk": max(RISK_HOTSPOTS, key=lambda x: x["risk_score"]),
-            "highest_exposure": max(RISK_HOTSPOTS, key=lambda x: x["exposure"]),
+            "total_exposure": round(total_exposure, 1),
+            "weighted_risk": round(weighted_risk, 3),
+            "total_expected_loss": round(total_expected_loss, 2),
+            "at_risk_exposure": round(at_risk, 1),
+            "critical_exposure": round(critical, 1),
+            "hotspot_count": len(score_list),
+            "total_assets": sum(s.assets_count for s in score_list),
+            "highest_risk": {
+                "id": highest_risk.city_id,
+                "name": highest_risk.name,
+                "risk_score": round(highest_risk.risk_score, 2),
+            },
+            "highest_exposure": {
+                "id": highest_exposure.city_id,
+                "name": highest_exposure.name,
+                "exposure": highest_exposure.exposure,
+            },
         }
 
     def _risk_to_color(self, risk: float) -> List[int]:
@@ -378,6 +374,8 @@ class GeoDataService:
         - Physical climate risks (temperature, precipitation, sea level)
         - Impact on portfolio hotspots
         - Time-based projections
+        
+        Uses dynamic risk scores from CityRiskCalculator.
         """
         # Climate impact multipliers by scenario (SSP1-2.6, SSP2-4.5, SSP5-8.5)
         scenario_multipliers = {
@@ -391,61 +389,61 @@ class GeoDataService:
         # Time-based scaling (2030 = 1.0, 2050 = 1.5, 2100 = 2.5)
         time_factor = 1.0 + (time_horizon - 2025) / 75
         
+        # Use cached scores
+        scores = self._cached_scores or {}
+        
         # Generate climate-adjusted risk data
         climate_hotspots = []
-        for spot in RISK_HOTSPOTS:
-            # Calculate climate vulnerability
+        for score in scores.values():
+            # Calculate climate vulnerability from risk factors
+            factors = {name: f.value for name, f in score.risk_factors.items()}
             climate_factors = [
-                spot["risk_factors"].get("flood", 0),
-                spot["risk_factors"].get("typhoon", 0),
-                spot["risk_factors"].get("hurricane", 0),
-                spot["risk_factors"].get("cyclone", 0),
-                spot["risk_factors"].get("heat", 0),
-                spot["risk_factors"].get("sea_level", 0),
-                spot["risk_factors"].get("water_stress", 0),
+                factors.get("flood", 0),
+                factors.get("hurricane", 0),
+                factors.get("seismic", 0) * 0.3,  # Seismic less climate-related
             ]
             climate_vulnerability = max(climate_factors) if climate_factors else 0.3
             
             # Projected climate risk
-            projected_risk = min(1.0, spot["risk_score"] * multiplier * time_factor * climate_vulnerability)
+            projected_risk = min(1.0, score.risk_score * multiplier * time_factor * climate_vulnerability)
             
             climate_hotspots.append({
-                "id": spot["id"],
-                "name": spot["name"],
-                "coordinates": [spot["lng"], spot["lat"]],
-                "current_risk": spot["risk_score"],
-                "projected_risk": projected_risk,
-                "risk_change": projected_risk - spot["risk_score"],
-                "exposure": spot["exposure"],
-                "projected_loss": spot["exposure"] * projected_risk * 0.1,  # Simplified
+                "id": score.city_id,
+                "name": score.name,
+                "coordinates": list(score.coordinates),
+                "current_risk": round(score.risk_score, 2),
+                "projected_risk": round(projected_risk, 2),
+                "risk_change": round(projected_risk - score.risk_score, 3),
+                "exposure": score.exposure,
+                "projected_loss": round(score.exposure * projected_risk * 0.1, 2),
                 "climate_factors": {
-                    "temperature_impact": multiplier * time_factor * 0.3,
-                    "precipitation_impact": multiplier * time_factor * 0.25,
-                    "sea_level_impact": multiplier * time_factor * 0.15,
-                    "extreme_events": multiplier * time_factor * 0.2,
+                    "temperature_impact": round(multiplier * time_factor * 0.3, 2),
+                    "precipitation_impact": round(multiplier * time_factor * 0.25, 2),
+                    "sea_level_impact": round(multiplier * time_factor * 0.15, 2),
+                    "extreme_events": round(multiplier * time_factor * 0.2, 2),
                 },
             })
         
         # Aggregate stats
+        total_exposure = sum(h["exposure"] for h in climate_hotspots) or 1
         total_current_risk = sum(h["current_risk"] * h["exposure"] for h in climate_hotspots)
         total_projected_risk = sum(h["projected_risk"] * h["exposure"] for h in climate_hotspots)
-        total_exposure = sum(h["exposure"] for h in climate_hotspots)
         
         return {
             "scenario": scenario,
             "time_horizon": time_horizon,
             "hotspots": climate_hotspots,
             "summary": {
-                "total_exposure": total_exposure,
-                "current_weighted_risk": total_current_risk / total_exposure,
-                "projected_weighted_risk": total_projected_risk / total_exposure,
-                "risk_increase_pct": ((total_projected_risk / total_current_risk) - 1) * 100,
+                "total_exposure": round(total_exposure, 1),
+                "current_weighted_risk": round(total_current_risk / total_exposure, 3),
+                "projected_weighted_risk": round(total_projected_risk / total_exposure, 3),
+                "risk_increase_pct": round(((total_projected_risk / max(total_current_risk, 0.01)) - 1) * 100, 1),
                 "high_risk_zones": len([h for h in climate_hotspots if h["projected_risk"] > 0.8]),
             },
             "metadata": {
                 "generated_at": datetime.utcnow().isoformat(),
                 "scenario_description": f"SSP {scenario[-3:]}" if "ssp" in scenario else scenario,
-                "data_source": "NVIDIA Earth-2 (simulated)",
+                "data_source": "CityRiskCalculator + Climate Projections",
             },
         }
 

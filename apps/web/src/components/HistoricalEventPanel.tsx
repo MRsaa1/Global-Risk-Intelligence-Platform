@@ -417,6 +417,157 @@ export const HISTORICAL_EVENTS: Record<string, HistoricalEvent> = {
       'Regional contagion effects'
     ],
     comparableEvents: ['ukraine2022']
+  },
+  katrina2005: {
+    id: 'katrina2005',
+    name: '2005 Hurricane Katrina',
+    year: 2005,
+    type: 'climate',
+    summary: 'One of the deadliest and most costly hurricanes in US history. Katrina devastated New Orleans and the Gulf Coast, causing catastrophic flooding when levees failed. The disaster exposed systemic failures in emergency response and infrastructure.',
+    duration: '3 weeks (acute phase)',
+    gdpImpact: -125,
+    affectedRegions: ['Gulf Coast USA', 'Louisiana', 'Mississippi', 'Alabama'],
+    industries: ['Oil & Gas', 'Insurance', 'Real Estate', 'Shipping', 'Tourism'],
+    recoveryTimeline: '10+ years for full recovery',
+    peakDate: 'August 29, 2005',
+    casualties: 1836,
+    economicLoss: 186,
+    lessonsLearned: [
+      'Infrastructure resilience critical',
+      'Emergency response coordination needs',
+      'Flood insurance adequacy questions',
+      'Climate risk pricing in real estate'
+    ],
+    comparableEvents: ['sandy2012', 'tsunami2004', 'fukushima2011']
+  },
+  sandy2012: {
+    id: 'sandy2012',
+    name: '2012 Hurricane Sandy',
+    year: 2012,
+    type: 'climate',
+    summary: 'Superstorm Sandy caused massive damage to the US East Coast, particularly New York and New Jersey. The storm flooded the NYC subway system and caused widespread power outages, highlighting urban infrastructure vulnerabilities.',
+    duration: '2 weeks (acute phase)',
+    gdpImpact: -75,
+    affectedRegions: ['US Northeast', 'New York', 'New Jersey', 'Caribbean'],
+    industries: ['Insurance', 'Real Estate', 'Transportation', 'Utilities', 'Retail'],
+    recoveryTimeline: '3-5 years',
+    peakDate: 'October 29, 2012',
+    casualties: 233,
+    economicLoss: 70,
+    lessonsLearned: [
+      'Urban flood preparedness',
+      'Critical infrastructure protection',
+      'Business continuity for financial centers',
+      'Climate adaptation investment needs'
+    ],
+    comparableEvents: ['katrina2005', 'fukushima2011']
+  },
+  crypto2022: {
+    id: 'crypto2022',
+    name: '2022 Crypto Collapse',
+    year: 2022,
+    type: 'financial',
+    summary: 'The cryptocurrency market lost over $2 trillion in value following the collapse of Terra/Luna, Three Arrows Capital, Celsius, and FTX. The contagion exposed systemic risks in crypto lending and exchange operations.',
+    duration: '12 months',
+    gdpImpact: -200,
+    affectedRegions: ['Global', 'United States', 'Singapore', 'Bahamas'],
+    industries: ['Cryptocurrency', 'Fintech', 'Venture Capital', 'Banking'],
+    recoveryTimeline: 'Ongoing',
+    peakDate: 'November 11, 2022 (FTX collapse)',
+    economicLoss: 2000,
+    lessonsLearned: [
+      'Counterparty risk in crypto',
+      'Regulatory gaps in digital assets',
+      'Leverage risks in DeFi',
+      'Custody and proof of reserves importance'
+    ],
+    comparableEvents: ['dotcom2000', 'lehman2008', 'svb2023']
+  },
+  russia1998: {
+    id: 'russia1998',
+    name: '1998 Russian Default',
+    year: 1998,
+    type: 'financial',
+    summary: 'Russia defaulted on domestic debt and devalued the ruble, triggering global market turmoil. The crisis led to the collapse of Long-Term Capital Management (LTCM), requiring a Federal Reserve-coordinated bailout.',
+    duration: '6 months',
+    gdpImpact: -180,
+    affectedRegions: ['Russia', 'Emerging Markets', 'United States', 'Europe'],
+    industries: ['Banking', 'Hedge Funds', 'Commodities', 'Emerging Market Bonds'],
+    recoveryTimeline: '2-3 years',
+    peakDate: 'August 17, 1998',
+    economicLoss: 450,
+    lessonsLearned: [
+      'Sovereign default contagion effects',
+      'Hedge fund systemic risk',
+      'Model risk in complex derivatives',
+      'Liquidity risk underestimation'
+    ],
+    comparableEvents: ['asian1997', 'argentina2001', 'lehman2008']
+  },
+  crimea2014: {
+    id: 'crimea2014',
+    name: '2014 Crimea Annexation',
+    year: 2014,
+    type: 'geopolitical',
+    summary: 'Russia annexed Crimea following political upheaval in Ukraine, leading to Western sanctions and a fundamental shift in European security architecture. The event marked the start of ongoing Russia-Ukraine tensions.',
+    duration: 'Ongoing',
+    gdpImpact: -150,
+    affectedRegions: ['Russia', 'Ukraine', 'Europe', 'United States'],
+    industries: ['Energy', 'Banking', 'Defense', 'Agriculture'],
+    recoveryTimeline: 'N/A - ongoing',
+    peakDate: 'March 18, 2014',
+    economicLoss: 400,
+    lessonsLearned: [
+      'Sanctions as geopolitical tool',
+      'Energy dependence vulnerabilities',
+      'European security reassessment',
+      'Asset seizure and capital flight risks'
+    ],
+    comparableEvents: ['ukraine2022', 'gulf1990']
+  },
+  h1n1_2009: {
+    id: 'h1n1_2009',
+    name: '2009 H1N1 Swine Flu',
+    year: 2009,
+    type: 'pandemic',
+    summary: 'A novel H1N1 influenza virus emerged in Mexico and spread globally, causing the first pandemic of the 21st century. While less deadly than initially feared, it exposed gaps in pandemic preparedness.',
+    duration: '18 months',
+    gdpImpact: -55,
+    affectedRegions: ['Global - All Regions'],
+    industries: ['Healthcare', 'Pharmaceuticals', 'Travel', 'Meat Industry'],
+    recoveryTimeline: '1 year',
+    peakDate: 'October 2009',
+    casualties: 284000,
+    economicLoss: 45,
+    lessonsLearned: [
+      'Vaccine production scaling',
+      'Public health communication',
+      'Global disease surveillance needs',
+      'Pandemic response coordination'
+    ],
+    comparableEvents: ['covid2020', 'sars2003', 'ebola2014']
+  },
+  australia2020: {
+    id: 'australia2020',
+    name: '2020 Australia Wildfires',
+    year: 2020,
+    type: 'climate',
+    summary: 'The 2019-2020 Australian bushfire season was unprecedented in scale, burning over 46 million acres. The fires destroyed communities, killed billions of animals, and intensified debates about climate change response.',
+    duration: '8 months (Sep 2019 - May 2020)',
+    gdpImpact: -75,
+    affectedRegions: ['Australia', 'New South Wales', 'Victoria', 'Queensland'],
+    industries: ['Agriculture', 'Tourism', 'Insurance', 'Forestry', 'Real Estate'],
+    recoveryTimeline: '5+ years',
+    peakDate: 'January 2020',
+    casualties: 34,
+    economicLoss: 100,
+    lessonsLearned: [
+      'Climate change impact acceleration',
+      'Fire management modernization needs',
+      'Insurance capacity for mega-fires',
+      'Biodiversity risk assessment'
+    ],
+    comparableEvents: ['katrina2005', 'fukushima2011']
   }
 }
 
@@ -469,6 +620,42 @@ export default function HistoricalEventPanel({ isOpen, onClose, eventId, onEvent
   const [notification, setNotification] = useState<string | null>(null)
   
   const event = eventId ? HISTORICAL_EVENTS[eventId] : null
+  
+  // Fallback for events not yet in database
+  if (!event && eventId && isOpen) {
+    return (
+      <motion.div
+        className="absolute inset-8 z-50 pointer-events-auto"
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+      >
+        <div className="h-full bg-black/95 backdrop-blur-xl rounded-2xl border border-white/10 overflow-hidden flex items-center justify-center">
+          <div className="text-center p-8 max-w-md">
+            <div className="w-16 h-16 mx-auto mb-6 bg-amber-500/20 rounded-full flex items-center justify-center">
+              <svg className="w-8 h-8 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h2 className="text-white text-xl font-light mb-2">Event Analysis Coming Soon</h2>
+            <p className="text-white/50 text-sm mb-4">
+              Detailed analysis for "{eventId.replace(/[_-]/g, ' ').replace(/\d+/g, ' $&').trim()}" 
+              is being prepared by our research team.
+            </p>
+            <p className="text-white/30 text-xs mb-6">
+              Event ID: {eventId}
+            </p>
+            <button
+              onClick={onClose}
+              className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    )
+  }
   
   if (!event) return null
   
