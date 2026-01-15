@@ -114,7 +114,7 @@ export interface RiskZone {
 export interface ZoneAsset {
   id: string
   name: string
-  type: 'bank' | 'enterprise' | 'developer' | 'insurer' | 'infrastructure' | 'military' | 'government' | 'hospital' | 'school'
+  type: 'bank' | 'enterprise' | 'developer' | 'insurer' | 'infrastructure' | 'military' | 'government' | 'hospital' | 'school' | 'city'
   latitude: number
   longitude: number
   exposure: number

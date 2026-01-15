@@ -225,7 +225,7 @@ export default function Assets() {
                 </div>
                 <div>
                   <p className="text-xs text-dark-muted">Area</p>
-                  <p className="text-lg font-semibold">{(asset.gross_floor_area_m2 / 1000).toFixed(1)}K m²</p>
+                  <p className="text-lg font-semibold">{((asset.gross_floor_area_m2 || 0) / 1000).toFixed(1)}K m²</p>
                 </div>
               </div>
 
@@ -233,20 +233,20 @@ export default function Assets() {
               <div className="flex gap-4">
                 <div className="flex-1 text-center p-2 bg-dark-bg rounded-lg">
                   <p className="text-xs text-dark-muted">Climate</p>
-                  <p className={`font-semibold ${getRiskColor(asset.climate_risk_score)}`}>
-                    {asset.climate_risk_score}
+                  <p className={`font-semibold ${getRiskColor(asset.climate_risk_score || 0)}`}>
+                    {asset.climate_risk_score || 0}
                   </p>
                 </div>
                 <div className="flex-1 text-center p-2 bg-dark-bg rounded-lg">
                   <p className="text-xs text-dark-muted">Physical</p>
-                  <p className={`font-semibold ${getRiskColor(asset.physical_risk_score)}`}>
-                    {asset.physical_risk_score}
+                  <p className={`font-semibold ${getRiskColor(asset.physical_risk_score || 0)}`}>
+                    {asset.physical_risk_score || 0}
                   </p>
                 </div>
                 <div className="flex-1 text-center p-2 bg-dark-bg rounded-lg">
                   <p className="text-xs text-dark-muted">Network</p>
-                  <p className={`font-semibold ${getRiskColor(asset.network_risk_score)}`}>
-                    {asset.network_risk_score}
+                  <p className={`font-semibold ${getRiskColor(asset.network_risk_score || 0)}`}>
+                    {asset.network_risk_score || 0}
                   </p>
                 </div>
               </div>

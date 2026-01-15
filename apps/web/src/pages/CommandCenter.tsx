@@ -20,7 +20,7 @@ import { CubeTransparentIcon, ChartBarIcon, Cog6ToothIcon, HomeIcon } from '@her
 import CesiumGlobe, { RiskZone, ZoneAsset } from '../components/CesiumGlobe'
 import DigitalTwinPanel from '../components/DigitalTwinPanel'
 import { useSimulatedWebSocket, RiskUpdate } from '../lib/useWebSocket'
-import { StressTestSelector, ActionPlanModal, ZoneDetailPanel } from '../components/stress'
+import { ActionPlanModal, ZoneDetailPanel } from '../components/stress'
 import HistoricalEventPanel from '../components/HistoricalEventPanel'
 import { RiskFlowMini } from '../components/RiskFlowDiagram'
 
@@ -61,6 +61,7 @@ interface ActiveScenario {
 // HELPER FUNCTIONS
 // ============================================
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function getRiskLevel(risk: number): 'critical' | 'high' | 'medium' | 'low' {
   if (risk > 0.8) return 'critical'
   if (risk > 0.6) return 'high'
@@ -101,7 +102,8 @@ interface RiskLevelRowProps {
   onOpenDigitalTwin?: (cityId: string, cityName: string, eventId?: string, eventName?: string, eventCategory?: string, timeHorizon?: string) => void
 }
 
-function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZoneClick, onHistoricalSelect, onCurrentSelect, onForecastSelect, onOpenDigitalTwin }: RiskLevelRowProps) {
+function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZoneClick: _onZoneClick, onHistoricalSelect, onCurrentSelect: _onCurrentSelect, onForecastSelect: _onForecastSelect, onOpenDigitalTwin }: RiskLevelRowProps) {
+  // Note: _onZoneClick, _onCurrentSelect, _onForecastSelect are available but not directly used in this component
   const [viewMode, setViewMode] = useState<RiskViewMode>('menu')
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [selectedHorizon, setSelectedHorizon] = useState<number | null>(null)
@@ -1843,6 +1845,7 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
   ]
   
   // Event categories for Current events (with SVG icons)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const eventCategories = currentEvents
   
   // Category icon component
@@ -2942,6 +2945,7 @@ export default function CommandCenter() {
   const userDeselectedZoneRef = useRef(false)
   
   // Handle stress test selection from StressTestSelector
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleStressTestSelect = useCallback((scenario: typeof selectedStressTest) => {
     userDeselectedZoneRef.current = false  // Reset on new selection
     setSelectedStressTest(scenario)
