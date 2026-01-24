@@ -245,28 +245,37 @@ def get_event_category(event_id: str) -> EventCategory:
     Determine event category from event ID string.
     
     Args:
-        event_id: Event identifier string (e.g., 'flood-scenario', 'basel-liquidity')
+        event_id: Event identifier string (e.g., 'flood-scenario', 'basel-liquidity',
+                  or registry ids: EBA_Adverse, NGFS_SSP5_2050, Sanctions_Escalation)
     
     Returns:
         EventCategory matching the event type
     """
     event_lower = event_id.lower()
     
-    if any(kw in event_lower for kw in ['flood', 'tsunami', 'sea-level', 'storm', 'hurricane']):
+    # Regulatory + Extended scenario registry IDs
+    if any(kw in event_lower for kw in ['eba', 'fed', 'severely_adverse', 'systemic', 'bank_failure', 'liquidity_freeze', 'asset_price', 'imf', 'sovereign', 'devaluation', 'default', 'restructuring', 'haircut', 'resolution', 'bail-in', 'capital_increase', 'climate_disclosure']):
+        return EventCategory.FINANCIAL
+    if any(kw in event_lower for kw in ['ngfs', 'ssp5', 'ssp2', 'climate_flood', 'flood_extreme', 'sea_level', 'sea-level']):
+        return EventCategory.FLOOD
+    if any(kw in event_lower for kw in ['fire', 'wildfire', 'heatwave', 'heat', 'drought', 'heat_stress']):
+        return EventCategory.FIRE
+    
+    if any(kw in event_lower for kw in ['flood', 'tsunami', 'sea-level', 'sea_level', 'storm', 'hurricane']):
         return EventCategory.FLOOD
     if any(kw in event_lower for kw in ['earthquake', 'seismic', 'quake', 'tremor']):
         return EventCategory.SEISMIC
-    if any(kw in event_lower for kw in ['fire', 'wildfire', 'heatwave', 'drought']):
-        return EventCategory.FIRE
     if any(kw in event_lower for kw in ['pandemic', 'health', 'covid', 'virus', 'outbreak']):
         return EventCategory.PANDEMIC
-    if any(kw in event_lower for kw in ['cyber', 'tech', 'grid', 'power', 'blackout']):
+    if any(kw in event_lower for kw in ['cyber', 'tech', 'grid', 'power', 'blackout', 'sabotage']):
         return EventCategory.INFRASTRUCTURE
     if any(kw in event_lower for kw in ['financial', 'credit', 'liquidity', 'basel', 'market', 'bank']):
         return EventCategory.FINANCIAL
+    if any(kw in event_lower for kw in ['sanctions_escalation', 'regional_conflict_spillover', 'trade_war_supply', 'energy_shock']):
+        return EventCategory.GEOPOLITICAL
     if any(kw in event_lower for kw in ['supply', 'blockade', 'sanctions', 'shipping', 'trade']):
         return EventCategory.SUPPLY_CHAIN
-    if any(kw in event_lower for kw in ['conflict', 'war', 'terror', 'military', 'geopolitical']):
+    if any(kw in event_lower for kw in ['conflict', 'war', 'terror', 'military', 'geopolitical', 'energy', 'regional_conflict']):
         return EventCategory.GEOPOLITICAL
     
     return EventCategory.GENERAL

@@ -266,8 +266,8 @@ export default function StressTestPanel({ data }: StressTestPanelProps) {
         {/* Left - Scenarios */}
         <div className="w-44 p-3 space-y-2 z-10">
           <div className="flex items-center gap-1.5 text-gray-500 text-[10px] mb-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse"></div>
-            <span className="text-cyan-400">Stress Lab</span>
+            <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></div>
+            <span className="text-amber-400">Stress Lab</span>
             <span>Simulation</span>
           </div>
 
@@ -321,7 +321,7 @@ export default function StressTestPanel({ data }: StressTestPanelProps) {
           <div className="flex-1 relative">
             <div className="h-1 bg-[#1a2535] rounded-full">
               <div 
-                className="h-full bg-cyan-500 rounded-full"
+                className="h-full bg-amber-500 rounded-full"
                 style={{ width: `${sliderValue}%` }}
               />
             </div>
@@ -366,7 +366,7 @@ export default function StressTestPanel({ data }: StressTestPanelProps) {
                 className="w-2.5 rounded-t"
                 style={{ 
                   height: `${h * 100}%`,
-                  background: i < 2 ? '#22d3ee' : '#f59e0b'
+                  background: i < 2 ? '#C9A962' : '#f59e0b'
                 }}
               />
             ))}

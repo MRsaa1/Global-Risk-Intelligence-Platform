@@ -95,7 +95,7 @@ export default function SceneUI({
           {/* Timeline bar */}
           <div className="w-64 h-1 bg-white/10 rounded-full relative">
             <motion.div 
-              className="absolute h-full bg-gradient-to-r from-cyan-500 via-amber-500 to-red-500 rounded-full"
+              className="absolute h-full bg-gradient-to-r from-amber-500 via-amber-500 to-red-500 rounded-full"
               initial={{ width: 0 }}
               animate={{ width: `${(timelineValue / 3) * 100}%` }}
               transition={{ duration: 0.3 }}
@@ -111,7 +111,7 @@ export default function SceneUI({
               >
                 <div className={`w-3 h-3 rounded-full border-2 transition-all ${
                   i <= timelineValue 
-                    ? 'bg-cyan-500 border-cyan-300' 
+                    ? 'bg-amber-500 border-amber-300' 
                     : 'bg-white/20 border-white/30'
                 } ${i === timelineValue ? 'w-4 h-4 bg-red-500 border-red-300' : ''}`} 
                 />
@@ -214,7 +214,7 @@ function TimeButton({
       onClick={onClick}
       className={`px-3 py-1.5 text-xs rounded transition-all ${
         active
-          ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+          ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
           : 'text-white/40 hover:text-white/70 border border-transparent'
       }`}
     >

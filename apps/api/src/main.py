@@ -45,12 +45,14 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"Knowledge Graph initialization failed: {e}")
         
-        # Start SENTINEL monitoring (optional - can be started via API)
+        # Start SENTINEL monitoring (auto-start in production)
         try:
             from src.api.v1.endpoints.alerts import start_monitoring
-            # Uncomment to auto-start monitoring on startup:
-            # await start_monitoring()
-            logger.info("SENTINEL monitoring service ready")
+            if settings.auto_start_sentinel or settings.environment == "production":
+                await start_monitoring()
+                logger.info("SENTINEL monitoring started automatically")
+            else:
+                logger.info("SENTINEL monitoring service ready (start via API)")
         except Exception as e:
             logger.warning(f"SENTINEL initialization failed: {e}")
         

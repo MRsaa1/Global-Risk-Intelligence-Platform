@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 import structlog
 
 from src.layers.agents.sentinel import sentinel_agent, Alert, AlertSeverity, AlertType
+from src.core.config import settings
 
 logger = structlog.get_logger()
 router = APIRouter()
@@ -188,6 +189,8 @@ async def stop_monitoring():
 
 async def _monitoring_loop():
     """Main monitoring loop."""
+    check_interval = settings.sentinel_check_interval_seconds
+    
     while _is_monitoring:
         try:
             # Build context from external sources
@@ -209,14 +212,16 @@ async def _monitoring_loop():
             # Send heartbeat every cycle
             await alert_manager.send_heartbeat()
             
-            # Wait before next cycle
-            await asyncio.sleep(30)  # Check every 30 seconds
+            # Wait before next cycle (configurable interval)
+            check_interval = settings.sentinel_check_interval_seconds
+            await asyncio.sleep(check_interval)
             
         except asyncio.CancelledError:
             break
         except Exception as e:
             logger.error("Monitoring error", error=str(e))
-            await asyncio.sleep(60)  # Wait longer on error
+            # Wait longer on error (2x normal interval)
+            await asyncio.sleep(settings.sentinel_check_interval_seconds * 2)
 
 
 async def _build_monitoring_context() -> dict:

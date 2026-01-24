@@ -79,6 +79,11 @@ tmp/
 temp/
 *.tmp
 
+# Backup files
+backup_*.tar.gz
+*.backup
+BACKUP_INFO.md
+
 # OS
 Thumbs.db
 .DS_Store

@@ -66,8 +66,8 @@ services:
       MINIO_ROOT_USER: pfrp_minio
       MINIO_ROOT_PASSWORD: pfrp_minio_secret_2024
     ports:
-      - "9000:9000"   # API
-      - "9001:9001"   # Console
+      - "9010:9000"   # API (changed from 9000)
+      - "9011:9001"   # Console (changed from 9001)
     volumes:
       - minio-data:/data
     command: server /data --console-address ":9001"

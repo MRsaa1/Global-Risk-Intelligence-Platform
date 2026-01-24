@@ -6,6 +6,7 @@
  * Each city has its own photogrammetry/3D model from Cesium Ion
  */
 import { useRef, useState, useEffect, useCallback } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import * as Cesium from 'cesium'
 import EventRiskGraph from './EventRiskGraph'
@@ -174,6 +175,8 @@ interface DynamicAsset {
 interface DigitalTwinPanelProps {
   isOpen: boolean
   onClose: () => void
+  pickerMode?: boolean  // When true: show country/city/enterprise picker instead of 3D (no default city)
+  onCitySelected?: (asset: DynamicAsset) => void
   assetId?: string
   dynamicAsset?: DynamicAsset | null  // For arbitrary coordinates with OSM Buildings
   eventId?: string | null  // The stress test event to run
@@ -212,7 +215,7 @@ interface StressTestReport {
   llmGenerated?: boolean
 }
 
-export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsset, eventId, eventName, eventCategory, timeHorizon }: DigitalTwinPanelProps) {
+export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, onCitySelected, assetId, dynamicAsset, eventId, eventName, eventCategory, timeHorizon }: DigitalTwinPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const viewerRef = useRef<Cesium.Viewer | null>(null)
   const [activeTab, setActiveTab] = useState<'3d' | 'sensors' | 'risks'>('3d')
@@ -228,12 +231,32 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
   const [stressTestReport, setStressTestReport] = useState<StressTestReport | null>(null)
   const [showReport, setShowReport] = useState(false)
   const riskEntitiesRef = useRef<Cesium.Entity[]>([])
+  const prevEventIdRef = useRef<string | undefined>(undefined)
+  const prevCityIdRef = useRef<string>('')
   
   // Stress test type selection
   const [showTestSelector, setShowTestSelector] = useState(false)
   const [selectedTestType, setSelectedTestType] = useState<'current' | 'forecast'>('current')
   const [selectedScenario, setSelectedScenario] = useState<string>('')
   const [isExportingPDF, setIsExportingPDF] = useState(false)
+  
+  // Picker mode (country / city / optional enterprise) when opening via D without a selected city
+  const [pickerCountry, setPickerCountry] = useState('')
+  const [pickerCityId, setPickerCityId] = useState('')
+  const [pickerEnterprise, setPickerEnterprise] = useState('')
+  
+  const { data: citiesData } = useQuery({
+    queryKey: ['geodata-cities'],
+    queryFn: async () => {
+      const res = await fetch('/api/v1/geodata/cities')
+      if (!res.ok) throw new Error('Failed to fetch cities')
+      return res.json() as Promise<{ cities: Array<{ id: string; name: string; country: string; coordinates: [number, number] }> }>
+    },
+    enabled: pickerMode && isOpen,
+  })
+  const cities = citiesData?.cities ?? []
+  const countries = [...new Set(cities.map((c) => c.country))].sort()
+  const citiesInCountry = pickerCountry ? cities.filter((c) => c.country === pickerCountry) : []
   
   // Available stress test scenarios
   const currentScenarios = [
@@ -273,6 +296,9 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
   
   // Check if city has premium 3D model
   const isPremiumCity = normalizedCityId && PREMIUM_CITIES.has(normalizedCityId)
+  
+  // True when opened from Risk Zones with a concrete scenario (not Focused Zone's generic 'stress_test_scenario')
+  const hasPreSelectedEvent = Boolean(eventId && eventId !== 'stress_test_scenario')
   
   // Log for debugging (only when panel is open to avoid spam)
   useEffect(() => {
@@ -357,9 +383,9 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
     return { city: DEFAULT_CITY }
   })()
 
-  // Initialize Cesium viewer when panel opens
+  // Initialize Cesium viewer when panel opens (skip when in picker mode)
   useEffect(() => {
-    if (!isOpen || !containerRef.current) return
+    if (!isOpen || !containerRef.current || pickerMode) return
 
     let viewer: Cesium.Viewer | null = null
     let isMounted = true  // Track if component is still mounted
@@ -415,12 +441,13 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
           viewer.scene.globe.show = false
           
           // Load Cesium OSM Buildings (gray, professional)
+          // Higher maximumScreenSpaceError = lower detail = less GPU pressure
           tileset = await Cesium.Cesium3DTileset.fromIonAssetId(CESIUM_OSM_BUILDINGS, {
-            maximumScreenSpaceError: 16,
+            maximumScreenSpaceError: 32, // Increased from 16 to prevent vertex buffer overflow
             skipLevelOfDetail: true,
             baseScreenSpaceError: 1024,
             skipScreenSpaceErrorFactor: 16,
-            skipLevels: 1,
+            skipLevels: 2, // Skip more levels for faster loading
             immediatelyLoadDesiredLevelOfDetail: false,
             loadSiblings: false,
             cullWithChildrenBounds: true,
@@ -464,12 +491,13 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
           viewer.scene.globe.show = false // Hide globe, show only 3D tiles
 
           // Load 3D Tileset from Cesium Ion with optimized settings
+          // Higher maximumScreenSpaceError = lower detail = less GPU pressure
           tileset = await Cesium.Cesium3DTileset.fromIonAssetId(city.cesiumAssetId, {
-            maximumScreenSpaceError: 16,
+            maximumScreenSpaceError: 32, // Increased from 16 to prevent vertex buffer overflow
             skipLevelOfDetail: true,
             baseScreenSpaceError: 1024,
             skipScreenSpaceErrorFactor: 16,
-            skipLevels: 1,
+            skipLevels: 2, // Skip more levels for faster loading
             immediatelyLoadDesiredLevelOfDetail: false,
             loadSiblings: false,
             cullWithChildrenBounds: true,
@@ -558,7 +586,7 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
         viewerRef.current = null
       }
     }
-  }, [isOpen, assetId, dynamicAsset, useCesiumMode, city.cesiumAssetId])  // Dependencies on props
+  }, [isOpen, pickerMode, assetId, dynamicAsset, useCesiumMode, city.cesiumAssetId])  // Dependencies on props
 
   // Reset stress test state when panel closes or city changes
   useEffect(() => {
@@ -569,6 +597,24 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
       setRiskHighlights([])
     }
   }, [isOpen, dynamicAsset?.id, assetId])
+
+  // Reset when context changes (event or city) while panel is open: clear state and risk entities
+  useEffect(() => {
+    if (!isOpen) return
+    if (prevEventIdRef.current === eventId && prevCityIdRef.current === effectiveCityId) return
+    setStressTestComplete(false)
+    setStressTestReport(null)
+    setStressTestRunning(false)
+    setStressTestProgress(0)
+    setRiskHighlights([])
+    setShowReport(false)
+    if (viewerRef.current && !viewerRef.current.isDestroyed()) {
+      riskEntitiesRef.current.forEach(e => viewerRef.current!.entities.remove(e))
+      riskEntitiesRef.current = []
+    }
+    prevEventIdRef.current = eventId
+    prevCityIdRef.current = effectiveCityId
+  }, [isOpen, eventId, effectiveCityId])
 
   // Function to export stress test report to PDF
   const exportToPDF = useCallback(async () => {
@@ -658,7 +704,7 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
           city_name: city.name,
           center_latitude: city.cameraPosition.lat,
           center_longitude: city.cameraPosition.lng,
-          event_id: eventId || 'general-scenario',
+          event_id: selectedScenario || eventId || 'general-scenario',
           severity: city.risk_score,
           use_llm: true,
         })
@@ -784,8 +830,20 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
     
     setStressTestRunning(false)
     setStressTestComplete(true)
-  }, [city, eventId])
-  
+  }, [city, eventId, selectedScenario])
+
+  // Auto-run stress test when opened from Risk Zones with a pre-selected event
+  useEffect(() => {
+    if (!(isOpen && hasPreSelectedEvent && !isLoading && !stressTestRunning && !stressTestComplete)) return
+    const t = setTimeout(runStressTest, 400)
+    return () => clearTimeout(t)
+  }, [isOpen, isLoading, hasPreSelectedEvent, stressTestRunning, stressTestComplete, effectiveCityId, runStressTest])
+
+  // Auto-show report when stress test completes from Risk Zones
+  useEffect(() => {
+    if (stressTestComplete && hasPreSelectedEvent) setShowReport(true)
+  }, [stressTestComplete, hasPreSelectedEvent])
+
   // Fallback local stress test calculation (original algorithm)
   const runLocalStressTest = useCallback(async () => {
     const viewer = viewerRef.current
@@ -1107,9 +1165,88 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
           transition={{ duration: 0.3 }}
         >
           <div className="h-full bg-black/95 backdrop-blur-xl rounded-2xl border border-white/10 overflow-hidden flex">
-            {/* Main content area - Always 3D (Premium or OSM Buildings) */}
+            {/* Main content area - Picker (country/city) or 3D (Premium or OSM Buildings) */}
             <div className="flex-1 relative">
-              {false ? ( // Info Mode disabled - always use 3D
+              {pickerMode ? (
+                <>
+                  <div className="w-full h-full flex items-center justify-center p-8">
+                    <div className="w-full max-w-md bg-white/5 rounded-2xl border border-white/10 p-6">
+                      <h3 className="text-white text-lg font-light mb-1">Digital Twin</h3>
+                      <p className="text-white/50 text-sm mb-6">Select country, city, and optionally a strategic enterprise</p>
+                      
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-white/50 text-xs uppercase tracking-wider mb-2">Country</label>
+                          <select
+                            value={pickerCountry}
+                            onChange={(e) => { setPickerCountry(e.target.value); setPickerCityId(''); }}
+                            className="w-full px-4 py-3 bg-black/30 border border-white/10 rounded-lg text-white text-sm"
+                          >
+                            <option value="">— Select country —</option>
+                            {countries.map((c) => (
+                              <option key={c} value={c}>{c}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-white/50 text-xs uppercase tracking-wider mb-2">City</label>
+                          <select
+                            value={pickerCityId}
+                            onChange={(e) => setPickerCityId(e.target.value)}
+                            className="w-full px-4 py-3 bg-black/30 border border-white/10 rounded-lg text-white text-sm"
+                            disabled={!pickerCountry}
+                          >
+                            <option value="">— Select city —</option>
+                            {citiesInCountry.map((c) => (
+                              <option key={c.id} value={c.id}>{c.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-white/50 text-xs uppercase tracking-wider mb-2">Strategic enterprise (optional)</label>
+                          <select
+                            value={pickerEnterprise}
+                            onChange={(e) => setPickerEnterprise(e.target.value)}
+                            className="w-full px-4 py-3 bg-black/30 border border-white/10 rounded-lg text-white text-sm"
+                          >
+                            <option value="">— Not selected —</option>
+                          </select>
+                        </div>
+                        <button
+                          onClick={() => {
+                            const c = cities.find((x) => x.id === pickerCityId)
+                            if (c && onCitySelected) {
+                              onCitySelected({
+                                id: c.id,
+                                name: c.name,
+                                type: 'city',
+                                latitude: c.coordinates[1],
+                                longitude: c.coordinates[0],
+                                exposure: 10,
+                                impactSeverity: 0.5,
+                              })
+                              setPickerCountry('')
+                              setPickerCityId('')
+                              setPickerEnterprise('')
+                            }
+                          }}
+                          disabled={!pickerCityId}
+                          className="w-full py-3 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 text-amber-400 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                        >
+                          Open 3D Digital Twin
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="absolute top-4 right-4">
+                    <button onClick={onClose} className="p-2 bg-white/10 rounded-lg hover:bg-white/20 transition-colors">
+                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                </>
+              ) : false ? ( // Info Mode disabled - always use 3D
                 // =============================================
                 // INFO MODE - For dynamic assets (no 3D model)
                 // =============================================
@@ -1171,26 +1308,26 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
                     <div className="grid grid-cols-2 gap-3">
                       <div className="bg-white/5 rounded-lg p-3 border border-white/5">
                         <div className="text-white/40 text-xs">Temperature</div>
-                        <div className="text-cyan-400 text-lg">{city.sensors.temperature.toFixed(1)}°C</div>
+                        <div className="text-amber-400 text-lg">{city.sensors.temperature.toFixed(1)}°C</div>
                       </div>
                       <div className="bg-white/5 rounded-lg p-3 border border-white/5">
                         <div className="text-white/40 text-xs">Humidity</div>
-                        <div className="text-cyan-400 text-lg">{city.sensors.humidity.toFixed(0)}%</div>
+                        <div className="text-amber-400 text-lg">{city.sensors.humidity.toFixed(0)}%</div>
                       </div>
                       <div className="bg-white/5 rounded-lg p-3 border border-white/5">
                         <div className="text-white/40 text-xs">Vibration</div>
-                        <div className="text-cyan-400 text-lg">{city.sensors.vibration.toFixed(3)}g</div>
+                        <div className="text-amber-400 text-lg">{city.sensors.vibration.toFixed(3)}g</div>
                       </div>
                       <div className="bg-white/5 rounded-lg p-3 border border-white/5">
                         <div className="text-white/40 text-xs">Strain</div>
-                        <div className="text-cyan-400 text-lg">{city.sensors.strain.toFixed(4)}</div>
+                        <div className="text-amber-400 text-lg">{city.sensors.strain.toFixed(4)}</div>
                       </div>
                     </div>
                   </div>
                   
                   {/* Actions */}
                   <div className="flex gap-3">
-                    <button className="flex-1 px-4 py-2 bg-cyan-500/20 text-cyan-400 rounded-lg border border-cyan-500/30 hover:bg-cyan-500/30 transition-colors text-sm">
+                    <button className="flex-1 px-4 py-2 bg-amber-500/20 text-amber-400 rounded-lg border border-amber-500/30 hover:bg-amber-500/30 transition-colors text-sm">
                       Generate Report
                     </button>
                     <button className="flex-1 px-4 py-2 bg-amber-500/20 text-amber-400 rounded-lg border border-amber-500/30 hover:bg-amber-500/30 transition-colors text-sm">
@@ -1221,8 +1358,8 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
                   {isLoading && (
                     <div className="absolute inset-0 flex items-center justify-center bg-black/80">
                       <div className="text-center">
-                        <div className={`w-8 h-8 border-2 ${useCesiumMode ? 'border-amber-500' : 'border-cyan-500'} border-t-transparent rounded-full animate-spin mx-auto mb-3`} />
-                        <div className={`${useCesiumMode ? 'text-amber-400' : 'text-cyan-400'} text-sm`}>
+                        <div className={`w-8 h-8 border-2 ${useCesiumMode ? 'border-amber-500' : 'border-amber-500'} border-t-transparent rounded-full animate-spin mx-auto mb-3`} />
+                        <div className={`${useCesiumMode ? 'text-amber-400' : 'text-amber-400'} text-sm`}>
                           {useCesiumMode ? 'Loading Premium 3D Model...' : 'Loading 3D Buildings...'}
                         </div>
                         <div className="text-white/40 text-xs mt-1">{city.name}</div>
@@ -1240,8 +1377,8 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
                   {!isLoading && loadProgress < 100 && (
                     <div className="absolute bottom-4 right-4 pointer-events-none">
                       <div className="flex items-center gap-2 px-3 py-1.5 bg-black/60 rounded-full">
-                        <div className="w-3 h-3 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
-                        <span className="text-cyan-400 text-xs">Loading detail... {loadProgress}%</span>
+                        <div className="w-3 h-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                        <span className="text-amber-400 text-xs">Loading detail... {loadProgress}%</span>
                       </div>
                     </div>
                   )}
@@ -1273,8 +1410,8 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
                       </div>
                     ) : (
                       <div className="mt-1 flex items-center gap-1.5">
-                        <div className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse" />
-                        <span className="text-cyan-400/70 text-[10px] uppercase tracking-wider">Cesium OSM Buildings</span>
+                        <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                        <span className="text-amber-400/70 text-[10px] uppercase tracking-wider">Cesium OSM Buildings</span>
                       </div>
                     )}
                   </div>
@@ -1282,23 +1419,23 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
                   {/* Scenario Context Banner - Shows what test will be run */}
                   {(eventName || eventId) && !stressTestComplete && (
                     <div className="absolute bottom-20 left-4 right-4 pointer-events-auto">
-                      <div className="bg-black/80 backdrop-blur-sm rounded-lg p-3 border border-cyan-500/30">
+                      <div className="bg-black/80 backdrop-blur-sm rounded-lg p-3 border border-amber-500/30">
                         <div className="flex items-start gap-3">
-                          <div className="w-8 h-8 rounded-lg bg-cyan-500/20 flex items-center justify-center flex-shrink-0">
+                          <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center flex-shrink-0">
                             {eventCategory === 'climate' || eventCategory === 'natural' ? (
-                              <svg className="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg className="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
                               </svg>
                             ) : eventCategory === 'financial' ? (
-                              <svg className="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg className="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                               </svg>
                             ) : eventCategory === 'geopolitical' || eventCategory === 'conflict' ? (
-                              <svg className="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg className="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                               </svg>
                             ) : (
-                              <svg className="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg className="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                               </svg>
                             )}
@@ -1307,7 +1444,7 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
                             <div className="text-white/40 text-[10px] uppercase tracking-wider mb-0.5">
                               Stress Test Scenario
                             </div>
-                            <div className="text-cyan-400 text-sm font-medium">
+                            <div className="text-amber-400 text-sm font-medium">
                               {eventName || eventId || 'General Risk Assessment'}
                             </div>
                             <div className="flex items-center gap-3 mt-1.5">
@@ -1353,24 +1490,31 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
                             <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
                             <span>Analyzing... {stressTestProgress}%</span>
                           </button>
-                        ) : (
+                        ) : hasPreSelectedEvent ? (
                           <button
-                            onClick={() => setShowTestSelector(!showTestSelector)}
-                            disabled={isLoading}
-                            className="px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-all bg-amber-500/20 text-amber-400 border border-amber-500/40 hover:bg-amber-500/30 hover:scale-105"
+                            disabled
+                            className="px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 bg-amber-500/20 text-amber-400/80 border border-amber-500/30 cursor-wait"
                           >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-                            </svg>
-                            <span>Select Stress Test</span>
-                            <svg className={`w-3 h-3 transition-transform ${showTestSelector ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
+                            <div className="w-4 h-4 border-2 border-amber-400/60 border-t-transparent rounded-full animate-spin" />
+                            <span>Preparing analysis…</span>
                           </button>
-                        )}
-                        
-                        {/* Stress Test Selector Dropdown */}
-                        {showTestSelector && !stressTestRunning && (
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => setShowTestSelector(!showTestSelector)}
+                              disabled={isLoading}
+                              className="px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-all bg-amber-500/20 text-amber-400 border border-amber-500/40 hover:bg-amber-500/30 hover:scale-105"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                              </svg>
+                              <span>Select Stress Test</span>
+                              <svg className={`w-3 h-3 transition-transform ${showTestSelector ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </button>
+                            {/* Stress Test Selector Dropdown */}
+                            {showTestSelector && !stressTestRunning && (
                           <div className="absolute bottom-full right-0 mb-2 w-80 bg-black/95 backdrop-blur-xl rounded-xl border border-white/20 shadow-2xl overflow-hidden">
                             {/* Tabs */}
                             <div className="flex border-b border-white/10">
@@ -1378,7 +1522,7 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
                                 onClick={() => setSelectedTestType('current')}
                                 className={`flex-1 py-2.5 text-xs font-medium transition-all ${
                                   selectedTestType === 'current' 
-                                    ? 'bg-cyan-500/20 text-cyan-400 border-b-2 border-cyan-400' 
+                                    ? 'bg-amber-500/20 text-amber-400 border-b-2 border-amber-400' 
                                     : 'text-white/50 hover:text-white hover:bg-white/5'
                                 }`}
                               >
@@ -1397,7 +1541,7 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
                             </div>
                             
                             {/* Scenario List */}
-                            <div className="max-h-64 overflow-y-auto p-2">
+                            <div className="max-h-64 overflow-y-auto custom-scrollbar p-2">
                               {(selectedTestType === 'current' ? currentScenarios : forecastScenarios).map((scenario) => (
                                 <button
                                   key={scenario.id}
@@ -1419,7 +1563,7 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
                                     </div>
                                   </div>
                                   <div className={`w-2 h-2 rounded-full ${
-                                    scenario.category === 'climate' ? 'bg-cyan-500' :
+                                    scenario.category === 'climate' ? 'bg-amber-500' :
                                     scenario.category === 'financial' ? 'bg-amber-500' :
                                     scenario.category === 'geopolitical' ? 'bg-red-500' :
                                     scenario.category === 'health' ? 'bg-green-500' :
@@ -1440,6 +1584,8 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
                             </div>
                           </div>
                         )}
+                          </>
+                        )}
                       </div>
                     )}
                     
@@ -1454,7 +1600,7 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
                         </div>
                         <button
                           onClick={() => setShowReport(true)}
-                          className="px-4 py-1.5 bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 rounded-lg text-sm font-medium hover:bg-cyan-500/30 transition-all flex items-center gap-2"
+                          className="px-4 py-1.5 bg-amber-500/20 text-amber-400 border border-amber-500/40 rounded-lg text-sm font-medium hover:bg-amber-500/30 transition-all flex items-center gap-2"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -1501,7 +1647,8 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
               </div>
             </div>
             
-            {/* Info Panel */}
+            {/* Info Panel - hidden in picker mode */}
+            {!pickerMode && (
             <div className="w-80 border-l border-white/10 p-4 overflow-y-auto bg-black/50">
               {/* Tabs */}
               <div className="flex gap-2 mb-4">
@@ -1511,7 +1658,7 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
                     onClick={() => setActiveTab(tab)}
                     className={`px-3 py-1.5 rounded-lg text-xs uppercase tracking-wider transition-all ${
                       activeTab === tab
-                        ? 'bg-cyan-500/20 text-cyan-400'
+                        ? 'bg-amber-500/20 text-amber-400'
                         : 'bg-white/5 text-white/50 hover:bg-white/10'
                     }`}
                   >
@@ -1611,8 +1758,8 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
                     <p>• Right-click to pan</p>
                   </div>
                   
-                  <div className="mt-4 p-3 bg-cyan-500/10 border border-cyan-500/20 rounded-lg">
-                    <div className="text-cyan-400 text-xs font-medium mb-1">Cesium Ion 3D Tiles</div>
+                  <div className="mt-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                    <div className="text-amber-400 text-xs font-medium mb-1">Cesium Ion 3D Tiles</div>
                     <div className="text-white/50 text-xs">
                       High-resolution photogrammetry model from Cesium Ion Asset #{city.cesiumAssetId}
                     </div>
@@ -1629,6 +1776,7 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
                 </div>
               )}
             </div>
+            )}
           </div>
 
           {/* ============================================ */}
@@ -1674,8 +1822,8 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
                   
                   {/* Executive Summary - LLM Generated */}
                   {stressTestReport.executiveSummary && (
-                    <div className="mb-6 p-4 bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border border-cyan-500/20 rounded-lg">
-                      <h3 className="text-cyan-400 text-sm uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <div className="mb-6 p-4 bg-gradient-to-br from-amber-500/10 to-amber-700/10 border border-amber-500/20 rounded-lg">
+                      <h3 className="text-amber-400 text-sm uppercase tracking-wider mb-3 flex items-center gap-2">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
@@ -1699,6 +1847,8 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
                       eventId={eventId || 'default'}
                       eventType="current"
                       eventName={stressTestReport.eventName}
+                      eventCategory={eventCategory}
+                      cityName={city.name}
                       fullWidth={true}
                       height={350}
                     />
@@ -1726,9 +1876,9 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
                         <div className="text-amber-400 text-2xl font-light">{stressTestReport.totalPopulationAffected.toLocaleString()}</div>
                         <div className="text-amber-400/50 text-[10px] mt-1">People in affected areas</div>
                       </div>
-                      <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-lg p-4">
-                        <div className="text-cyan-400/70 text-xs uppercase tracking-wider mb-1">Risk Zones</div>
-                        <div className="text-cyan-400 text-2xl font-light">{stressTestReport.zones.length}</div>
+                      <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
+                        <div className="text-amber-400/70 text-xs uppercase tracking-wider mb-1">Risk Zones</div>
+                        <div className="text-amber-400 text-2xl font-light">{stressTestReport.zones.length}</div>
                         <div className="flex gap-1 mt-1 flex-wrap">
                           {stressTestReport.zones.filter(z => z.riskLevel === 'critical').length > 0 && (
                             <span className="px-1.5 py-0.5 bg-red-500/30 text-red-400 text-[10px] rounded">
@@ -1751,7 +1901,7 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
                   </div>
                   
                   {/* VaR/CVaR and Monte Carlo Section */}
-                  <div className="mb-6 p-4 bg-gradient-to-br from-purple-500/10 to-cyan-500/10 border border-purple-500/20 rounded-lg">
+                  <div className="mb-6 p-4 bg-gradient-to-br from-purple-500/10 to-amber-500/10 border border-purple-500/20 rounded-lg">
                     <h3 className="text-purple-400 text-sm uppercase tracking-wider mb-4 flex items-center gap-2">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
@@ -1763,9 +1913,9 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
                       <div className="bg-black/30 rounded-lg p-3">
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-white/50 text-xs">Value at Risk (99%)</span>
-                          <span className="text-[8px] text-cyan-400/70 bg-cyan-400/10 px-1.5 rounded">MC</span>
+                          <span className="text-[8px] text-amber-400/70 bg-amber-400/10 px-1.5 rounded">MC</span>
                         </div>
-                        <div className="text-cyan-400 text-xl font-light">
+                        <div className="text-amber-400 text-xl font-light">
                           €{(stressTestReport.totalLoss * 1.3).toFixed(0)}M
                         </div>
                         <div className="text-white/40 text-[10px] mt-1">
@@ -1847,7 +1997,7 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
                         <div className="text-white/50 mb-2">Zone Identification Based On:</div>
                         <ul className="text-white/70 space-y-1">
                           <li className="flex items-start gap-1.5">
-                            <span className="text-cyan-400 mt-0.5">→</span>
+                            <span className="text-amber-400 mt-0.5">→</span>
                             <span><strong>Event Type Analysis:</strong> {stressTestReport.eventType === 'flood' ? 'Coastal, low-lying, and waterfront areas identified' :
                               stressTestReport.eventType === 'seismic' ? 'Fault lines, soft soil, and high-rise clusters analyzed' :
                               stressTestReport.eventType === 'fire' ? 'Industrial zones and dense urban areas mapped' :
@@ -1858,7 +2008,7 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
                               'Critical infrastructure and population centers analyzed'}</span>
                           </li>
                           <li className="flex items-start gap-1.5">
-                            <span className="text-cyan-400 mt-0.5">→</span>
+                            <span className="text-amber-400 mt-0.5">→</span>
                             <span><strong>Severity Factor:</strong> {(stressTestReport.zones[0]?.riskLevel === 'critical' ? 'High' : 'Moderate')} severity applied ({((stressTestReport.totalLoss / stressTestReport.totalBuildingsAffected) || 0).toFixed(1)}€M avg loss per building)</span>
                           </li>
                         </ul>
@@ -1940,7 +2090,7 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
                               <ul className="text-white/60 text-xs space-y-0.5">
                                 {zone.recommendations.map((rec, j) => (
                                   <li key={j} className="flex items-start gap-1">
-                                    <span className="text-cyan-400">•</span> {rec}
+                                    <span className="text-amber-400">•</span> {rec}
                                   </li>
                                 ))}
                               </ul>
@@ -2010,7 +2160,7 @@ export default function DigitalTwinPanel({ isOpen, onClose, assetId, dynamicAsse
                       </button>
                       <button 
                         onClick={() => setShowReport(false)}
-                        className="px-4 py-2 bg-cyan-500/20 text-cyan-400 rounded-lg text-sm hover:bg-cyan-500/30 transition-colors"
+                        className="px-4 py-2 bg-amber-500/20 text-amber-400 rounded-lg text-sm hover:bg-amber-500/30 transition-colors"
                       >
                         Back to Map
                       </button>

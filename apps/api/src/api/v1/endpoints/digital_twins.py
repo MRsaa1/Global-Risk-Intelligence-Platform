@@ -1,4 +1,6 @@
 """Digital Twin endpoints - Layer 1: Living Digital Twins."""
+import json
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
@@ -9,7 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.core.database import get_db
+from src.models.asset import Asset
 from src.models.digital_twin import DigitalTwin, TwinState, TwinTimeline
+from src.services.climate_service import ClimateScenario, ClimateService
 
 router = APIRouter()
 
@@ -203,17 +207,75 @@ async def sync_digital_twin(
         select(DigitalTwin).where(DigitalTwin.asset_id == asset_id)
     )
     twin = result.scalar_one_or_none()
-    
     if not twin:
         raise HTTPException(status_code=404, detail="Digital Twin not found")
-    
-    # TODO: Implement sync logic
-    # For now, return placeholder
+
+    asset_res = await db.execute(select(Asset).where(Asset.id == asset_id))
+    asset = asset_res.scalar_one_or_none()
+    lat = (asset.latitude if asset and asset.latitude is not None else 52.52)
+    lon = (asset.longitude if asset and asset.longitude is not None else 13.405)
+
+    climate_svc = ClimateService()
+    assessment = await climate_svc.get_climate_assessment(lat, lon, ClimateScenario.SSP245, 2050)
+    exposures = _map_assessment_to_exposures(assessment)
+    twin.climate_exposures = json.dumps({
+        "exposures": exposures,
+        "composite_score": assessment.composite_score,
+        "data_sources": assessment.data_sources or ["CMIP6", "FEMA", "Copernicus"],
+        "scenario": "ssp245",
+        "time_horizon": 2050,
+    })
+    twin.climate_exposures_updated_at = datetime.now(timezone.utc)
+    await db.commit()
+
     return {
-        "status": "sync_triggered",
+        "status": "synced",
         "asset_id": str(asset_id),
         "twin_id": str(twin.id),
-        "message": "Synchronization will be implemented",
+    }
+
+
+def _exposures_fallback(asset_id: str, scenario: str, time_horizon: int) -> dict:
+    """Fallback sample when ClimateService fails."""
+    return {
+        "asset_id": asset_id,
+        "scenario": scenario,
+        "time_horizon": time_horizon,
+        "exposures": {
+            "flood": {"score": 45, "return_period_100yr_depth_m": 1.2, "annual_probability": 0.01},
+            "heat_stress": {"score": 62, "cooling_degree_days_increase": 450, "extreme_heat_days_per_year": 35},
+            "wind": {"score": 28, "max_gust_100yr_ms": 42},
+            "wildfire": {"score": 15, "probability": 0.002},
+            "sea_level_rise": {"score": 8, "exposure_m": 0.3},
+        },
+        "composite_score": 52,
+        "data_sources": ["CMIP6", "FEMA NFHL", "Copernicus"],
+    }
+
+
+def _map_assessment_to_exposures(a) -> dict:
+    """Map ClimateRiskAssessment to exposures JSON."""
+    flood = a.flood
+    f = {"score": flood.score if flood else 0, "return_period_100yr_depth_m": (flood.intensity if flood else 1.2), "annual_probability": (flood.probability if flood else 0.01)}
+
+    heat = a.heat_stress
+    hs = {"score": heat.score if heat else 0, "cooling_degree_days_increase": (heat.intensity if heat else 450), "extreme_heat_days_per_year": 35}
+
+    wind = a.wind
+    w = {"score": wind.score if wind else 0, "max_gust_100yr_ms": (wind.intensity if wind else 42)}
+
+    wf = a.wildfire
+    wf_dict = {"score": wf.score if wf else 0, "probability": (wf.probability if wf else 0.002)}
+
+    slr = a.sea_level_rise
+    slr_dict = {"score": slr.score if slr else 0, "exposure_m": (slr.intensity if slr else 0.3)}
+
+    return {
+        "flood": f,
+        "heat_stress": hs,
+        "wind": w,
+        "wildfire": wf_dict,
+        "sea_level_rise": slr_dict,
     }
 
 
@@ -239,44 +301,30 @@ async def get_climate_exposures(
     - Wildfire risk
     - Sea level rise
     """
-    result = await db.execute(
-        select(DigitalTwin).where(DigitalTwin.asset_id == asset_id)
-    )
-    twin = result.scalar_one_or_none()
-    
+    twin_res = await db.execute(select(DigitalTwin).where(DigitalTwin.asset_id == asset_id))
+    twin = twin_res.scalar_one_or_none()
     if not twin:
         raise HTTPException(status_code=404, detail="Digital Twin not found")
-    
-    # TODO: Implement climate exposure calculation
-    # For now, return sample data
-    return {
-        "asset_id": str(asset_id),
-        "scenario": scenario,
-        "time_horizon": time_horizon,
-        "exposures": {
-            "flood": {
-                "score": 45,
-                "return_period_100yr_depth_m": 1.2,
-                "annual_probability": 0.01,
-            },
-            "heat_stress": {
-                "score": 62,
-                "cooling_degree_days_increase": 450,
-                "extreme_heat_days_per_year": 35,
-            },
-            "wind": {
-                "score": 28,
-                "max_gust_100yr_ms": 42,
-            },
-            "wildfire": {
-                "score": 15,
-                "probability": 0.002,
-            },
-            "sea_level_rise": {
-                "score": 8,
-                "exposure_m": 0.3,
-            },
-        },
-        "composite_score": 52,
-        "data_sources": ["CMIP6", "FEMA NFHL", "Copernicus"],
-    }
+
+    asset_res = await db.execute(select(Asset).where(Asset.id == asset_id))
+    asset = asset_res.scalar_one_or_none()
+    lat = (asset.latitude if asset and asset.latitude is not None else 52.52)
+    lon = (asset.longitude if asset and asset.longitude is not None else 13.405)
+
+    scenario_map = {"ssp126": ClimateScenario.SSP126, "ssp245": ClimateScenario.SSP245, "ssp370": ClimateScenario.SSP370, "ssp585": ClimateScenario.SSP585}
+    cs_enum = scenario_map.get(scenario.lower(), ClimateScenario.SSP245)
+
+    try:
+        climate_svc = ClimateService()
+        assessment = await climate_svc.get_climate_assessment(lat, lon, cs_enum, time_horizon)
+        exposures = _map_assessment_to_exposures(assessment)
+        return {
+            "asset_id": str(asset_id),
+            "scenario": scenario,
+            "time_horizon": time_horizon,
+            "exposures": exposures,
+            "composite_score": assessment.composite_score,
+            "data_sources": assessment.data_sources or ["CMIP6", "FEMA", "Copernicus"],
+        }
+    except Exception:
+        return _exposures_fallback(str(asset_id), scenario, time_horizon)

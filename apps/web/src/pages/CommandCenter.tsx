@@ -16,13 +16,18 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { CubeTransparentIcon, ChartBarIcon, Cog6ToothIcon, HomeIcon } from '@heroicons/react/24/outline'
+import { CubeTransparentIcon, ChartBarIcon, Cog6ToothIcon, HomeIcon, Square3Stack3DIcon, BuildingOffice2Icon } from '@heroicons/react/24/outline'
 import CesiumGlobe, { RiskZone, ZoneAsset } from '../components/CesiumGlobe'
 import DigitalTwinPanel from '../components/DigitalTwinPanel'
 import { useSimulatedWebSocket, RiskUpdate } from '../lib/useWebSocket'
 import { ActionPlanModal, ZoneDetailPanel } from '../components/stress'
+import StressTestSelector from '../components/stress/StressTestSelector'
 import HistoricalEventPanel from '../components/HistoricalEventPanel'
 import { RiskFlowMini } from '../components/RiskFlowDiagram'
+import { exportStressTestPdf } from '../lib/exportService'
+// Platform state management
+import { usePlatformStore, usePortfolio, useSelectedZone, useShowDigitalTwinPanel, useActiveScenario, useSelectedStressTestId, PortfolioState as StorePortfolioState, ActiveScenarioState } from '../store/platformStore'
+import { usePlatformWebSocket } from '../hooks/usePlatformWebSocket'
 
 const API_BASE = '/api/v1'
 
@@ -48,6 +53,11 @@ interface FocusedHotspot {
     climate: number
     credit: number
     operational: number
+    geopolitical: number
+    flood: number
+    earthquake: number
+    fire: number
+    structural: number
   }
 }
 
@@ -64,15 +74,36 @@ interface ActiveScenario {
 // getRiskLevel removed - using inline conditions instead
 
 function getRiskColor(risk: number): string {
-  if (risk > 0.8) return 'text-red-400'
-  if (risk > 0.6) return 'text-orange-400'
-  if (risk > 0.4) return 'text-yellow-400'
-  return 'text-emerald-400'
+  // Professional muted colors - not too bright
+  if (risk > 0.8) return 'text-red-300'  // Muted red
+  if (risk > 0.6) return 'text-orange-300'  // Muted orange
+  if (risk > 0.4) return 'text-amber-300'  // Muted amber
+  return 'text-emerald-300'  // Muted green
+}
+
+/** Dot/marker color by risk % — only for Quick Navigation (Z) for now */
+function getRiskDotColor(risk: number): string {
+  if (risk > 0.8) return 'bg-red-400/90'
+  if (risk > 0.6) return 'bg-orange-400/90'
+  if (risk > 0.4) return 'bg-amber-400/90'
+  return 'bg-emerald-400/90'
 }
 
 function formatBillions(value: number): string {
   if (value >= 1000) return `${(value / 1000).toFixed(1)}T`
   return `${value.toFixed(1)}B`
+}
+
+// Risk factor → scenario IDs from registry (Stress Scenarios)
+const FACTOR_TO_SCENARIO_IDS: Record<string, string[]> = {
+  climate: ['NGFS_SSP5_2050', 'NGFS_SSP2_2040', 'Flood_Extreme_100y', 'Heat_Stress_Energy', 'Sea_Level_Coastal', 'Wildfire_Insurance', 'Climate_Disclosure_Enforcement'],
+  credit: ['EBA_Adverse', 'FED_Severely_Adverse_CRE', 'Liquidity_Freeze', 'Asset_Price_Collapse', 'IMF_Systemic', 'Sovereign_Debt_Crisis', 'Currency_Devaluation', 'Government_Default', 'Sudden_Capital_Increase', 'Resolution_Regime_Activation'],
+  operational: ['COVID19_Replay', 'Pandemic_X', 'Urban_Riots_Asset_Damage', 'Infrastructure_Sabotage', 'Prolonged_Social_Instability'],
+  geopolitical: ['Regional_Conflict_Spillover', 'Sanctions_Escalation', 'Trade_War_Supply_Chain', 'Energy_Shock'],
+  flood: ['Flood_Extreme_100y', 'Sea_Level_Coastal', 'NGFS_SSP5_2050', 'NGFS_SSP2_2040'],
+  earthquake: [],
+  fire: ['Wildfire_Insurance', 'Heat_Stress_Energy'],
+  structural: ['Infrastructure_Sabotage', 'Urban_Riots_Asset_Damage'],
 }
 
 // ============================================
@@ -106,11 +137,12 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null)
   const [selectedCity, setSelectedCity] = useState<{ id: string; name: string; risk: number } | null>(null)
   
+  // Professional muted color palette - serious, not cartoonish
   const colorClasses = {
-    red: { text: 'text-red-400', bg: 'bg-red-500', border: 'border-red-500/30', hover: 'hover:bg-red-500/20' },
-    orange: { text: 'text-orange-400', bg: 'bg-orange-500', border: 'border-orange-500/30', hover: 'hover:bg-orange-500/20' },
-    yellow: { text: 'text-yellow-400', bg: 'bg-yellow-500', border: 'border-yellow-500/30', hover: 'hover:bg-yellow-500/20' },
-    green: { text: 'text-emerald-400', bg: 'bg-emerald-500', border: 'border-emerald-500/30', hover: 'hover:bg-emerald-500/20' },
+    red: { text: 'text-red-300', bg: 'bg-red-500/20', border: 'border-red-500/20', hover: 'hover:bg-red-500/10' },
+    orange: { text: 'text-orange-300', bg: 'bg-orange-500/20', border: 'border-orange-500/20', hover: 'hover:bg-orange-500/10' },
+    yellow: { text: 'text-amber-300', bg: 'bg-amber-500/20', border: 'border-amber-500/20', hover: 'hover:bg-amber-500/10' },
+    green: { text: 'text-emerald-300', bg: 'bg-emerald-500/20', border: 'border-emerald-500/20', hover: 'hover:bg-emerald-500/10' },
   }
   
   const colors = colorClasses[color]
@@ -1657,6 +1689,119 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
         { id: 'kinshasa', name: 'Kinshasa', risk: 0.82 },
       ]},
     ]},
+
+    // ===== STRESS SCENARIO REGISTRY (EBA, Fed, NGFS, IMF, Extended) – link with Stress Test (S) =====
+    EBA_Adverse: { countries: [
+      { id: 'de', name: 'Germany', flag: '🇩🇪', cities: [{ id: 'frankfurt', name: 'Frankfurt (ECB)', risk: 0.88 }] },
+      { id: 'it', name: 'Italy', flag: '🇮🇹', cities: [{ id: 'milan', name: 'Milan', risk: 0.82 }] },
+      { id: 'fr', name: 'France', flag: '🇫🇷', cities: [{ id: 'paris', name: 'Paris', risk: 0.78 }] },
+    ]},
+    FED_Severely_Adverse_CRE: { countries: [
+      { id: 'us', name: 'United States', flag: '🇺🇸', cities: [{ id: 'newyork', name: 'New York', risk: 0.90, cesiumId: 75343 }, { id: 'sanfrancisco', name: 'San Francisco', risk: 0.88 }] },
+      { id: 'uk', name: 'United Kingdom', flag: '🇬🇧', cities: [{ id: 'london', name: 'London', risk: 0.82 }] },
+    ]},
+    Liquidity_Freeze: { countries: [
+      { id: 'de', name: 'Germany', flag: '🇩🇪', cities: [{ id: 'frankfurt', name: 'Frankfurt', risk: 0.88 }] },
+      { id: 'it', name: 'Italy', flag: '🇮🇹', cities: [{ id: 'milan', name: 'Milan', risk: 0.85 }] },
+      { id: 'fr', name: 'France', flag: '🇫🇷', cities: [{ id: 'paris', name: 'Paris', risk: 0.78 }] },
+    ]},
+    Asset_Price_Collapse: { countries: [
+      { id: 'us', name: 'United States', flag: '🇺🇸', cities: [{ id: 'newyork', name: 'New York', risk: 0.85, cesiumId: 75343 }] },
+      { id: 'uk', name: 'United Kingdom', flag: '🇬🇧', cities: [{ id: 'london', name: 'London', risk: 0.80 }] },
+      { id: 'jp', name: 'Japan', flag: '🇯🇵', cities: [{ id: 'tokyo', name: 'Tokyo', risk: 0.75, cesiumId: 2602291 }] },
+    ]},
+    IMF_Systemic: { countries: [
+      { id: 'us', name: 'United States', flag: '🇺🇸', cities: [{ id: 'newyork', name: 'New York', risk: 0.92, cesiumId: 75343 }] },
+      { id: 'ch', name: 'Switzerland', flag: '🇨🇭', cities: [{ id: 'zurich', name: 'Zurich', risk: 0.85 }] },
+      { id: 'uk', name: 'United Kingdom', flag: '🇬🇧', cities: [{ id: 'london', name: 'London', risk: 0.88 }] },
+    ]},
+    NGFS_SSP5_2050: { countries: [
+      { id: 'bd', name: 'Bangladesh', flag: '🇧🇩', cities: [{ id: 'dhaka', name: 'Dhaka', risk: 0.92 }] },
+      { id: 'nl', name: 'Netherlands', flag: '🇳🇱', cities: [{ id: 'rotterdam', name: 'Rotterdam', risk: 0.85 }] },
+      { id: 'us', name: 'United States', flag: '🇺🇸', cities: [{ id: 'miami', name: 'Miami', risk: 0.88 }] },
+    ]},
+    NGFS_SSP2_2040: { countries: [
+      { id: 'de', name: 'Germany', flag: '🇩🇪', cities: [{ id: 'berlin', name: 'Berlin', risk: 0.62 }] },
+      { id: 'fr', name: 'France', flag: '🇫🇷', cities: [{ id: 'paris', name: 'Paris', risk: 0.58 }] },
+    ]},
+    Flood_Extreme_100y: { countries: [
+      { id: 'de', name: 'Germany', flag: '🇩🇪', cities: [{ id: 'cologne', name: 'Cologne', risk: 0.90 }, { id: 'bonn', name: 'Bonn', risk: 0.88 }] },
+      { id: 'nl', name: 'Netherlands', flag: '🇳🇱', cities: [{ id: 'rotterdam', name: 'Rotterdam', risk: 0.85 }] },
+    ]},
+    Heat_Stress_Energy: { countries: [
+      { id: 'es', name: 'Spain', flag: '🇪🇸', cities: [{ id: 'madrid', name: 'Madrid', risk: 0.82 }] },
+      { id: 'it', name: 'Italy', flag: '🇮🇹', cities: [{ id: 'rome', name: 'Rome', risk: 0.78 }] },
+      { id: 'fr', name: 'France', flag: '🇫🇷', cities: [{ id: 'marseille', name: 'Marseille', risk: 0.80 }] },
+    ]},
+    Sea_Level_Coastal: { countries: [
+      { id: 'nl', name: 'Netherlands', flag: '🇳🇱', cities: [{ id: 'amsterdam', name: 'Amsterdam', risk: 0.80 }] },
+      { id: 'us', name: 'United States', flag: '🇺🇸', cities: [{ id: 'miami', name: 'Miami', risk: 0.85 }] },
+      { id: 'bd', name: 'Bangladesh', flag: '🇧🇩', cities: [{ id: 'chittagong', name: 'Chittagong', risk: 0.88 }] },
+    ]},
+    Wildfire_Insurance: { countries: [
+      { id: 'us', name: 'United States', flag: '🇺🇸', cities: [{ id: 'losangeles', name: 'Los Angeles', risk: 0.82 }] },
+      { id: 'au', name: 'Australia', flag: '🇦🇺', cities: [{ id: 'sydney', name: 'Sydney', risk: 0.78, cesiumId: 2644092 }] },
+    ]},
+    Sanctions_Escalation: { countries: [
+      { id: 'ru', name: 'Russia', flag: '🇷🇺', cities: [{ id: 'moscow', name: 'Moscow', risk: 0.88 }] },
+      { id: 'de', name: 'Germany', flag: '🇩🇪', cities: [{ id: 'frankfurt', name: 'Frankfurt', risk: 0.58 }] },
+    ]},
+    Trade_War_Supply_Chain: { countries: [
+      { id: 'cn', name: 'China', flag: '🇨🇳', cities: [{ id: 'shanghai', name: 'Shanghai', risk: 0.78 }] },
+      { id: 'us', name: 'United States', flag: '🇺🇸', cities: [{ id: 'losangeles', name: 'Los Angeles', risk: 0.72 }] },
+      { id: 'de', name: 'Germany', flag: '🇩🇪', cities: [{ id: 'hamburg', name: 'Hamburg', risk: 0.68 }] },
+    ]},
+    Energy_Shock: { countries: [
+      { id: 'de', name: 'Germany', flag: '🇩🇪', cities: [{ id: 'berlin', name: 'Berlin', risk: 0.78 }] },
+      { id: 'it', name: 'Italy', flag: '🇮🇹', cities: [{ id: 'milan', name: 'Milan', risk: 0.72 }] },
+    ]},
+    Regional_Conflict_Spillover: { countries: [
+      { id: 'ua', name: 'Ukraine', flag: '🇺🇦', cities: [{ id: 'kyiv', name: 'Kyiv', risk: 0.95 }] },
+      { id: 'pl', name: 'Poland', flag: '🇵🇱', cities: [{ id: 'warsaw', name: 'Warsaw', risk: 0.62 }] },
+    ]},
+    COVID19_Replay: { countries: [
+      { id: 'global', name: 'Global', flag: '🌍', cities: [{ id: 'newyork', name: 'New York', risk: 0.82, cesiumId: 75343 }, { id: 'london', name: 'London', risk: 0.78 }] },
+    ]},
+    Pandemic_X: { countries: [
+      { id: 'global', name: 'Global', flag: '🌍', cities: [{ id: 'newyork', name: 'New York', risk: 0.85, cesiumId: 75343 }, { id: 'tokyo', name: 'Tokyo', risk: 0.80, cesiumId: 2602291 }] },
+    ]},
+    Sovereign_Debt_Crisis: { countries: [
+      { id: 'it', name: 'Italy', flag: '🇮🇹', cities: [{ id: 'rome', name: 'Rome', risk: 0.82 }] },
+      { id: 'gr', name: 'Greece', flag: '🇬🇷', cities: [{ id: 'athens', name: 'Athens', risk: 0.78 }] },
+      { id: 'jp', name: 'Japan', flag: '🇯🇵', cities: [{ id: 'tokyo', name: 'Tokyo', risk: 0.72, cesiumId: 2602291 }] },
+    ]},
+    Currency_Devaluation: { countries: [
+      { id: 'tr', name: 'Turkey', flag: '🇹🇷', cities: [{ id: 'istanbul', name: 'Istanbul', risk: 0.78 }] },
+      { id: 'ar', name: 'Argentina', flag: '🇦🇷', cities: [{ id: 'buenosaires', name: 'Buenos Aires', risk: 0.82 }] },
+    ]},
+    Government_Default: { countries: [
+      { id: 'ar', name: 'Argentina', flag: '🇦🇷', cities: [{ id: 'buenosaires', name: 'Buenos Aires', risk: 0.85 }] },
+      { id: 'eg', name: 'Egypt', flag: '🇪🇬', cities: [{ id: 'cairo', name: 'Cairo', risk: 0.72 }] },
+    ]},
+    Sudden_Capital_Increase: { countries: [
+      { id: 'ch', name: 'Switzerland', flag: '🇨🇭', cities: [{ id: 'zurich', name: 'Zurich', risk: 0.68 }] },
+      { id: 'de', name: 'Germany', flag: '🇩🇪', cities: [{ id: 'frankfurt', name: 'Frankfurt', risk: 0.65 }] },
+    ]},
+    Climate_Disclosure_Enforcement: { countries: [
+      { id: 'eu', name: 'European Union', flag: '🇪🇺', cities: [{ id: 'brussels', name: 'Brussels', risk: 0.58 }] },
+      { id: 'uk', name: 'United Kingdom', flag: '🇬🇧', cities: [{ id: 'london', name: 'London', risk: 0.55 }] },
+    ]},
+    Resolution_Regime_Activation: { countries: [
+      { id: 'de', name: 'Germany', flag: '🇩🇪', cities: [{ id: 'frankfurt', name: 'Frankfurt', risk: 0.88 }] },
+      { id: 'us', name: 'United States', flag: '🇺🇸', cities: [{ id: 'newyork', name: 'New York', risk: 0.82, cesiumId: 75343 }] },
+    ]},
+    Urban_Riots_Asset_Damage: { countries: [
+      { id: 'fr', name: 'France', flag: '🇫🇷', cities: [{ id: 'paris', name: 'Paris', risk: 0.75 }] },
+      { id: 'us', name: 'United States', flag: '🇺🇸', cities: [{ id: 'losangeles', name: 'Los Angeles', risk: 0.68 }] },
+    ]},
+    Infrastructure_Sabotage: { countries: [
+      { id: 'de', name: 'Germany', flag: '🇩🇪', cities: [{ id: 'berlin', name: 'Berlin', risk: 0.78 }] },
+      { id: 'us', name: 'United States', flag: '🇺🇸', cities: [{ id: 'washington', name: 'Washington DC', risk: 0.72 }] },
+    ]},
+    Prolonged_Social_Instability: { countries: [
+      { id: 'fr', name: 'France', flag: '🇫🇷', cities: [{ id: 'paris', name: 'Paris', risk: 0.68 }] },
+      { id: 'ar', name: 'Argentina', flag: '🇦🇷', cities: [{ id: 'buenosaires', name: 'Buenos Aires', risk: 0.72 }] },
+    ]},
   }
   
   // Current events (0-1 year) with specific ongoing situations
@@ -1666,6 +1811,11 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
       // Stress Lab scenarios
       { id: 'flood-rhine', name: 'Rhine Valley Flood', risk: 0.85 },
       { id: 'heatwave-eu', name: 'European Heatwave', risk: 0.75 },
+      // Registry (NGFS): link with Stress Test (S)
+      { id: 'Flood_Extreme_100y', name: 'Flood Extreme (100y→10y)', risk: 0.85 },
+      { id: 'Heat_Stress_Energy', name: 'Heat Stress & Energy Load', risk: 0.65 },
+      { id: 'Sea_Level_Coastal', name: 'Sea Level Rise – Coastal Assets', risk: 0.70 },
+      { id: 'Wildfire_Insurance', name: 'Wildfire + Insurance Withdrawal', risk: 0.72 },
       // Current events
       { id: 'drought2024', name: 'European Drought 2024', risk: 0.72 },
       { id: 'flood_asia', name: 'Southeast Asia Flooding', risk: 0.68 },
@@ -1682,6 +1832,11 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
       { id: 'blockade', name: 'Trade Route Blockade', risk: 0.70 },
       { id: 'sanctions', name: 'Major Sanctions Package', risk: 0.65 },
       { id: 'regime-change', name: 'Regime Transition Risk', risk: 0.75 },
+      // Registry (Extended): link with Stress Test (S)
+      { id: 'Sanctions_Escalation', name: 'Sanctions Escalation', risk: 0.85 },
+      { id: 'Trade_War_Supply_Chain', name: 'Trade War / Supply Chain Disruption', risk: 0.78 },
+      { id: 'Energy_Shock', name: 'Energy Shock (gas/oil cutoff)', risk: 0.82 },
+      { id: 'Regional_Conflict_Spillover', name: 'Regional Conflict Spillover', risk: 0.88 },
       // Current events
       { id: 'ukraine_ongoing', name: 'Ukraine Conflict (Ongoing)', risk: 0.88 },
       { id: 'israel_gaza', name: 'Israel-Gaza Conflict', risk: 0.85 },
@@ -1699,6 +1854,15 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
       { id: 'liquidity-eu', name: 'Eurozone Liquidity Crisis', risk: 0.90 },
       { id: 'credit-crunch', name: 'Credit Crunch', risk: 0.75 },
       { id: 'basel-full', name: 'Basel IV Implementation', risk: 0.50 },
+      // Registry (EBA, Fed, IMF): link with Stress Test (S)
+      { id: 'EBA_Adverse', name: 'EBA Adverse Scenario', risk: 0.85 },
+      { id: 'FED_Severely_Adverse_CRE', name: 'Fed Severely Adverse (CRE shock)', risk: 0.90 },
+      { id: 'Liquidity_Freeze', name: 'Liquidity Freeze / Funding Stress', risk: 0.88 },
+      { id: 'Asset_Price_Collapse', name: 'Asset Price Collapse (−30–40%)', risk: 0.82 },
+      { id: 'IMF_Systemic', name: 'IMF-style Systemic Crisis', risk: 0.92 },
+      { id: 'Sovereign_Debt_Crisis', name: 'Sovereign Debt Crisis', risk: 0.88 },
+      { id: 'Currency_Devaluation', name: 'Currency Devaluation', risk: 0.75 },
+      { id: 'Government_Default', name: 'Government Default / Restructuring', risk: 0.90 },
       // Current events
       { id: 'rate_hikes', name: 'Central Bank Rate Hikes', risk: 0.68 },
       { id: 'commercial_re', name: 'Commercial Real Estate Crisis', risk: 0.72 },
@@ -1714,6 +1878,9 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
     { id: 'pandemic', name: 'Pandemic & Health', events: [
       // Stress Lab scenarios
       { id: 'pandemic-x', name: 'Pandemic Variant X', risk: 0.80 },
+      // Registry (Extended): link with Stress Test (S)
+      { id: 'COVID19_Replay', name: 'COVID-19 Replay (calibrated)', risk: 0.80 },
+      { id: 'Pandemic_X', name: 'Pandemic X (high mortality, logistics)', risk: 0.85 },
       // Current events
       { id: 'covid_variants', name: 'COVID Variants Monitoring', risk: 0.35 },
       { id: 'avian_flu', name: 'H5N1 Avian Flu Risk', risk: 0.45 },
@@ -1727,6 +1894,10 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
       // Stress Lab scenarios
       { id: 'mass-protest', name: 'Mass Civil Unrest', risk: 0.60 },
       { id: 'general-strike', name: 'General Strike', risk: 0.55 },
+      // Registry (Extended): link with Stress Test (S)
+      { id: 'Urban_Riots_Asset_Damage', name: 'Urban Riots → Asset Damage', risk: 0.72 },
+      { id: 'Infrastructure_Sabotage', name: 'Infrastructure Sabotage', risk: 0.80 },
+      { id: 'Prolonged_Social_Instability', name: 'Prolonged Social Instability', risk: 0.68 },
       // Additional scenarios
       { id: 'farmer_protests', name: 'Farmer Protests (EU)', risk: 0.52 },
       { id: 'cost_living', name: 'Cost of Living Protests', risk: 0.58 },
@@ -1747,6 +1918,10 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
     { id: 'regulatory', name: 'Regulatory & Legal', events: [
       // Stress Lab scenarios
       { id: 'basel-iv', name: 'Basel IV Full Implementation', risk: 0.50 },
+      // Registry (Extended): link with Stress Test (S)
+      { id: 'Sudden_Capital_Increase', name: 'Sudden Capital Requirement Increase', risk: 0.70 },
+      { id: 'Climate_Disclosure_Enforcement', name: 'Climate Disclosure Enforcement Shock', risk: 0.60 },
+      { id: 'Resolution_Regime_Activation', name: 'Resolution Regime Activation', risk: 0.85 },
       // Additional scenarios
       { id: 'eu_ai_act', name: 'EU AI Act Compliance', risk: 0.45 },
       { id: 'carbon_border', name: 'Carbon Border Tax', risk: 0.52 },
@@ -1803,6 +1978,8 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
       { id: 'antibiotic_failure', name: 'Antibiotic Resistance Crisis', risk: 0.55, type: 'pandemic' },
     ]},
     { horizon: 15, name: '15 Year Outlook', scenarios: [
+      // Registry (NGFS): link with Stress Test (S)
+      { id: 'NGFS_SSP2_2040', name: 'NGFS SSP2-4.5 (Baseline)', risk: 0.55, type: 'climate' },
       { id: 'sea_level', name: 'Sea Level Rise +1m Impact', risk: 0.78, type: 'climate' },
       { id: 'food_security', name: 'Global Food Security Crisis', risk: 0.72, type: 'climate' },
       { id: 'agi_emergence', name: 'AGI Economic Shift', risk: 0.58, type: 'technology' },
@@ -1814,6 +1991,8 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
       { id: 'genetic_engineering', name: 'Genetic Engineering Risk', risk: 0.45, type: 'technology' },
     ]},
     { horizon: 20, name: '20 Year Outlook', scenarios: [
+      // Registry (NGFS): link with Stress Test (S)
+      { id: 'NGFS_SSP5_2050', name: 'NGFS SSP5-8.5 (2050)', risk: 0.88, type: 'climate' },
       { id: 'arctic_collapse', name: 'Arctic Ice Collapse', risk: 0.82, type: 'climate' },
       { id: 'demographic_crisis', name: 'Demographic Crisis (Aging)', risk: 0.75, type: 'social' },
       { id: 'resource_wars', name: 'Resource Conflict', risk: 0.65, type: 'geopolitical' },
@@ -1863,7 +2042,7 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
       case 'energy':
         return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
       default:
-        return <div className="w-3.5 h-3.5 rounded-full bg-white/20" />
+        return <div className="w-3.5 h-3.5 rounded-full bg-amber-400/70" />
     }
   }
   
@@ -1886,20 +2065,8 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
       {/* Main row - clickable */}
       <button
         onClick={onToggle}
-        className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-all ${colors.hover} ${isExpanded ? 'bg-white/5' : ''}`}
+        className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-all ${colors.hover} ${isExpanded ? 'bg-amber-500/5' : ''}`}
       >
-        {/* Indicator dots */}
-        <div className="flex gap-0.5">
-          {zones.slice(0, 5).map((_, i) => (
-            <div 
-              key={i}
-              className={`w-1.5 h-1.5 rounded-full ${colors.bg} ${level === 'critical' ? 'animate-pulse' : ''}`}
-              style={{ animationDelay: `${i * 150}ms` }}
-            />
-          ))}
-          {zones.length > 5 && <span className="text-white/30 text-[8px] ml-0.5">+{zones.length - 5}</span>}
-        </div>
-        
         {/* Count */}
         <span className={`${colors.text} text-lg font-light min-w-[20px]`}>
           {zones.length}
@@ -1939,7 +2106,7 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                   {/* Option 1: Historical */}
                   <button
                     onClick={() => setViewMode('historical')}
-                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/10 transition-all text-left group"
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-amber-500/10 transition-all text-left group"
                   >
                     <svg className="w-3.5 h-3.5 text-white/50 group-hover:text-white/70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -1951,7 +2118,7 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                   {/* Option 2: Current */}
                   <button
                     onClick={() => setViewMode('current')}
-                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/10 transition-all text-left group"
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-amber-500/10 transition-all text-left group"
                   >
                     <svg className="w-3.5 h-3.5 text-white/50 group-hover:text-white/70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
@@ -1963,7 +2130,7 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                   {/* Option 3: Forecast */}
                   <button
                     onClick={() => setViewMode('forecast')}
-                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/10 transition-all text-left group"
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-amber-500/10 transition-all text-left group"
                   >
                     <svg className="w-3.5 h-3.5 text-white/50 group-hover:text-white/70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
@@ -1986,22 +2153,23 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                   <div className="text-white/30 text-[10px] px-2 py-1 uppercase tracking-wider">
                     Historical Events (1970-Present)
                   </div>
-                  {historicalEvents.map((event) => (
-                    <button
-                      key={event.id}
-                      onClick={() => {
-                        onHistoricalSelect?.(event.id)
-                        // Historical events open report, not 3D view
-                      }}
-                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/10 transition-all text-left group"
-                    >
-                      <div className={`w-1.5 h-1.5 rounded-full ${colors.bg}`} />
-                      <span className="text-white/70 text-xs group-hover:text-white flex-1">
-                        {event.name}
-                      </span>
-                      <span className="text-white/30 text-[10px]">{event.type}</span>
-                    </button>
-                  ))}
+                  <div className="max-h-[300px] overflow-y-auto custom-scrollbar pr-1">
+                    {historicalEvents.map((event) => (
+                      <button
+                        key={event.id}
+                        onClick={() => {
+                          onHistoricalSelect?.(event.id)
+                          // Historical events open report, not 3D view
+                        }}
+                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-amber-500/10 transition-all text-left group"
+                      >
+                        <span className="text-white/70 text-xs group-hover:text-white flex-1">
+                          {event.name}
+                        </span>
+                        <span className="text-white/30 text-[10px]">{event.type}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
               
@@ -2017,19 +2185,21 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                   <div className="text-white/30 text-[10px] px-2 py-1 uppercase tracking-wider">
                     Current Event Categories
                   </div>
-                  {currentEvents.map((cat) => (
-                    <button
-                      key={cat.id}
-                      onClick={() => setSelectedCategory(cat.id)}
-                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/10 transition-all text-left group"
-                    >
-                      <CategoryIcon id={cat.id} />
-                      <span className="text-white/70 text-xs group-hover:text-white flex-1">
-                        {cat.name}
-                      </span>
-                      <span className="text-white/30 text-[10px]">{cat.events.length}</span>
-                    </button>
-                  ))}
+                  <div className="max-h-[300px] overflow-y-auto custom-scrollbar pr-1">
+                    {currentEvents.map((cat) => (
+                      <button
+                        key={cat.id}
+                        onClick={() => setSelectedCategory(cat.id)}
+                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-amber-500/10 transition-all text-left group"
+                      >
+                        <CategoryIcon id={cat.id} />
+                        <span className="text-white/70 text-xs group-hover:text-white flex-1">
+                          {cat.name}
+                        </span>
+                        <span className="text-white/30 text-[10px]">{cat.events.length}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
               
@@ -2045,21 +2215,22 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                   <div className="text-white/30 text-[10px] px-2 py-1 uppercase tracking-wider">
                     {currentEvents.find(c => c.id === selectedCategory)?.name || 'Events'}
                   </div>
-                  {currentEvents.find(c => c.id === selectedCategory)?.events.map((event) => (
-                    <button
-                      key={event.id}
-                      onClick={() => setSelectedEventId(event.id)}
-                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/10 transition-all text-left group"
-                    >
-                      <div className={`w-1.5 h-1.5 rounded-full ${event.risk > 0.7 ? 'bg-red-500' : event.risk > 0.5 ? 'bg-orange-500' : 'bg-yellow-500'}`} />
-                      <span className="text-white/70 text-xs group-hover:text-white flex-1">
-                        {event.name}
-                      </span>
-                      <span className={`text-[10px] font-mono ${event.risk > 0.7 ? 'text-red-400' : event.risk > 0.5 ? 'text-orange-400' : 'text-yellow-400'}`}>
-                        {(event.risk * 100).toFixed(0)}%
-                      </span>
-                    </button>
-                  ))}
+                  <div className="max-h-[300px] overflow-y-auto custom-scrollbar pr-1">
+                    {currentEvents.find(c => c.id === selectedCategory)?.events.map((event) => (
+                      <button
+                        key={event.id}
+                        onClick={() => setSelectedEventId(event.id)}
+                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-amber-500/10 transition-all text-left group"
+                      >
+                        <span className="text-white/70 text-xs group-hover:text-white flex-1">
+                          {event.name}
+                        </span>
+                        <span className={`text-[10px] font-mono ${event.risk > 0.7 ? 'text-red-300' : event.risk > 0.5 ? 'text-orange-300' : 'text-amber-300'}`}>
+                          {(event.risk * 100).toFixed(0)}%
+                        </span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
               
@@ -2079,7 +2250,7 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                     <button
                       key={country.id}
                       onClick={() => setSelectedCountry(country.id)}
-                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/10 transition-all text-left group"
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-amber-500/10 transition-all text-left group"
                     >
                       <span className="text-sm">{country.flag}</span>
                       <span className="text-white/70 text-xs group-hover:text-white flex-1">
@@ -2108,37 +2279,38 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                   <div className="text-white/30 text-[10px] px-2 py-1 uppercase tracking-wider">
                     {affectedRegions[selectedEventId]?.countries.find(c => c.id === selectedCountry)?.name || 'Cities'}
                   </div>
-                  {affectedRegions[selectedEventId]?.countries.find(c => c.id === selectedCountry)?.cities.map((city) => {
-                    // Find event name from currentEvents
-                    const eventInfo = currentEvents.flatMap(c => c.events).find(e => e.id === selectedEventId)
-                    const categoryInfo = currentEvents.find(c => c.events.some(e => e.id === selectedEventId))
-                    return (
-                    <button
-                      key={city.id}
-                      onClick={() => {
-                        // IMMEDIATELY open Digital Twin when city is clicked
-                        setSelectedCity(city)
-                        onOpenDigitalTwin?.(
-                          city.id, 
-                          city.name, 
-                          selectedEventId,
-                          eventInfo?.name,
-                          categoryInfo?.id,
-                          'current'
-                        )
-                        console.log('City clicked:', city.name, '- Opening Digital Twin for event:', eventInfo?.name)
-                      }}
-                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/10 transition-all text-left group"
-                    >
-                      <div className={`w-1.5 h-1.5 rounded-full ${city.risk > 0.7 ? 'bg-red-500' : city.risk > 0.5 ? 'bg-orange-500' : 'bg-yellow-500'}`} />
-                      <span className="text-white/70 text-xs group-hover:text-white flex-1">
-                        {city.name}
-                      </span>
-                      <span className={`text-[10px] font-mono ${city.risk > 0.7 ? 'text-red-400' : city.risk > 0.5 ? 'text-orange-400' : 'text-yellow-400'}`}>
-                        {(city.risk * 100).toFixed(0)}%
-                      </span>
-                    </button>
-                  )})}
+                  <div className="max-h-[300px] overflow-y-auto custom-scrollbar pr-1">
+                    {affectedRegions[selectedEventId]?.countries.find(c => c.id === selectedCountry)?.cities.map((city) => {
+                      // Find event name from currentEvents
+                      const eventInfo = currentEvents.flatMap(c => c.events).find(e => e.id === selectedEventId)
+                      const categoryInfo = currentEvents.find(c => c.events.some(e => e.id === selectedEventId))
+                      return (
+                      <button
+                        key={city.id}
+                        onClick={() => {
+                          // IMMEDIATELY open Digital Twin when city is clicked
+                          setSelectedCity(city)
+                          onOpenDigitalTwin?.(
+                            city.id, 
+                            city.name, 
+                            selectedEventId,
+                            eventInfo?.name,
+                            categoryInfo?.id,
+                            'current'
+                          )
+                          console.log('City clicked:', city.name, '- Opening Digital Twin for event:', eventInfo?.name)
+                        }}
+                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-amber-500/10 transition-all text-left group"
+                      >
+                        <span className="text-white/70 text-xs group-hover:text-white flex-1">
+                          {city.name}
+                        </span>
+                        <span className={`text-[10px] font-mono ${city.risk > 0.7 ? 'text-red-300' : city.risk > 0.5 ? 'text-orange-300' : 'text-amber-300'}`}>
+                          {(city.risk * 100).toFixed(0)}%
+                        </span>
+                      </button>
+                    )})}
+                  </div>
                 </div>
               )}
               
@@ -2153,15 +2325,15 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                   </button>
                   
                   {/* Selected city info - Digital Twin is open */}
-                  <div className="px-2 py-2 bg-cyan-500/10 rounded-lg border border-cyan-500/30">
+                  <div className="px-2 py-2 bg-amber-500/5 rounded-lg border border-amber-500/10">
                     <div className="flex items-center gap-2 mb-2">
-                      <div className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse" />
-                      <span className="text-cyan-400 text-sm font-medium">{selectedCity.name}</span>
+                      <div className="w-2 h-2 rounded-full bg-amber-400/60 animate-pulse" />
+                      <span className="text-amber-300 text-sm font-medium">{selectedCity.name}</span>
                     </div>
                     <div className="text-white/50 text-[10px] mb-1">
                       Event: {currentEvents.flatMap(c => c.events).find(e => e.id === selectedEventId)?.name || selectedEventId}
                     </div>
-                    <div className="text-cyan-400/70 text-[10px]">
+                    <div className="text-amber-300/50 text-[10px]">
                       Digital Twin is open. Click "Run Stress Test" button on the 3D view to analyze risk zones.
                     </div>
                   </div>
@@ -2180,21 +2352,23 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                   <div className="text-white/30 text-[10px] px-2 py-1 uppercase tracking-wider">
                     Forecast Horizon
                   </div>
-                  {forecastScenarios.map((period) => (
-                    <button
-                      key={period.horizon}
-                      onClick={() => setSelectedHorizon(period.horizon)}
-                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/10 transition-all text-left group"
-                    >
-                      <svg className="w-3.5 h-3.5 text-white/50 group-hover:text-white/70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
-                      </svg>
-                      <span className="text-white/70 text-xs group-hover:text-white flex-1">
-                        {period.name}
-                      </span>
-                      <span className="text-white/30 text-[10px]">{period.scenarios.length} scenarios</span>
-                    </button>
-                  ))}
+                  <div className="max-h-[300px] overflow-y-auto custom-scrollbar pr-1">
+                    {forecastScenarios.map((period) => (
+                      <button
+                        key={period.horizon}
+                        onClick={() => setSelectedHorizon(period.horizon)}
+                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-amber-500/10 transition-all text-left group"
+                      >
+                        <svg className="w-3.5 h-3.5 text-white/50 group-hover:text-white/70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+                        </svg>
+                        <span className="text-white/70 text-xs group-hover:text-white flex-1">
+                          {period.name}
+                        </span>
+                        <span className="text-white/30 text-[10px]">{period.scenarios.length} scenarios</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
               
@@ -2210,22 +2384,23 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                   <div className="text-white/30 text-[10px] px-2 py-1 uppercase tracking-wider">
                     {forecastScenarios.find(f => f.horizon === selectedHorizon)?.name || `${selectedHorizon}yr Scenarios`}
                   </div>
-                  {forecastScenarios.find(f => f.horizon === selectedHorizon)?.scenarios.map((scenario) => (
-                    <button
-                      key={scenario.id}
-                      onClick={() => setSelectedEventId(scenario.id)}
-                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/10 transition-all text-left group"
-                    >
-                      <div className={`w-1.5 h-1.5 rounded-full ${scenario.risk > 0.7 ? 'bg-red-500' : scenario.risk > 0.5 ? 'bg-orange-500' : 'bg-yellow-500'}`} />
-                      <span className="text-white/70 text-xs group-hover:text-white flex-1">
-                        {scenario.name}
-                      </span>
-                      <span className={`text-[10px] font-mono ${scenario.risk > 0.7 ? 'text-red-400' : scenario.risk > 0.5 ? 'text-orange-400' : 'text-yellow-400'}`}>
-                        {(scenario.risk * 100).toFixed(0)}%
-                      </span>
-                      <span className="text-white/20 text-[9px] ml-1">{scenario.type}</span>
-                    </button>
-                  ))}
+                  <div className="max-h-[300px] overflow-y-auto custom-scrollbar pr-1">
+                    {forecastScenarios.find(f => f.horizon === selectedHorizon)?.scenarios.map((scenario) => (
+                      <button
+                        key={scenario.id}
+                        onClick={() => setSelectedEventId(scenario.id)}
+                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-amber-500/10 transition-all text-left group"
+                      >
+                        <span className="text-white/70 text-xs group-hover:text-white flex-1">
+                          {scenario.name}
+                        </span>
+                        <span className={`text-[10px] font-mono ${scenario.risk > 0.7 ? 'text-red-300' : scenario.risk > 0.5 ? 'text-orange-300' : 'text-amber-300'}`}>
+                          {(scenario.risk * 100).toFixed(0)}%
+                        </span>
+                        <span className="text-white/20 text-[9px] ml-1">{scenario.type}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
               
@@ -2241,24 +2416,26 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                   <div className="text-white/30 text-[10px] px-2 py-1 uppercase tracking-wider">
                     Affected Countries
                   </div>
-                  {(affectedRegions[selectedEventId]?.countries || []).map((country) => (
-                    <button
-                      key={country.id}
-                      onClick={() => setSelectedCountry(country.id)}
-                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/10 transition-all text-left group"
-                    >
-                      <span className="text-sm">{country.flag}</span>
-                      <span className="text-white/70 text-xs group-hover:text-white flex-1">
-                        {country.name}
-                      </span>
-                      <span className="text-white/30 text-[10px]">{country.cities.length} cities</span>
-                    </button>
-                  ))}
-                  {!affectedRegions[selectedEventId] && (
-                    <div className="text-white/30 text-xs px-2 py-2">
-                      Region data for forecast...
-                    </div>
-                  )}
+                  <div className="max-h-[300px] overflow-y-auto custom-scrollbar pr-1">
+                    {(affectedRegions[selectedEventId]?.countries || []).map((country) => (
+                      <button
+                        key={country.id}
+                        onClick={() => setSelectedCountry(country.id)}
+                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-amber-500/10 transition-all text-left group"
+                      >
+                        <span className="text-sm">{country.flag}</span>
+                        <span className="text-white/70 text-xs group-hover:text-white flex-1">
+                          {country.name}
+                        </span>
+                        <span className="text-white/30 text-[10px]">{country.cities.length} cities</span>
+                      </button>
+                    ))}
+                    {!affectedRegions[selectedEventId] && (
+                      <div className="text-white/30 text-xs px-2 py-2">
+                        Region data for forecast...
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
               
@@ -2274,36 +2451,37 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                   <div className="text-white/30 text-[10px] px-2 py-1 uppercase tracking-wider">
                     {affectedRegions[selectedEventId]?.countries.find(c => c.id === selectedCountry)?.name || 'Cities'} - {selectedHorizon}yr
                   </div>
-                  {affectedRegions[selectedEventId]?.countries.find(c => c.id === selectedCountry)?.cities.map((city) => {
-                    // Find scenario name from forecastScenarios
-                    const scenarioInfo = forecastScenarios.flatMap(h => h.scenarios).find(s => s.id === selectedEventId)
-                    return (
-                    <button
-                      key={city.id}
-                      onClick={() => {
-                        // IMMEDIATELY open Digital Twin when city is clicked
-                        setSelectedCity(city)
-                        onOpenDigitalTwin?.(
-                          city.id, 
-                          city.name, 
-                          selectedEventId,
-                          scenarioInfo?.name,
-                          scenarioInfo?.type,
-                          selectedHorizon ? `${selectedHorizon}yr` : undefined
-                        )
-                        console.log('City clicked:', city.name, '- Opening Digital Twin for forecast:', scenarioInfo?.name, selectedHorizon + 'yr')
-                      }}
-                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/10 transition-all text-left group"
-                    >
-                      <div className={`w-1.5 h-1.5 rounded-full ${city.risk > 0.7 ? 'bg-red-500' : city.risk > 0.5 ? 'bg-orange-500' : 'bg-yellow-500'}`} />
-                      <span className="text-white/70 text-xs group-hover:text-white flex-1">
-                        {city.name}
-                      </span>
-                      <span className={`text-[10px] font-mono ${city.risk > 0.7 ? 'text-red-400' : city.risk > 0.5 ? 'text-orange-400' : 'text-yellow-400'}`}>
-                        {(city.risk * 100).toFixed(0)}%
-                      </span>
-                    </button>
-                  )})}
+                  <div className="max-h-[300px] overflow-y-auto custom-scrollbar pr-1">
+                    {affectedRegions[selectedEventId]?.countries.find(c => c.id === selectedCountry)?.cities.map((city) => {
+                      // Find scenario name from forecastScenarios
+                      const scenarioInfo = forecastScenarios.flatMap(h => h.scenarios).find(s => s.id === selectedEventId)
+                      return (
+                      <button
+                        key={city.id}
+                        onClick={() => {
+                          // IMMEDIATELY open Digital Twin when city is clicked
+                          setSelectedCity(city)
+                          onOpenDigitalTwin?.(
+                            city.id, 
+                            city.name, 
+                            selectedEventId,
+                            scenarioInfo?.name,
+                            scenarioInfo?.type,
+                            selectedHorizon ? `${selectedHorizon}yr` : undefined
+                          )
+                          console.log('City clicked:', city.name, '- Opening Digital Twin for forecast:', scenarioInfo?.name, selectedHorizon + 'yr')
+                        }}
+                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-amber-500/10 transition-all text-left group"
+                      >
+                        <span className="text-white/70 text-xs group-hover:text-white flex-1">
+                          {city.name}
+                        </span>
+                        <span className={`text-[10px] font-mono ${city.risk > 0.7 ? 'text-red-300' : city.risk > 0.5 ? 'text-orange-300' : 'text-amber-300'}`}>
+                          {(city.risk * 100).toFixed(0)}%
+                        </span>
+                      </button>
+                    )})}
+                  </div>
                 </div>
               )}
               
@@ -2318,10 +2496,10 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                   </button>
                   
                   {/* Selected city info - Digital Twin is open */}
-                  <div className="px-2 py-2 bg-cyan-500/10 rounded-lg border border-cyan-500/30">
+                  <div className="px-2 py-2 bg-amber-500/5 rounded-lg border border-amber-500/10">
                     <div className="flex items-center gap-2 mb-2">
-                      <div className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse" />
-                      <span className="text-cyan-400 text-sm font-medium">{selectedCity.name}</span>
+                      <div className="w-2 h-2 rounded-full bg-amber-400/60 animate-pulse" />
+                      <span className="text-amber-300 text-sm font-medium">{selectedCity.name}</span>
                     </div>
                     <div className="text-white/50 text-[10px] mb-1">
                       Scenario: {forecastScenarios.flatMap(h => h.scenarios).find(s => s.id === selectedEventId)?.name || selectedEventId}
@@ -2329,7 +2507,7 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                     <div className="text-white/40 text-[10px] mb-1">
                       Horizon: {selectedHorizon} years
                     </div>
-                    <div className="text-cyan-400/70 text-[10px]">
+                    <div className="text-amber-300/50 text-[10px]">
                       Digital Twin is open. Click "Run Stress Test" button on the 3D view to analyze risk zones.
                     </div>
                   </div>
@@ -2386,7 +2564,7 @@ function EntryAnimation({ onComplete }: { onComplete: () => void }) {
       <div className="text-center">
         {/* Logo */}
         <motion.div
-          className="w-24 h-24 mx-auto mb-8 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-blue-600/20 border border-cyan-500/30 flex items-center justify-center"
+          className="w-24 h-24 mx-auto mb-8 rounded-2xl bg-gradient-to-br from-amber-500/10 to-amber-700/10 border border-amber-500/10 flex items-center justify-center"
           initial={{ scale: 0.5, opacity: 0 }}
           animate={{ 
             scale: phase === 'loading' ? [1, 1.1, 1] : 1,
@@ -2397,7 +2575,7 @@ function EntryAnimation({ onComplete }: { onComplete: () => void }) {
             opacity: { duration: 0.5 }
           }}
         >
-          <CubeTransparentIcon className="w-12 h-12 text-cyan-400" />
+          <CubeTransparentIcon className="w-12 h-12 text-amber-300/60" />
         </motion.div>
         
         {/* Title */}
@@ -2429,7 +2607,7 @@ function EntryAnimation({ onComplete }: { onComplete: () => void }) {
           {phase === 'loading' && (
             <>
               <motion.div
-                className="text-cyan-400/60 text-xs uppercase tracking-[0.2em]"
+                className="text-amber-300/40 text-xs uppercase tracking-[0.2em]"
                 animate={{ opacity: [0.5, 1, 0.5] }}
                 transition={{ duration: 1.5, repeat: Infinity }}
               >
@@ -2439,7 +2617,7 @@ function EntryAnimation({ onComplete }: { onComplete: () => void }) {
           )}
           {phase === 'entering' && (
             <motion.div
-              className="text-cyan-400 text-xs uppercase tracking-[0.2em]"
+              className="text-amber-300/60 text-xs uppercase tracking-[0.2em]"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
             >
@@ -2458,7 +2636,7 @@ function EntryAnimation({ onComplete }: { onComplete: () => void }) {
           {[0, 1, 2].map((i) => (
             <motion.div
               key={i}
-              className="w-1.5 h-1.5 rounded-full bg-cyan-400"
+              className="w-1.5 h-1.5 rounded-full bg-amber-300/60"
               animate={{ opacity: [0.2, 1, 0.2] }}
               transition={{ duration: 1, repeat: Infinity, delay: i * 0.2 }}
             />
@@ -2588,35 +2766,78 @@ export default function CommandCenter() {
   const [showEntry, setShowEntry] = useState(true)
   const [entryComplete, setEntryComplete] = useState(false)
   
-  // Core state
-  const [portfolio, setPortfolio] = useState<PortfolioState>({
-    totalExposure: 247.3,
-    atRisk: 52.1,
-    criticalCount: 4,
-    weightedRisk: 0.68,
-  })
+  // Platform store - shared state with Dashboard
+  const store = usePlatformStore()
+  const portfolio = usePortfolio()
+  
+  // Platform WebSocket - syncs events to Dashboard
+  usePlatformWebSocket(['command_center', 'dashboard', 'stress_tests'])
   
   const [focusedHotspot, setFocusedHotspot] = useState<FocusedHotspot | null>(null)
-  const [activeScenario, setActiveScenario] = useState<ActiveScenario | null>(null)
+  
+  // Active scenario - synced to store for Dashboard
+  const activeScenarioState = useActiveScenario()
+  const setActiveScenarioState = store.setActiveScenario
+  const clearActiveScenarioState = store.clearActiveScenario
+  // Convert store state to local format for compatibility
+  const activeScenario: ActiveScenario | null = activeScenarioState ? {
+    type: activeScenarioState.type,
+    severity: activeScenarioState.severity,
+    active: true,
+  } : null
+  const setActiveScenario = (scenario: ActiveScenario | null) => {
+    if (scenario) {
+      setActiveScenarioState({
+        type: scenario.type,
+        severity: scenario.severity,
+        probability: 0.5,
+        started_at: new Date().toISOString(),
+      })
+    } else {
+      clearActiveScenarioState()
+    }
+  }
+  
   const [isSceneReady, setIsSceneReady] = useState(false)
   const [recentAlerts, setRecentAlerts] = useState<RiskUpdate[]>([])
-  const [showDigitalTwin, setShowDigitalTwin] = useState(false)
+  
+  // Digital Twin panel visibility - synced to store
+  const showDigitalTwin = useShowDigitalTwinPanel()
+  const setShowDigitalTwin = store.setShowDigitalTwinPanel
   const [showZoneNav, setShowZoneNav] = useState(false)
   const [availableZones, setAvailableZones] = useState<{id: string, name: string, risk: number}[]>([])
   const [resetViewTrigger, setResetViewTrigger] = useState(0)
   const [expandedRiskLevel, setExpandedRiskLevel] = useState<'critical' | 'high' | 'medium' | 'low' | null>(null)
   
   // Stress Test State (integrated into Risk Zones)
-  const [selectedStressTest, setSelectedStressTest] = useState<{
+  // Store the full test data locally, but sync ID to store for Dashboard access
+  const selectedStressTestId = useSelectedStressTestId()
+  const setSelectedStressTestId = store.setSelectedStressTestId
+  const [selectedStressTestData, setSelectedStressTestData] = useState<{
     id: string
     name: string
     type: string
     severity: number
     probability: number
   } | null>(null)
+  
+  // Wrapper to sync both local data and store ID
+  const selectedStressTest = selectedStressTestData
+  const setSelectedStressTest = (test: typeof selectedStressTestData) => {
+    setSelectedStressTestData(test)
+    setSelectedStressTestId(test?.id ?? null)
+  }
+  
   const [showActionPlans, setShowActionPlans] = useState(false)
-  const [selectedZone, setSelectedZone] = useState<RiskZone | null>(null)
+  const [showStressTestSelector, setShowStressTestSelector] = useState(false)
+  const [isExportingPdf, setIsExportingPdf] = useState(false)
+  
+  // Selected zone - synced to store for Dashboard
+  const selectedZone = useSelectedZone()
+  const setSelectedZone = store.setSelectedZone
+  
   const [selectedZoneAsset, setSelectedZoneAsset] = useState<ZoneAsset | null>(null)
+  const [digitalTwinPickerMode, setDigitalTwinPickerMode] = useState(false)
   const [selectedDigitalTwinEvent, setSelectedDigitalTwinEvent] = useState<string | null>(null)
   const [selectedDigitalTwinEventName, setSelectedDigitalTwinEventName] = useState<string | null>(null)
   const [selectedDigitalTwinEventCategory, setSelectedDigitalTwinEventCategory] = useState<string | null>(null)
@@ -2625,6 +2846,10 @@ export default function CommandCenter() {
   // Historical event state
   const [selectedHistoricalEvent, setSelectedHistoricalEvent] = useState<string | null>(null)
   const [showHistoricalPanel, setShowHistoricalPanel] = useState(false)
+  
+  // Registry scenarios for Focused Zone (Regulatory + Extended)
+  const [registryScenariosFlat, setRegistryScenariosFlat] = useState<Array<{ id: string; name: string; severity_numeric?: number; horizon?: number; source?: string; category?: string; library?: string }>>([])
+  const [expandedFactorIds, setExpandedFactorIds] = useState<Set<string>>(() => new Set())
   
   // Helper to generate random assets within a zone
   const generateZoneAssets = useCallback((zone: Omit<RiskZone, 'assets'>, count: number): ZoneAsset[] => {
@@ -2706,7 +2931,11 @@ export default function CommandCenter() {
       ],
     }
     
-    const baseZones = typeZonesBase[selectedStressTest.type] || typeZonesBase.climate
+    const typeKey =
+      selectedStressTest.type === 'military' ? 'geopolitical'
+      : selectedStressTest.type === 'protest' ? 'civil_unrest'
+      : selectedStressTest.type
+    const baseZones = typeZonesBase[typeKey] ?? typeZonesBase.climate
     
     // Add assets to each zone
     return baseZones.map(zone => ({
@@ -2772,12 +3001,12 @@ export default function CommandCenter() {
       const update = msg as RiskUpdate
       setRecentAlerts(prev => [update, ...prev.slice(0, 2)])
       
-      // Update portfolio if significant change
+      // Update portfolio if significant change - synced to Dashboard via store
       if (Math.abs(update.risk_score - update.previous_score) > 0.05) {
-        setPortfolio(prev => ({
-          ...prev,
-          weightedRisk: prev.weightedRisk + (update.risk_score - update.previous_score) * 0.1,
-        }))
+        const currentWeightedRisk = store.portfolioConfirmed.weightedRisk
+        store.updatePortfolio({
+          weightedRisk: currentWeightedRisk + (update.risk_score - update.previous_score) * 0.1,
+        })
       }
     }
   })
@@ -2789,7 +3018,8 @@ export default function CommandCenter() {
         const res = await fetch(`${API_BASE}/geodata/summary`)
         if (res.ok) {
           const data = await res.json()
-          setPortfolio({
+          // Update store - synced to Dashboard
+          store.setPortfolioConfirmed({
             totalExposure: data.total_exposure || 247.3,
             atRisk: data.at_risk_exposure || 52.1,
             criticalCount: data.critical_count || 4,
@@ -2807,13 +3037,17 @@ export default function CommandCenter() {
   // Hotspot data for cities - auto-generated from CITY_COORDINATES
   const HOTSPOT_DATA: Record<string, FocusedHotspot> = useMemo(() => {
     const data: Record<string, FocusedHotspot> = {}
+    const coastalIds = new Set(['miami', 'amsterdam', 'rotterdam', 'bangkok', 'cologne', 'hochiminh', 'dhaka', 'neworleans', 'singapore', 'hongkong'])
+    const seismicIds = new Set(['tokyo', 'sanfrancisco', 'istanbul', 'lima', 'santiago', 'losangeles', 'jakarta'])
+    const fireIds = new Set(['sydney', 'losangeles', 'sanfrancisco', 'barcelona', 'athens', 'cairo'])
+    const conflictIds = new Set(['kyiv', 'gaza', 'damascus', 'kharkiv', 'telaviv', 'tehran', 'warsaw', 'taipei', 'odesa', 'aleppo', 'sanaa'])
     
     // Generate from CITY_COORDINATES
     Object.entries(CITY_COORDINATES).forEach(([id, coords]) => {
       const risk = coords.risk || 0.5
       const isConflict = risk > 0.9
       const isHighRisk = risk > 0.7
-      
+      const fid = id.toLowerCase()
       data[id] = {
         id,
         name: id.charAt(0).toUpperCase() + id.slice(1).replace(/([A-Z])/g, ' $1'),
@@ -2825,22 +3059,29 @@ export default function CommandCenter() {
           climate: isConflict ? 0.3 : (risk * 0.8),
           credit: isConflict ? 0.2 : (risk * 0.6),
           operational: isConflict ? 0.95 : (risk * 0.5),
+          geopolitical: isConflict ? 0.9 : (conflictIds.has(fid) ? 0.55 + risk * 0.35 : risk * 0.4),
+          flood: coastalIds.has(fid) ? 0.5 + risk * 0.35 : risk * 0.35,
+          earthquake: seismicIds.has(fid) ? 0.55 + risk * 0.3 : risk * 0.25,
+          fire: fireIds.has(fid) ? 0.5 + risk * 0.35 : risk * 0.3,
+          structural: risk * 0.4,
         },
       }
     })
     
-    // Override with specific known data
+    // Override with specific known data (all 7 factors)
     const overrides: Partial<Record<string, Partial<FocusedHotspot>>> = {
       newyork: { name: 'New York City', region: 'North America' },
-      tokyo: { name: 'Tokyo', region: 'Asia Pacific' },
+      tokyo: { name: 'Tokyo', region: 'Asia Pacific', factors: { climate: 0.4, credit: 0.5, operational: 0.5, geopolitical: 0.2, flood: 0.35, earthquake: 0.92, fire: 0.4, structural: 0.45 } },
       london: { name: 'London', region: 'Europe' },
-      kyiv: { name: 'Kyiv', region: 'Eastern Europe', factors: { climate: 0.2, credit: 0.1, operational: 0.95 } },
-      gaza: { name: 'Gaza City', region: 'Middle East', factors: { climate: 0.1, credit: 0.05, operational: 0.99 } },
-      damascus: { name: 'Damascus', region: 'Middle East', factors: { climate: 0.2, credit: 0.1, operational: 0.95 } },
-      caracas: { name: 'Caracas', region: 'South America', factors: { climate: 0.3, credit: 0.9, operational: 0.85 } },
-      taipei: { name: 'Taipei', region: 'Asia Pacific', factors: { climate: 0.85, credit: 0.4, operational: 0.75 } },
-      kharkiv: { name: 'Kharkiv', region: 'Eastern Europe', factors: { climate: 0.2, credit: 0.1, operational: 0.92 } },
-      telaviv: { name: 'Tel Aviv', region: 'Middle East', factors: { climate: 0.3, credit: 0.5, operational: 0.85 } },
+      kyiv: { name: 'Kyiv', region: 'Eastern Europe', factors: { climate: 0.2, credit: 0.1, operational: 0.95, geopolitical: 0.95, flood: 0.25, earthquake: 0.1, fire: 0.2, structural: 0.35 } },
+      gaza: { name: 'Gaza City', region: 'Middle East', factors: { climate: 0.1, credit: 0.05, operational: 0.99, geopolitical: 0.99, flood: 0.1, earthquake: 0.1, fire: 0.15, structural: 0.4 } },
+      damascus: { name: 'Damascus', region: 'Middle East', factors: { climate: 0.2, credit: 0.1, operational: 0.95, geopolitical: 0.95, flood: 0.2, earthquake: 0.25, fire: 0.2, structural: 0.4 } },
+      caracas: { name: 'Caracas', region: 'South America', factors: { climate: 0.3, credit: 0.9, operational: 0.85, geopolitical: 0.4, flood: 0.3, earthquake: 0.2, fire: 0.25, structural: 0.4 } },
+      taipei: { name: 'Taipei', region: 'Asia Pacific', factors: { climate: 0.85, credit: 0.4, operational: 0.75, geopolitical: 0.75, flood: 0.7, earthquake: 0.65, fire: 0.5, structural: 0.45 } },
+      kharkiv: { name: 'Kharkiv', region: 'Eastern Europe', factors: { climate: 0.2, credit: 0.1, operational: 0.92, geopolitical: 0.92, flood: 0.2, earthquake: 0.1, fire: 0.2, structural: 0.35 } },
+      telaviv: { name: 'Tel Aviv', region: 'Middle East', factors: { climate: 0.3, credit: 0.5, operational: 0.85, geopolitical: 0.85, flood: 0.2, earthquake: 0.35, fire: 0.3, structural: 0.4 } },
+      sanfrancisco: { factors: { climate: 0.35, credit: 0.5, operational: 0.5, geopolitical: 0.2, flood: 0.3, earthquake: 0.92, fire: 0.45, structural: 0.38 } },
+      miami: { factors: { climate: 0.65, credit: 0.45, operational: 0.5, geopolitical: 0.25, flood: 0.82, earthquake: 0.15, fire: 0.35, structural: 0.35 } },
     }
     
     Object.entries(overrides).forEach(([id, override]) => {
@@ -2918,7 +3159,7 @@ export default function CommandCenter() {
         risk: 0.5,
         exposure: 10,
         trend: 'up',
-        factors: { climate: 0.5, credit: 0.5, operational: 0.5 },
+        factors: { climate: 0.5, credit: 0.5, operational: 0.5, geopolitical: 0.5, flood: 0.5, earthquake: 0.5, fire: 0.5, structural: 0.5 },
       })
     }
   }, [])
@@ -2955,8 +3196,41 @@ export default function CommandCenter() {
     }
   }, [activeRiskZones, selectedStressTest]) // Removed selectedZone from deps!
 
+  // Ensure main container can receive focus for keyboard events
+  const containerRef = useRef<HTMLDivElement>(null)
+  
+  useEffect(() => {
+    // Focus the container on mount to enable keyboard shortcuts
+    if (containerRef.current) {
+      containerRef.current.focus()
+    }
+  }, [])
+
+  // Fetch registry scenarios (library + extended) for Focused Zone panel
+  useEffect(() => {
+    Promise.all([
+      fetch('/api/v1/stress-tests/scenarios/library').then((r) => (r.ok ? r.json() : [])),
+      fetch('/api/v1/stress-tests/scenarios/extended').then((r) => (r.ok ? r.json() : { categories: [] })),
+    ])
+      .then(([lib, ext]) => {
+        const flat = Array.isArray(lib) ? lib : []
+        const cats = ext?.categories ?? []
+        const fromExt = cats.flatMap((c: { scenarios?: unknown[] }) => c.scenarios ?? [])
+        setRegistryScenariosFlat([...flat, ...fromExt])
+      })
+      .catch(() => {})
+  }, [])
+
   return (
-    <div className="fixed inset-0 bg-[#030810] overflow-hidden">
+    <div 
+      ref={containerRef}
+      className="fixed inset-0 bg-[#030810] overflow-hidden"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        // This is a fallback - main handler is in KeyboardHandler component
+        // But we ensure the container can receive focus
+      }}
+    >
       {/* ============================================ */}
       {/* ENTRY ANIMATION - Shows on first load */}
       {/* ============================================ */}
@@ -2977,7 +3251,7 @@ export default function CommandCenter() {
           scenario={activeScenario?.type}
           resetViewTrigger={resetViewTrigger}
           onHotspotsLoaded={(spots) => setAvailableZones(spots.map(s => ({ id: s.id, name: s.name, risk: s.risk })))}
-          riskZones={activeRiskZones}
+          riskZones={[]}
           selectedZone={selectedZone}
           onZoneClick={(zone) => {
             if (zone) {
@@ -2994,7 +3268,7 @@ export default function CommandCenter() {
             }
           }}
           paused={showDigitalTwin}
-          activeRiskFilter={expandedRiskLevel}
+          activeRiskFilter={expandedRiskLevel ?? 'critical'}
         />
       </div>
 
@@ -3006,18 +3280,33 @@ export default function CommandCenter() {
           <>
             {/* TOP RIGHT - Quick Navigation */}
             <motion.div 
-              className="absolute top-6 right-8 pointer-events-auto z-50"
+              className="absolute top-6 right-8 pointer-events-auto z-50 flex items-center gap-3"
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.5 }}
             >
+              {/* Navigation Links */}
               <div className="flex items-center gap-2 bg-black/40 backdrop-blur-sm rounded-full px-2 py-1.5 border border-white/10">
                 <Link 
-                  to="/"
+                  to="/dashboard"
                   className="p-2 rounded-full text-white/50 hover:text-white hover:bg-white/10 transition-all"
                   title="Dashboard"
                 >
                   <HomeIcon className="w-4 h-4" />
+                </Link>
+                <Link 
+                  to="/assets"
+                  className="p-2 rounded-full text-white/50 hover:text-white hover:bg-white/10 transition-all"
+                  title="Assets"
+                >
+                  <BuildingOffice2Icon className="w-4 h-4" />
+                </Link>
+                <Link 
+                  to="/modules"
+                  className="p-2 rounded-full text-white/50 hover:text-white hover:bg-white/10 transition-all"
+                  title="Strategic Modules"
+                >
+                  <Square3Stack3DIcon className="w-4 h-4" />
                 </Link>
                 <Link 
                   to="/visualizations"
@@ -3238,12 +3527,12 @@ export default function CommandCenter() {
                   exit={{ opacity: 0, x: 50, scale: 0.95 }}
                   transition={{ duration: 0.4 }}
                 >
-                  <div className="bg-black/70 backdrop-blur-xl border border-red-500/30 rounded-xl overflow-hidden">
+                  <div className="bg-black/70 backdrop-blur-xl border border-red-500/10 rounded-xl overflow-hidden">
                     {/* Header */}
-                    <div className="px-4 py-3 bg-red-500/10 border-b border-red-500/20 flex items-center justify-between">
+                    <div className="px-4 py-3 bg-red-500/5 border-b border-red-500/10 flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                        <span className="text-red-400 text-xs uppercase tracking-wider font-medium">
+                        <div className="w-2 h-2 rounded-full bg-red-400/60 animate-pulse" />
+                        <span className="text-red-300 text-xs uppercase tracking-wider font-medium">
                           Stress Test Active
                         </span>
                       </div>
@@ -3263,9 +3552,9 @@ export default function CommandCenter() {
                         {activeScenario.type}
                       </div>
                       <div className="flex items-center gap-2">
-                        <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                        <div className="flex-1 h-1.5 bg-amber-500/15 rounded-full overflow-hidden">
                           <motion.div 
-                            className="h-full bg-gradient-to-r from-yellow-500 via-orange-500 to-red-500 rounded-full"
+                            className="h-full bg-amber-400/65 rounded-full"
                             initial={{ width: 0 }}
                             animate={{ width: `${activeScenario.severity * 100}%` }}
                             transition={{ duration: 0.6 }}
@@ -3283,10 +3572,10 @@ export default function CommandCenter() {
                       <div className="flex justify-between items-center">
                         <div className="flex items-center gap-1.5">
                           <span className="text-white/50 text-xs">VaR 99%</span>
-                          <span className="text-[8px] text-cyan-400/50 bg-cyan-400/10 px-1 rounded">MC</span>
+                          <span className="text-[8px] text-amber-300/40 bg-amber-500/5 px-1 rounded">MC</span>
                         </div>
                         <motion.span 
-                          className="text-red-400 font-mono text-sm"
+                          className="text-red-300 font-mono text-sm"
                           initial={{ opacity: 0 }}
                           animate={{ opacity: 1 }}
                           transition={{ delay: 0.2 }}
@@ -3299,10 +3588,10 @@ export default function CommandCenter() {
                       <div className="flex justify-between items-center">
                         <div className="flex items-center gap-1.5">
                           <span className="text-white/50 text-xs">ES (CVaR)</span>
-                          <span className="text-[8px] text-cyan-400/50 bg-cyan-400/10 px-1 rounded">Copula</span>
+                          <span className="text-[8px] text-amber-300/40 bg-amber-500/5 px-1 rounded">Copula</span>
                         </div>
                         <motion.span 
-                          className="text-orange-400 font-mono text-sm"
+                          className="text-orange-300 font-mono text-sm"
                           initial={{ opacity: 0 }}
                           animate={{ opacity: 1 }}
                           transition={{ delay: 0.3 }}
@@ -3315,7 +3604,7 @@ export default function CommandCenter() {
                       <div className="flex justify-between items-center">
                         <span className="text-white/50 text-xs">Max Drawdown</span>
                         <motion.span 
-                          className="text-red-500 font-mono text-sm"
+                          className="text-red-300 font-mono text-sm"
                           initial={{ opacity: 0 }}
                           animate={{ opacity: 1 }}
                           transition={{ delay: 0.4 }}
@@ -3328,7 +3617,7 @@ export default function CommandCenter() {
                       <div className="flex justify-between items-center pt-2 border-t border-white/5">
                         <span className="text-white/50 text-xs">Affected Zones</span>
                         <motion.span 
-                          className="text-yellow-400 font-mono text-sm"
+                          className="text-amber-300 font-mono text-sm"
                           initial={{ opacity: 0 }}
                           animate={{ opacity: 1 }}
                           transition={{ delay: 0.5 }}
@@ -3341,7 +3630,7 @@ export default function CommandCenter() {
                       <div className="flex justify-between items-center">
                         <span className="text-white/50 text-xs">Est. Recovery</span>
                         <motion.span 
-                          className="text-cyan-400 font-mono text-sm"
+                          className="text-amber-300 font-mono text-sm"
                           initial={{ opacity: 0 }}
                           animate={{ opacity: 1 }}
                           transition={{ delay: 0.6 }}
@@ -3365,7 +3654,7 @@ export default function CommandCenter() {
                     </div>
                     
                     {/* Simulation Info - Monte Carlo Details */}
-                    <div className="px-3 py-2 bg-white/5 border-t border-white/5">
+                    <div className="px-3 py-2 bg-amber-500/5 border-t border-amber-500/10">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-white/40 text-[10px] uppercase tracking-wider">Monte Carlo Engine</span>
                         <div className="flex items-center gap-1">
@@ -3380,7 +3669,7 @@ export default function CommandCenter() {
                         </div>
                         <div className="flex justify-between">
                           <span className="text-white/40">Copula</span>
-                          <span className="text-cyan-400/70 font-mono">Gaussian</span>
+                          <span className="text-amber-400/70 font-mono">Gaussian</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-white/40">Confidence</span>
@@ -3388,21 +3677,69 @@ export default function CommandCenter() {
                         </div>
                         <div className="flex justify-between">
                           <span className="text-white/40">Engine</span>
-                          <span className="text-cyan-400/70 font-mono">NumPy</span>
+                          <span className="text-amber-400/70 font-mono">NumPy</span>
                         </div>
                       </div>
                     </div>
                     
-                    {/* Action Plans Button */}
-                    <div className="p-3 border-t border-white/5">
+                    {/* Action Buttons */}
+                    <div className="p-3 border-t border-white/5 space-y-2">
                       <button
                         onClick={() => setShowActionPlans(true)}
-                        className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/30 transition-all text-xs text-cyan-400 hover:text-cyan-300"
+                        className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 transition-all text-xs text-amber-400 hover:text-amber-300"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
                         </svg>
                         View Action Plans
+                      </button>
+                      <button
+                        onClick={async () => {
+                          setIsExportingPdf(true)
+                          try {
+                            const stressTestData = {
+                              name: activeScenario.type,
+                              type: 'climate',
+                              scenario_name: activeScenario.type,
+                              severity: activeScenario.severity,
+                              nvidia_enhanced: true,
+                            }
+                            const zones = [
+                              { name: 'Critical Zone', zone_level: 'critical', expected_loss: portfolio.atRisk * 0.4, affected_assets_count: portfolio.criticalCount, population_affected: 50000 },
+                              { name: 'High Risk Zone', zone_level: 'high', expected_loss: portfolio.atRisk * 0.3, affected_assets_count: portfolio.highCount, population_affected: 30000 },
+                              { name: 'Medium Risk Zone', zone_level: 'medium', expected_loss: portfolio.atRisk * 0.2, affected_assets_count: portfolio.mediumCount, population_affected: 15000 },
+                            ]
+                            await exportStressTestPdf(stressTestData, zones)
+                            console.log('✅ PDF exported successfully')
+                          } catch (error) {
+                            console.error('❌ PDF export failed:', error)
+                          } finally {
+                            setIsExportingPdf(false)
+                          }
+                        }}
+                        disabled={isExportingPdf}
+                        className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border transition-all text-xs ${
+                          isExportingPdf 
+                            ? 'bg-white/5 border-white/10 text-white/40 cursor-not-allowed'
+                            : 'bg-white/5 hover:bg-white/10 border-white/10 text-white/60 hover:text-white'
+                        }`}
+                      >
+                        {isExportingPdf ? (
+                          <>
+                            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                            </svg>
+                            Generating...
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            Export Report
+                          </>
+                        )}
                       </button>
                     </div>
                   </div>
@@ -3455,12 +3792,12 @@ export default function CommandCenter() {
                           <div 
                             className={`w-3 h-3 rounded-full mb-1 transition-all ${
                               i === 0 
-                                ? 'bg-cyan-400 ring-2 ring-cyan-400/30' 
+                                ? 'bg-amber-400 ring-2 ring-amber-400/30' 
                                 : 'bg-white/20 hover:bg-white/40'
                             }`}
                           />
                           <span className={`text-[10px] ${
-                            i === 0 ? 'text-cyan-400' : 'text-white/30'
+                            i === 0 ? 'text-amber-400' : 'text-white/30'
                           }`}>
                             {marker}
                           </span>
@@ -3472,7 +3809,7 @@ export default function CommandCenter() {
                       <div className="absolute top-0 left-0 right-0 h-0.5 bg-white/10" 
                            style={{ marginLeft: '6px', marginRight: '6px', top: '-18px' }} />
                       <motion.div 
-                        className="absolute top-0 left-0 h-0.5 bg-gradient-to-r from-cyan-400 to-transparent"
+                        className="absolute top-0 left-0 h-0.5 bg-gradient-to-r from-amber-300/40 to-transparent"
                         style={{ marginLeft: '6px', top: '-18px' }}
                         initial={{ width: 0 }}
                         animate={{ width: '20%' }}
@@ -3495,23 +3832,23 @@ export default function CommandCenter() {
             >
               <div className="flex gap-3 px-4 py-2.5 bg-black/60 backdrop-blur-md rounded-lg border border-white/10">
                   <div className="flex items-center gap-1.5">
-                    <kbd className="px-2 py-1 bg-cyan-500/20 border border-cyan-500/30 rounded text-[10px] text-cyan-400 font-medium">Z</kbd>
-                    <span className="text-white/60 text-xs">Zones</span>
+                    <kbd className="px-2 py-1 bg-amber-500/10 border border-amber-500/20 rounded text-[10px] text-amber-300/80 font-medium">Z</kbd>
+                    <span className="text-white/50 text-xs">Zones</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <kbd className="px-2 py-1 bg-cyan-500/20 border border-cyan-500/30 rounded text-[10px] text-cyan-400 font-medium">S</kbd>
-                    <span className="text-white/60 text-xs">Stress</span>
+                    <kbd className="px-2 py-1 bg-amber-500/10 border border-amber-500/20 rounded text-[10px] text-amber-300/80 font-medium">S</kbd>
+                    <span className="text-white/50 text-xs">Stress</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <kbd className="px-2 py-1 bg-cyan-500/20 border border-cyan-500/30 rounded text-[10px] text-cyan-400 font-medium">D</kbd>
-                    <span className="text-white/60 text-xs">Twin</span>
+                    <kbd className="px-2 py-1 bg-amber-500/10 border border-amber-500/20 rounded text-[10px] text-amber-300/80 font-medium">D</kbd>
+                    <span className="text-white/50 text-xs">Twin</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <kbd className="px-2 py-1 bg-orange-500/20 border border-orange-500/30 rounded text-[10px] text-orange-400 font-medium">R</kbd>
+                    <kbd className="px-2 py-1 bg-amber-500/10 border border-amber-500/20 rounded text-[10px] text-amber-300/80 font-medium">R</kbd>
                     <span className="text-white/40 text-xs">Reset</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <kbd className="px-2 py-1 bg-white/10 border border-white/20 rounded text-[10px] text-white/70 font-medium">ESC</kbd>
+                    <kbd className="px-2 py-1 bg-amber-500/10 border border-amber-500/20 rounded text-[10px] text-amber-300/70 font-medium">ESC</kbd>
                     <span className="text-white/40 text-xs">Back</span>
                   </div>
               </div>
@@ -3618,34 +3955,56 @@ export default function CommandCenter() {
                       </div>
                     </div>
                     
-                    {/* Risk factors - minimal bars */}
+                    {/* Risk factors – каждый раскрывается и показывает сценарии реестра по этому фактору */}
                     <div className="mb-8">
                       <div className="text-white/30 text-[10px] uppercase tracking-wider mb-4">
                         Risk Factors
                       </div>
-                      <div className="space-y-3">
-                        {Object.entries(focusedHotspot.factors).map(([key, value]) => (
-                          <div key={key}>
-                            <div className="flex justify-between text-xs mb-1">
-                              <span className="text-white/50 capitalize">{key}</span>
-                              <span className={`font-mono ${getRiskColor(value)}`}>
-                                {(value * 100).toFixed(0)}%
-                              </span>
+                      <div className="space-y-2">
+                        {Object.entries(focusedHotspot.factors).map(([key, value]) => {
+                          const isExp = expandedFactorIds.has(key)
+                          const scenarioIds = FACTOR_TO_SCENARIO_IDS[key] ?? []
+                          const scenarios = scenarioIds.map(id => registryScenariosFlat.find(s => s.id === id)).filter((s): s is NonNullable<typeof s> => Boolean(s))
+                          return (
+                            <div key={key} className="border border-amber-500/10 rounded-lg overflow-hidden">
+                              <button
+                                onClick={() => setExpandedFactorIds(prev => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n })}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-amber-500/10 transition-colors"
+                              >
+                                <svg className={`w-3.5 h-3.5 text-white/40 shrink-0 transition-transform ${isExp ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex justify-between text-xs">
+                                    <span className="text-white/70 capitalize">{key}</span>
+                                    <span className="font-mono text-white/80 shrink-0 ml-2">{(value * 100).toFixed(0)}%</span>
+                                  </div>
+                                  <div className="h-1 bg-amber-500/15 rounded-full overflow-hidden mt-1">
+                                    <motion.div className="h-full rounded-full bg-amber-400/65" initial={{ width: 0 }} animate={{ width: `${value * 100}%` }} transition={{ duration: 0.4 }} />
+                                  </div>
+                                </div>
+                              </button>
+                              {isExp && (
+                                <div className="border-t border-amber-500/10 px-3 pb-3 pt-2">
+                                  <div className="text-white/40 text-[10px] uppercase tracking-wider mb-2">Scenarios (Registry)</div>
+                                  {scenarios.length === 0 ? (
+                                    <div className="text-white/30 text-xs py-1">{scenarioIds.length === 0 ? 'No scenarios' : 'Loading…'}</div>
+                                  ) : (
+                                    <div className="space-y-1 max-h-[200px] overflow-y-auto pr-1 custom-scrollbar">
+                                      {scenarios.map((s) => {
+                                        const sev = (s.severity_numeric ?? 0.5)
+                                        return (
+                                          <div key={s.id} className="flex items-center justify-between gap-2 py-1.5 px-2 rounded bg-amber-500/5 text-[11px]">
+                                            <span className="text-white/80 truncate flex-1">{s.name}</span>
+                                            <span className="font-mono text-white/70 shrink-0">{(sev * 100).toFixed(0)}%</span>
+                                          </div>
+                                        )
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
-                            <div className="h-1 bg-white/10 rounded-full overflow-hidden">
-                              <motion.div 
-                                className={`h-full rounded-full ${
-                                  value > 0.7 ? 'bg-red-500' :
-                                  value > 0.5 ? 'bg-orange-500' :
-                                  value > 0.3 ? 'bg-yellow-500' : 'bg-emerald-500'
-                                }`}
-                                initial={{ width: 0 }}
-                                animate={{ width: `${value * 100}%` }}
-                                transition={{ duration: 0.6, delay: 0.2 }}
-                              />
-                            </div>
-                          </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     </div>
                     
@@ -3736,33 +4095,34 @@ export default function CommandCenter() {
                 </button>
               </div>
               
-              <div className="grid grid-cols-2 gap-2">
-                {availableZones.sort((a, b) => b.risk - a.risk).map((zone, idx) => (
-                  <button
-                    key={zone.id}
-                    onClick={() => {
-                      handleHotspotFocus(zone.id)
-                      setShowZoneNav(false)
-                    }}
-                    className="flex items-center gap-3 p-3 bg-white/5 hover:bg-white/10 rounded-lg transition-all text-left group"
-                  >
-                    <span className="text-white/30 text-xs font-mono w-5">{idx + 1}</span>
-                    <div className="flex-1">
-                      <div className="text-white text-sm">{zone.name}</div>
-                      <div className={`text-xs ${getRiskColor(zone.risk)}`}>
-                        Risk: {(zone.risk * 100).toFixed(0)}%
+              {/* Scrollable zones list */}
+              <div className="max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                <div className="grid grid-cols-2 gap-2">
+                  {availableZones.sort((a, b) => b.risk - a.risk).map((zone, idx) => (
+                    <button
+                      key={zone.id}
+                      onClick={() => {
+                        handleHotspotFocus(zone.id)
+                        setShowZoneNav(false)
+                      }}
+                      className="flex items-center gap-3 p-3 bg-amber-500/5 hover:bg-amber-500/10 rounded-lg transition-all text-left group"
+                    >
+                      <span className="text-white/30 text-xs font-mono w-5">{idx + 1}</span>
+                      <div className="flex-1">
+                        <div className="text-white text-sm">{zone.name}</div>
+                        <div className="text-xs text-white/60">
+                          Risk: {(zone.risk * 100).toFixed(0)}%
+                        </div>
                       </div>
-                    </div>
-                    <div className={`w-2 h-2 rounded-full ${
-                      zone.risk > 0.7 ? 'bg-red-500' : zone.risk > 0.5 ? 'bg-orange-500' : 'bg-yellow-500'
-                    }`} />
-                  </button>
-                ))}
+                      <div className={`w-2 h-2 rounded-full ${getRiskDotColor(zone.risk)}`} />
+                    </button>
+                  ))}
+                </div>
               </div>
               
               <div className="mt-4 pt-4 border-t border-white/10 flex justify-center gap-4 text-white/30 text-xs">
-                <span><kbd className="px-1.5 py-0.5 bg-white/10 rounded">ESC</kbd> Close</span>
-                <span><kbd className="px-1.5 py-0.5 bg-white/10 rounded">R</kbd> Reset View</span>
+                <span><kbd className="px-1.5 py-0.5 bg-amber-500/10 border border-amber-500/20 rounded">ESC</kbd> Close</span>
+                <span><kbd className="px-1.5 py-0.5 bg-amber-500/10 border border-amber-500/20 rounded">R</kbd> Reset View</span>
               </div>
             </div>
           </motion.div>
@@ -3794,10 +4154,16 @@ export default function CommandCenter() {
         onClose={() => {
           setShowDigitalTwin(false)
           setSelectedZoneAsset(null)
+          setDigitalTwinPickerMode(false)
           setSelectedDigitalTwinEvent(null)
           setSelectedDigitalTwinEventName(null)
           setSelectedDigitalTwinEventCategory(null)
           setSelectedDigitalTwinTimeHorizon(null)
+        }}
+        pickerMode={digitalTwinPickerMode && !selectedZoneAsset}
+        onCitySelected={(asset) => {
+          setSelectedZoneAsset(asset)
+          setDigitalTwinPickerMode(false)
         }}
         assetId={focusedHotspot?.id}
         dynamicAsset={selectedZoneAsset}
@@ -3884,30 +4250,98 @@ export default function CommandCenter() {
       />
       
       {/* ============================================ */}
+      {/* STRESS TEST SELECTOR MODAL */}
+      {/* ============================================ */}
+      <AnimatePresence>
+        {showStressTestSelector && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50"
+              onClick={() => setShowStressTestSelector(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-8 pointer-events-none"
+            >
+              <div 
+                className="bg-[#0a0f18] border border-white/10 rounded-xl p-6 max-w-md w-full pointer-events-auto shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-white text-lg font-medium">Select Stress Test</h2>
+                    <p className="text-white/40 text-xs mt-1">Choose a scenario to analyze</p>
+                  </div>
+                  <button
+                    onClick={() => setShowStressTestSelector(false)}
+                    className="text-white/40 hover:text-white transition-colors p-1"
+                    title="Close (ESC)"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <StressTestSelector
+                  onScenarioSelect={(scenario) => {
+                    if (scenario) {
+                      setSelectedStressTest({
+                        id: scenario.id,
+                        name: scenario.name,
+                        type: scenario.type,
+                        severity: scenario.severity,
+                        probability: scenario.probability,
+                      })
+                      activateScenario(scenario.name, scenario.severity)
+                      setShowStressTestSelector(false)
+                      console.log('✅ Stress Test selected:', scenario.name, `(${scenario.type}, ${(scenario.severity * 100).toFixed(0)}%)`)
+                    } else {
+                      setSelectedStressTest(null)
+                      deactivateScenario()
+                    }
+                  }}
+                  selectedScenario={selectedStressTest?.id || null}
+                />
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+      
+      {/* ============================================ */}
       {/* KEYBOARD SHORTCUTS */}
       {/* ============================================ */}
       <KeyboardHandler
         onStressTest={() => {
-          console.log('Action: Stress Test')
-          activateScenario('Climate Physical', 0.8)
+          console.log('Action: Stress Test - Opening selector')
+          setShowStressTestSelector(true)
         }}
         onDigitalTwin={() => {
           console.log('Action: Digital Twin')
-          // If no city is selected, use focused hotspot or set a default
-          if (!selectedZoneAsset && focusedHotspot) {
-            const coords = findCityCoordinates(focusedHotspot.id)
-            if (coords) {
-              setSelectedZoneAsset({
-                id: focusedHotspot.id,
-                name: focusedHotspot.name,
-                type: 'city',
-                latitude: coords.lat,
-                longitude: coords.lng,
-                impactSeverity: focusedHotspot.intensity,
-              })
+          if (selectedZoneAsset || focusedHotspot) {
+            if (!selectedZoneAsset && focusedHotspot) {
+              const coords = findCityCoordinates(focusedHotspot.id)
+              if (coords) {
+                setSelectedZoneAsset({
+                  id: focusedHotspot.id,
+                  name: focusedHotspot.name,
+                  type: 'city',
+                  latitude: coords.lat,
+                  longitude: coords.lng,
+                  impactSeverity: focusedHotspot.intensity,
+                })
+              }
             }
+            setShowDigitalTwin(true)
+          } else {
+            setShowDigitalTwin(true)
+            setDigitalTwinPickerMode(true)
           }
-          setShowDigitalTwin(true)
         }}
         onResetView={() => {
           console.log('Action: Reset View')
@@ -3919,7 +4353,9 @@ export default function CommandCenter() {
         }}
         onEscape={() => {
           console.log('Action: Escape')
-          if (showActionPlans) {
+          if (showStressTestSelector) {
+            setShowStressTestSelector(false)
+          } else if (showActionPlans) {
             setShowActionPlans(false)
           } else if (selectedZone) {
             userDeselectedZoneRef.current = true
@@ -3939,6 +4375,11 @@ export default function CommandCenter() {
           console.log('Action: Zone Navigation')
           setShowZoneNav(prev => !prev)
         }}
+        onZoneSelectByNumber={(n) => {
+          const sorted = availableZones.slice().sort((a, b) => b.risk - a.risk)
+          const z = sorted[n - 1]
+          if (z) handleHotspotFocus(z.id)
+        }}
       />
     </div>
   )
@@ -3953,60 +4394,64 @@ function KeyboardHandler({
   onDigitalTwin,
   onResetView, 
   onEscape,
-  onZoneNav
+  onZoneNav,
+  onZoneSelectByNumber,
 }: { 
   onStressTest: () => void
   onDigitalTwin: () => void
   onResetView: () => void
   onEscape: () => void
   onZoneNav: () => void
+  onZoneSelectByNumber?: (num: number) => void
 }) {
+  const ref = useRef({ onStressTest, onDigitalTwin, onResetView, onEscape, onZoneNav, onZoneSelectByNumber })
+  ref.current = { onStressTest, onDigitalTwin, onResetView, onEscape, onZoneNav, onZoneSelectByNumber }
+
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      // Ignore if typing in input
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+      // Ignore if typing in input, textarea, or contenteditable
+      const target = e.target as HTMLElement
+      if (
+        target instanceof HTMLInputElement || 
+        target instanceof HTMLTextAreaElement ||
+        target.isContentEditable ||
+        target.closest('input, textarea, [contenteditable="true"]')
+      ) {
         return
       }
-      // Allow Escape even with modifiers
-      if (e.key === 'Escape') {
+      
+      if (e.key === 'Escape' || e.key === 'Esc') {
         e.preventDefault()
         e.stopPropagation()
-        console.log('Keyboard: ESC pressed')
-        onEscape()
-        return
-      }
-      // Ignore other keys if modifier keys are pressed
-      if (e.ctrlKey || e.metaKey || e.altKey) {
+        ref.current.onEscape()
         return
       }
       
       const key = e.key.toLowerCase()
+      const isSimpleKey = /^[a-z0-9]$/.test(key)
+      if (isSimpleKey && (e.ctrlKey || e.metaKey || e.altKey)) return
       
-      switch(key) {
+      switch (key) {
         case 's':
           e.preventDefault()
           e.stopPropagation()
-          console.log('Keyboard: S - Stress Test')
-          onStressTest()
+          ref.current.onStressTest()
           break
         case 'd':
           e.preventDefault()
           e.stopPropagation()
-          console.log('Keyboard: D - Digital Twin')
-          onDigitalTwin()
+          ref.current.onDigitalTwin()
           break
         case 'r':
           e.preventDefault()
           e.stopPropagation()
-          console.log('Keyboard: R - Reset View')
-          onResetView()
+          ref.current.onResetView()
           break
         case 'z':
         case 'n':
           e.preventDefault()
           e.stopPropagation()
-          console.log('Keyboard: Z/N - Zone Navigation')
-          onZoneNav()
+          ref.current.onZoneNav()
           break
         case '1':
         case '2':
@@ -4016,18 +4461,20 @@ function KeyboardHandler({
         case '6':
         case '7':
         case '8':
-          // Quick jump to zone by number
+        case '9':
           e.preventDefault()
           e.stopPropagation()
-          console.log('Keyboard: Quick jump to zone', key)
+          const num = Number(key)
+          if (num >= 1 && num <= 9) ref.current.onZoneSelectByNumber?.(num)
+          break
+        default:
           break
       }
     }
     
-    // Use capture phase for highest priority
-    window.addEventListener('keydown', handleKeyDown, true)
-    return () => window.removeEventListener('keydown', handleKeyDown, true)
-  }, [onStressTest, onDigitalTwin, onResetView, onEscape, onZoneNav])
+    document.addEventListener('keydown', handleKeyDown, true)
+    return () => document.removeEventListener('keydown', handleKeyDown, true)
+  }, [])
   
   return null
 }

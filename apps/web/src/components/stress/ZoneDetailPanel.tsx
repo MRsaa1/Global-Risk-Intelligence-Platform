@@ -228,7 +228,7 @@ export default function ZoneDetailPanel({
             onClick={() => setActiveTab('entities')}
             className={`flex-1 px-4 py-2 text-xs transition-all ${
               activeTab === 'entities' 
-                ? 'text-white border-b-2 border-cyan-500' 
+                ? 'text-white border-b-2 border-amber-500' 
                 : 'text-white/40 hover:text-white/60'
             }`}
           >
@@ -238,7 +238,7 @@ export default function ZoneDetailPanel({
             onClick={() => setActiveTab('timeline')}
             className={`flex-1 px-4 py-2 text-xs transition-all ${
               activeTab === 'timeline' 
-                ? 'text-white border-b-2 border-cyan-500' 
+                ? 'text-white border-b-2 border-amber-500' 
                 : 'text-white/40 hover:text-white/60'
             }`}
           >
@@ -382,7 +382,7 @@ export default function ZoneDetailPanel({
           </button>
           <button
             onClick={onViewActionPlans}
-            className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/30 transition-all text-xs text-cyan-400 hover:text-cyan-300"
+            className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 transition-all text-xs text-amber-400 hover:text-amber-300"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />

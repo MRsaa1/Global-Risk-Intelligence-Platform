@@ -7,6 +7,7 @@
  */
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { exportStressTestPdf } from '../../lib/exportService'
 
 interface ActionPlan {
   id: string
@@ -91,7 +92,7 @@ const COLOR_CLASSES: Record<string, { text: string; bg: string; border: string }
   blue: { text: 'text-blue-400', bg: 'bg-blue-500', border: 'border-blue-500/30' },
   purple: { text: 'text-purple-400', bg: 'bg-purple-500', border: 'border-purple-500/30' },
   emerald: { text: 'text-emerald-400', bg: 'bg-emerald-500', border: 'border-emerald-500/30' },
-  cyan: { text: 'text-cyan-400', bg: 'bg-cyan-500', border: 'border-cyan-500/30' },
+  cyan: { text: 'text-amber-400', bg: 'bg-amber-500', border: 'border-amber-500/30' },
   orange: { text: 'text-orange-400', bg: 'bg-orange-500', border: 'border-orange-500/30' },
   yellow: { text: 'text-yellow-400', bg: 'bg-yellow-500', border: 'border-yellow-500/30' },
   red: { text: 'text-red-400', bg: 'bg-red-500', border: 'border-red-500/30' },
@@ -112,6 +113,57 @@ export default function ActionPlanModal({
 }: ActionPlanModalProps) {
   const [expandedPlan, setExpandedPlan] = useState<string | null>(null)
   const [filter, setFilter] = useState<'all' | 'critical' | 'high'>('all')
+  const [isExporting, setIsExporting] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
+
+  // Handle PDF export
+  const handleExportPdf = async () => {
+    setIsExporting(true)
+    setExportError(null)
+
+    try {
+      // Prepare stress test data
+      const stressTestData = {
+        name: stressTestName,
+        type: 'climate',
+        scenario_name: stressTestName,
+        region_name: zoneName || 'Global',
+        severity: 0.7,
+        nvidia_enhanced: true,
+      }
+
+      // Convert action plans to zones format for PDF
+      const zones = actionPlans.map(plan => ({
+        name: plan.organizationName || plan.organizationType,
+        zone_level: plan.priority,
+        zone_type: 'action_plan',
+        affected_assets_count: plan.actions.length,
+        expected_loss: plan.estimatedCost || 0,
+        population_affected: 0,
+        risk_score: plan.riskReduction ? (1 - plan.riskReduction) * 100 : 50,
+      }))
+
+      // Convert action plans to actions format for PDF
+      const actions = actionPlans.flatMap(plan => 
+        plan.actions.map((action, idx) => ({
+          title: action,
+          priority: plan.priority === 'critical' ? 'Critical' : plan.priority === 'high' ? 'High' : 'Medium',
+          timeline: plan.timeline,
+          estimated_cost: plan.estimatedCost ? plan.estimatedCost / plan.actions.length : 0,
+          risk_reduction: plan.riskReduction ? Math.round(plan.riskReduction * 100 / plan.actions.length) : 10,
+        }))
+      )
+
+      await exportStressTestPdf(stressTestData, zones, actions)
+      
+      console.log('✅ PDF exported successfully')
+    } catch (error) {
+      console.error('❌ PDF export failed:', error)
+      setExportError(error instanceof Error ? error.message : 'Failed to export PDF')
+    } finally {
+      setIsExporting(false)
+    }
+  }
 
   // Filter plans
   const filteredPlans = actionPlans.filter(plan => {
@@ -155,11 +207,11 @@ export default function ActionPlanModal({
           className="relative w-full max-w-4xl max-h-[85vh] bg-[#0a0f18] border border-white/10 rounded-2xl overflow-hidden shadow-2xl"
         >
           {/* Header */}
-          <div className="px-6 py-4 border-b border-white/10 bg-gradient-to-r from-cyan-500/10 to-transparent">
+          <div className="px-6 py-4 border-b border-white/10 bg-gradient-to-r from-amber-500/10 to-transparent">
             <div className="flex items-center justify-between">
               <div>
                 <div className="flex items-center gap-3 mb-1">
-                  <div className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse" />
+                  <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
                   <h2 className="text-white text-xl font-light">Action Plans</h2>
                 </div>
                 <p className="text-white/40 text-sm">
@@ -189,7 +241,7 @@ export default function ActionPlanModal({
                   onClick={() => setFilter(tab.id as typeof filter)}
                   className={`px-3 py-1.5 rounded-lg text-xs transition-all ${
                     filter === tab.id
-                      ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                      ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
                       : 'text-white/40 hover:text-white/60 hover:bg-white/5'
                   }`}
                 >
@@ -339,22 +391,49 @@ export default function ActionPlanModal({
 
           {/* Footer */}
           <div className="px-6 py-4 border-t border-white/10 bg-white/5 flex items-center justify-between">
-            <div className="text-white/40 text-xs">
-              {sortedPlans.length} action plans • {sortedPlans.filter(p => p.priority === 'critical').length} critical
+            <div className="flex items-center gap-3">
+              <div className="text-white/40 text-xs">
+                {sortedPlans.length} action plans • {sortedPlans.filter(p => p.priority === 'critical').length} critical
+              </div>
+              {exportError && (
+                <div className="text-red-400 text-xs flex items-center gap-1">
+                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                  {exportError}
+                </div>
+              )}
             </div>
             <div className="flex gap-2">
               <button
-                onClick={() => {/* Export logic */}}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-all text-sm text-white/70 hover:text-white"
+                onClick={handleExportPdf}
+                disabled={isExporting}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-all text-sm ${
+                  isExporting 
+                    ? 'bg-white/5 border-white/10 text-white/40 cursor-not-allowed' 
+                    : 'bg-white/5 hover:bg-white/10 border-white/10 text-white/70 hover:text-white'
+                }`}
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                Export PDF
+                {isExporting ? (
+                  <>
+                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Export PDF
+                  </>
+                )}
               </button>
               <button
                 onClick={onClose}
-                className="px-4 py-2 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/30 transition-all text-sm text-cyan-400"
+                className="px-4 py-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 transition-all text-sm text-amber-400"
               >
                 Close
               </button>

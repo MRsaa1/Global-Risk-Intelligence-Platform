@@ -36,14 +36,48 @@ interface EventRiskGraphProps {
   eventId: string
   eventType: 'historical' | 'current' | 'forecast'
   eventName: string
+  eventCategory?: string | null
+  cityName?: string
   width?: number
   height?: number
   compact?: boolean
   fullWidth?: boolean  // Use container width instead of fixed width
 }
 
-// Generate graph data based on event type and ID
-function generateEventGraph(eventId: string, eventType: string): GraphData {
+// Map stress-test and risk-zone eventIds to template keys (fukushima2011, lehman2008, ukraine2022, covid2020)
+const EVENT_ID_TO_TEMPLATE: Record<string, string> = {
+  seismic_shock: 'fukushima2011',
+  flood_event: 'fukushima2011',
+  hurricane: 'fukushima2011',
+  climate_5yr: 'fukushima2011',
+  climate_10yr: 'fukushima2011',
+  climate_25yr: 'fukushima2011',
+  sea_level_10yr: 'fukushima2011',
+  sea_level_25yr: 'fukushima2011',
+  credit_crunch: 'lehman2008',
+  market_crash: 'lehman2008',
+  liquidity_crisis: 'lehman2008',
+  financial_stress_5yr: 'lehman2008',
+  conflict_escalation: 'ukraine2022',
+  sanctions_escalation: 'ukraine2022',
+  regional_conflict_spillover: 'ukraine2022',
+  trade_war_supply: 'ukraine2022',
+  energy_shock: 'ukraine2022',
+  supply_chain: 'fukushima2011',
+  cyber_attack: 'fukushima2011',
+  tech_disruption_10yr: 'fukushima2011',
+  tech_disruption_25yr: 'fukushima2011',
+  demographic_25yr: 'fukushima2011',
+  pandemic: 'covid2020',
+}
+
+// Generate graph data based on event type, ID, and category fallback
+function generateEventGraph(
+  eventId: string,
+  _eventType: string,
+  eventCategory?: string | null,
+  _cityName?: string
+): GraphData {
   // Different graph structures for different event types
   const eventGraphs: Record<string, GraphData> = {
     // Financial Crisis 2008
@@ -287,9 +321,23 @@ function generateEventGraph(eventId: string, eventType: string): GraphData {
       ]
     },
   }
-  
-  // Return event-specific graph or default
-  return eventGraphs[eventId] || generateDefaultGraph()
+
+  // 1) Exact match (historic keys)
+  if (eventGraphs[eventId]) return eventGraphs[eventId]
+
+  // 2) Stress/risk eventId → template
+  const templateKey = EVENT_ID_TO_TEMPLATE[eventId] ??
+    (eventId.startsWith('tech_disruption') || eventId.startsWith('sea_level') ? 'fukushima2011' : null)
+  if (templateKey && eventGraphs[templateKey]) return eventGraphs[templateKey]
+
+  // 3) Fallback by eventCategory
+  const cat = (eventCategory || '').toLowerCase()
+  if (cat === 'climate' || cat === 'natural') return eventGraphs.fukushima2011
+  if (cat === 'financial') return eventGraphs.lehman2008
+  if (cat === 'geopolitical') return eventGraphs.ukraine2022
+  if (cat === 'operational' || cat === 'supply_chain') return eventGraphs.fukushima2011
+
+  return generateDefaultGraph()
 }
 
 function generateDefaultGraph(): GraphData {
@@ -333,6 +381,8 @@ export default function EventRiskGraph({
   eventId, 
   eventType, 
   eventName,
+  eventCategory,
+  cityName,
   width = 500, 
   height = 350,
   compact = false,
@@ -354,8 +404,18 @@ export default function EventRiskGraph({
   
   // Load graph data for event
   useEffect(() => {
-    setGraphData(generateEventGraph(eventId, eventType))
-  }, [eventId, eventType])
+    setGraphData(generateEventGraph(eventId, eventType, eventCategory, cityName))
+  }, [eventId, eventType, eventCategory, cityName])
+  
+  // Configure force simulation to spread nodes further apart
+  useEffect(() => {
+    if (graphRef.current && graphData.nodes.length > 0) {
+      // Increase repulsion force to spread nodes even further
+      graphRef.current.d3Force('charge')?.strength(-1600)  // Stronger repulsion for more spacing
+      graphRef.current.d3Force('link')?.distance(350)  // Longer link distance to spread nodes
+      graphRef.current.d3Force('center')?.strength(0.05)
+    }
+  }, [graphData])
   
   // Track container size for fullWidth mode
   useEffect(() => {
@@ -364,10 +424,10 @@ export default function EventRiskGraph({
     const updateSize = () => {
       if (containerRef.current) {
         const rect = containerRef.current.getBoundingClientRect()
-        // Use container width but FIXED height (450px) to prevent infinite growth
+        // Use container width but FIXED height (720px - 20% smaller) to prevent infinite growth
         setContainerSize({ 
           width: rect.width || width, 
-          height: 450  // Fixed height - no infinite growth
+          height: 720  // Fixed height - 20% smaller for better fit
         })
       }
     }
@@ -452,14 +512,16 @@ export default function EventRiskGraph({
     <div 
       ref={containerRef}
       className={`relative rounded-xl overflow-hidden border border-white/10 bg-black/40 ${fullWidth ? 'w-full' : ''}`}
-      style={fullWidth ? { height: 450, minHeight: 450 } : undefined}
+      style={fullWidth ? { height: 576, minHeight: 576 } : undefined}
     >
       {/* Header */}
       <div className="absolute top-0 left-0 right-0 z-10 p-3 bg-gradient-to-b from-black/80 to-transparent">
         <div className="flex items-center justify-between">
           <div>
             <div className="text-white/50 text-[10px] uppercase tracking-wider">Cascade Analysis</div>
-            <div className="text-white text-sm font-light">{eventName}</div>
+            <div className="text-white text-sm font-light">
+              {eventName}{cityName ? ` · ${cityName}` : ''}
+            </div>
           </div>
           <div className="flex items-center gap-3 text-xs">
             <div className="text-center">

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -10,8 +10,30 @@ import {
   CheckCircleIcon,
   ClockIcon,
   BeakerIcon,
+  BoltIcon,
+  SignalIcon,
 } from '@heroicons/react/24/outline'
 import AlertPanel from '../components/AlertPanel'
+import ClimateWidget from '../components/ClimateWidget'
+import RecentActivityPanel from '../components/dashboard/RecentActivityPanel'
+// New chart components
+import TimeSeriesChart from '../components/charts/TimeSeriesChart'
+import PieChart from '../components/charts/PieChart'
+import BarChart3D from '../components/charts/BarChart3D'
+import ComparisonChart from '../components/charts/ComparisonChart'
+import ChartControls, { TimeRange } from '../components/charts/ChartControls'
+import { chartColors } from '../lib/chartColors'
+// Analytics API for real data
+import { 
+  getRiskTrends, 
+  getRiskDistribution, 
+  getTopRiskAssets, 
+  getScenarioComparison,
+  type RiskTrendSeries,
+} from '../services/analyticsApi'
+// Platform state management - synced with Command Center
+import { usePortfolio, useActiveStressTest, useRecentEvents, usePlatformStore } from '../store/platformStore'
+import { usePlatformWebSocket } from '../hooks/usePlatformWebSocket'
 
 // Types for Platform Layers API
 interface LayerDetails {
@@ -36,12 +58,41 @@ interface PlatformStatus {
   last_sync: string
 }
 
-const stats = [
-  { name: 'Total Assets', value: '1,284', icon: BuildingOffice2Icon, change: '+12%', color: 'primary' },
-  { name: 'At Risk', value: '23', icon: ExclamationTriangleIcon, change: '-5%', color: 'risk-high' },
-  { name: 'Digital Twins', value: '1,156', icon: CubeTransparentIcon, change: '+8%', color: 'accent' },
-  { name: 'Portfolio Value', value: '€4.2B', icon: ArrowTrendingUpIcon, change: '+3.2%', color: 'primary' },
-]
+// Stats are now derived from platform store (synced with Command Center)
+function useStats() {
+  const portfolio = usePortfolio()
+  
+  return useMemo(() => [
+    { 
+      name: 'Total Assets', 
+      value: portfolio.totalAssets?.toLocaleString() || '1,284', 
+      icon: BuildingOffice2Icon, 
+      change: '+12%', 
+      color: 'primary' 
+    },
+    { 
+      name: 'At Risk', 
+      value: portfolio.criticalCount?.toString() || '23', 
+      icon: ExclamationTriangleIcon, 
+      change: portfolio.weightedRisk > 0.7 ? '+15%' : '-5%', 
+      color: 'risk-high' 
+    },
+    { 
+      name: 'Digital Twins', 
+      value: portfolio.digitalTwins?.toLocaleString() || '1,156', 
+      icon: CubeTransparentIcon, 
+      change: '+8%', 
+      color: 'accent' 
+    },
+    { 
+      name: 'Portfolio Value', 
+      value: `€${portfolio.portfolioValue?.toFixed(1) || '4.2'}B`, 
+      icon: ArrowTrendingUpIcon, 
+      change: '+3.2%', 
+      color: 'primary' 
+    },
+  ], [portfolio])
+}
 
 
 const container = {
@@ -64,6 +115,165 @@ async function fetchPlatformLayers(): Promise<PlatformStatus> {
     throw new Error('Failed to fetch platform layers')
   }
   return response.json()
+}
+
+// Calculate trend for a series (comparing first half to second half)
+interface TrendInfo {
+  id: string
+  name: string
+  color: string
+  current: number
+  change: number
+  direction: 'up' | 'down' | 'stable'
+}
+
+function calculateTrends(series: { id: string; name: string; color?: string; data: { value: number; date?: string | Date }[] }[]): TrendInfo[] {
+  return series.map(s => {
+    if (!s.data || s.data.length < 2) {
+      return { id: s.id, name: s.name, color: s.color || '#888', current: 0, change: 0, direction: 'stable' as const }
+    }
+    
+    const midPoint = Math.floor(s.data.length / 2)
+    const firstHalf = s.data.slice(0, midPoint)
+    const secondHalf = s.data.slice(midPoint)
+    
+    const firstAvg = firstHalf.reduce((sum, d) => sum + d.value, 0) / firstHalf.length
+    const secondAvg = secondHalf.reduce((sum, d) => sum + d.value, 0) / secondHalf.length
+    const current = s.data[s.data.length - 1].value
+    
+    const change = firstAvg > 0 ? ((secondAvg - firstAvg) / firstAvg) * 100 : 0
+    const direction = Math.abs(change) < 1 ? 'stable' : change > 0 ? 'up' : 'down'
+    
+    return {
+      id: s.id,
+      name: s.name,
+      color: s.color || '#888',
+      current: Math.round(current * 10) / 10,
+      change: Math.round(change * 10) / 10,
+      direction,
+    }
+  })
+}
+
+// Transform API risk trend data to chart format (convert string dates to Date objects)
+function transformRiskTrendData(apiSeries: RiskTrendSeries[]) {
+  return apiSeries.map(s => ({
+    ...s,
+    data: s.data.map(d => ({
+      date: new Date(d.date),
+      value: d.value,
+    })),
+  }))
+}
+
+// Get number of days based on time range
+function getDaysFromTimeRange(range: TimeRange): number {
+  switch (range) {
+    case '1D': return 1
+    case '1W': return 7
+    case '1M': return 30
+    case '3M': return 90
+    case '1Y': return 365
+    case 'ALL': return 365
+    default: return 30
+  }
+}
+
+// Generate time series data for risk trends
+function generateRiskTrendData(timeRange: TimeRange = '1M') {
+  const now = new Date()
+  const days = getDaysFromTimeRange(timeRange)
+  const series = [
+    { id: 'climate', name: 'Climate Risk', color: chartColors.series.climate },
+    { id: 'physical', name: 'Physical Risk', color: chartColors.series.physical },
+    { id: 'network', name: 'Network Risk', color: chartColors.series.network },
+    { id: 'financial', name: 'Financial Risk', color: chartColors.series.financial },
+  ]
+  
+  // Adjust data points based on range
+  const dataPoints = Math.min(days, days <= 7 ? days * 24 : days) // Hourly for 1D/1W, daily otherwise
+  
+  return series.map(s => ({
+    ...s,
+    data: Array.from({ length: dataPoints }, (_, i) => {
+      const date = new Date(now)
+      if (days <= 7) {
+        date.setHours(date.getHours() - (dataPoints - 1 - i))
+      } else {
+        date.setDate(date.getDate() - (dataPoints - 1 - i))
+      }
+      // Different base values and volatility for each series
+      const baseValue = s.id === 'climate' ? 45 : s.id === 'physical' ? 28 : s.id === 'network' ? 62 : 35
+      const volatility = s.id === 'network' ? 15 : 10
+      return {
+        date,
+        value: Math.max(0, Math.min(100, baseValue + (Math.random() - 0.5) * volatility + Math.sin(i / 5) * 5)),
+      }
+    }),
+  }))
+}
+
+// Mock data for risk distribution pie chart
+function getRiskDistributionData() {
+  return [
+    { id: 'critical', label: 'Critical', value: 23, color: chartColors.risk.critical, risk: 0.9 },
+    { id: 'high', label: 'High', value: 45, color: chartColors.risk.high, risk: 0.7 },
+    { id: 'medium', label: 'Medium', value: 112, color: chartColors.risk.medium, risk: 0.5 },
+    { id: 'low', label: 'Low', value: 347, color: chartColors.risk.low, risk: 0.2 },
+  ]
+}
+
+// Mock data for top risk assets bar chart
+function getTopRiskAssetsData() {
+  return [
+    { label: 'Frankfurt Tower', value: 92, risk: 0.92 },
+    { label: 'London Bridge Offices', value: 87, risk: 0.87 },
+    { label: 'Tokyo Central', value: 78, risk: 0.78 },
+    { label: 'Singapore Marina', value: 72, risk: 0.72 },
+    { label: 'NYC Financial', value: 68, risk: 0.68 },
+    { label: 'Dubai Downtown', value: 65, risk: 0.65 },
+    { label: 'Sydney Harbor', value: 58, risk: 0.58 },
+    { label: 'Paris La Defense', value: 52, risk: 0.52 },
+  ]
+}
+
+// Mock data for scenario comparison
+function getScenarioComparisonData() {
+  return [
+    {
+      id: 'climate-stress',
+      name: 'Climate Stress',
+      description: 'Impact of extreme climate events on portfolio',
+      metrics: [
+        { id: 'portfolio', label: 'Portfolio Value', before: 4200000000, after: 3780000000, format: 'currency' as const, higherIsBetter: true },
+        { id: 'var', label: 'Value at Risk', before: 180000000, after: 520000000, format: 'currency' as const, higherIsBetter: false },
+        { id: 'avg-risk', label: 'Average Risk', before: 0.35, after: 0.58, format: 'percent' as const, higherIsBetter: false },
+        { id: 'critical', label: 'Critical Assets', before: 12, after: 34, format: 'number' as const, higherIsBetter: false },
+      ],
+    },
+    {
+      id: 'market-crash',
+      name: 'Market Crash',
+      description: '2008-style financial crisis scenario',
+      metrics: [
+        { id: 'portfolio', label: 'Portfolio Value', before: 4200000000, after: 2940000000, format: 'currency' as const, higherIsBetter: true },
+        { id: 'var', label: 'Value at Risk', before: 180000000, after: 890000000, format: 'currency' as const, higherIsBetter: false },
+        { id: 'avg-risk', label: 'Average Risk', before: 0.35, after: 0.72, format: 'percent' as const, higherIsBetter: false },
+        { id: 'critical', label: 'Critical Assets', before: 12, after: 89, format: 'number' as const, higherIsBetter: false },
+      ],
+    },
+    {
+      id: 'geopolitical',
+      name: 'Geopolitical',
+      description: 'Regional conflict impact analysis',
+      metrics: [
+        { id: 'portfolio', label: 'Portfolio Value', before: 4200000000, after: 3570000000, format: 'currency' as const, higherIsBetter: true },
+        { id: 'var', label: 'Value at Risk', before: 180000000, after: 410000000, format: 'currency' as const, higherIsBetter: false },
+        { id: 'avg-risk', label: 'Average Risk', before: 0.35, after: 0.51, format: 'percent' as const, higherIsBetter: false },
+        { id: 'critical', label: 'Critical Assets', before: 12, after: 28, format: 'number' as const, higherIsBetter: false },
+      ],
+    },
+  ]
 }
 
 // Layer icon based on layer number
@@ -115,7 +325,7 @@ function LayerDetailPanel({ layer, onClose }: { layer: LayerMetrics; onClose: ()
           </div>
           <div className="flex justify-between">
             <span className="text-white/40">External Sources</span>
-            <span className="text-cyan-400">{(details.external_sources || 0).toLocaleString()}</span>
+            <span className="text-amber-400">{(details.external_sources || 0).toLocaleString()}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-white/40">Verification Rate</span>
@@ -132,7 +342,7 @@ function LayerDetailPanel({ layer, onClose }: { layer: LayerMetrics; onClose: ()
           </div>
           <div className="flex justify-between">
             <span className="text-white/40">Connections (Edges)</span>
-            <span className="text-cyan-400">{details.edges || 0}</span>
+            <span className="text-amber-400">{details.edges || 0}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-white/40">Risk Clusters</span>
@@ -223,6 +433,19 @@ function LayerDetailPanel({ layer, onClose }: { layer: LayerMetrics; onClose: ()
 
 export default function Dashboard() {
   const [expandedLayer, setExpandedLayer] = useState<number | null>(null)
+  const [riskTrendTimeRange, setRiskTrendTimeRange] = useState<TimeRange>('1M')
+  const [isRiskTrendFullscreen, setIsRiskTrendFullscreen] = useState(false)
+  const [isRefreshingTrends, setIsRefreshingTrends] = useState(false)
+  const riskTrendChartRef = useRef<HTMLDivElement>(null)
+  
+  // Platform store - synced with Command Center
+  const stats = useStats()
+  const activeStressTest = useActiveStressTest()
+  const recentEvents = useRecentEvents(5)
+  const { wsStatus } = usePlatformStore()
+  
+  // Platform WebSocket - receives events from Command Center
+  usePlatformWebSocket(['dashboard', 'stress_tests', 'alerts'])
   
   // Fetch platform layers from API
   const { data: platformData, isLoading, error } = useQuery({
@@ -231,6 +454,143 @@ export default function Dashboard() {
     refetchInterval: 30000, // Refresh every 30 seconds
     staleTime: 10000,
   })
+  
+  // Fetch risk trends from API
+  const { 
+    data: riskTrendsResponse, 
+    isLoading: isLoadingTrends,
+    refetch: refetchTrends,
+  } = useQuery({
+    queryKey: ['riskTrends', riskTrendTimeRange],
+    queryFn: () => getRiskTrends(riskTrendTimeRange),
+    refetchInterval: 60000, // Refresh every minute
+    staleTime: 30000,
+  })
+  
+  // Transform API data for chart component
+  const riskTrendData = useMemo(() => {
+    if (!riskTrendsResponse?.series) {
+      // Fallback mock data if API fails
+      return generateRiskTrendData(riskTrendTimeRange)
+    }
+    return transformRiskTrendData(riskTrendsResponse.series)
+  }, [riskTrendsResponse, riskTrendTimeRange])
+  
+  // Last update timestamp from API response
+  const lastTrendUpdate = useMemo(() => {
+    if (riskTrendsResponse?.last_updated) {
+      return new Date(riskTrendsResponse.last_updated)
+    }
+    return new Date()
+  }, [riskTrendsResponse])
+  
+  const riskTrends = useMemo(() => calculateTrends(riskTrendData), [riskTrendData])
+  
+  // Auto-refresh trends when stress tests complete
+  useEffect(() => {
+    const latestEvent = recentEvents[0]
+    if (latestEvent?.event_type === 'stress_test.completed' || 
+        latestEvent?.event_type === 'portfolio.updated' ||
+        latestEvent?.event_type === 'zone.risk_updated') {
+      // Trigger data refresh when relevant events occur
+      refetchTrends()
+    }
+  }, [recentEvents, refetchTrends])
+  
+  // Refresh handler for risk trend chart
+  const handleRefreshTrends = async () => {
+    setIsRefreshingTrends(true)
+    await refetchTrends()
+    setIsRefreshingTrends(false)
+  }
+  
+  // Sample annotations for the risk trend chart
+  const riskTrendAnnotations = useMemo(() => {
+    const now = new Date()
+    const days = getDaysFromTimeRange(riskTrendTimeRange)
+    
+    // Generate sample annotations based on time range
+    const annotations: Array<{ date: Date; label: string; type: 'stress-test' | 'alert' | 'event' }> = []
+    
+    if (days >= 7) {
+      // Add a stress test from 5 days ago
+      const stressTestDate = new Date(now)
+      stressTestDate.setDate(stressTestDate.getDate() - 5)
+      annotations.push({
+        date: stressTestDate,
+        label: 'Climate Stress Test',
+        type: 'stress-test',
+      })
+    }
+    
+    if (days >= 14) {
+      // Add an alert from 12 days ago
+      const alertDate = new Date(now)
+      alertDate.setDate(alertDate.getDate() - 12)
+      annotations.push({
+        date: alertDate,
+        label: 'High Risk Alert: Frankfurt Tower',
+        type: 'alert',
+      })
+    }
+    
+    if (days >= 21) {
+      // Add a system event from 18 days ago
+      const eventDate = new Date(now)
+      eventDate.setDate(eventDate.getDate() - 18)
+      annotations.push({
+        date: eventDate,
+        label: 'Model Update Deployed',
+        type: 'event',
+      })
+    }
+    
+    return annotations
+  }, [riskTrendTimeRange])
+  // Fetch risk distribution from API
+  const { data: riskDistributionResponse } = useQuery({
+    queryKey: ['riskDistribution'],
+    queryFn: getRiskDistribution,
+    refetchInterval: 60000,
+    staleTime: 30000,
+  })
+  
+  const riskDistributionData = useMemo(() => {
+    if (!riskDistributionResponse?.distribution) {
+      return getRiskDistributionData() // Fallback
+    }
+    return riskDistributionResponse.distribution
+  }, [riskDistributionResponse])
+  
+  // Fetch top risk assets from API
+  const { data: topRiskAssetsResponse } = useQuery({
+    queryKey: ['topRiskAssets'],
+    queryFn: () => getTopRiskAssets(8),
+    refetchInterval: 60000,
+    staleTime: 30000,
+  })
+  
+  const topRiskAssetsData = useMemo(() => {
+    if (!topRiskAssetsResponse?.assets) {
+      return getTopRiskAssetsData() // Fallback
+    }
+    return topRiskAssetsResponse.assets
+  }, [topRiskAssetsResponse])
+  
+  // Fetch scenario comparison from API
+  const { data: scenarioComparisonResponse } = useQuery({
+    queryKey: ['scenarioComparison'],
+    queryFn: getScenarioComparison,
+    refetchInterval: 120000, // Less frequent - stress tests don't change often
+    staleTime: 60000,
+  })
+  
+  const scenarioComparisonData = useMemo(() => {
+    if (!scenarioComparisonResponse?.scenarios) {
+      return getScenarioComparisonData() // Fallback
+    }
+    return scenarioComparisonResponse.scenarios
+  }, [scenarioComparisonResponse])
   
   // Fallback data if API fails
   const fallbackLayers = [
@@ -252,12 +612,56 @@ export default function Dashboard() {
         animate={{ opacity: 1, y: 0 }}
         className="mb-8"
       >
-        <h1 className="text-3xl font-display font-bold gradient-text">
-          Physical-Financial Risk Platform
-        </h1>
-        <p className="text-dark-muted mt-2">
-          The Operating System for the Physical Economy
-        </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-display font-bold gradient-text">
+              Physical-Financial Risk Platform
+            </h1>
+            <p className="text-dark-muted mt-2">
+              The Operating System for the Physical Economy
+            </p>
+          </div>
+          
+          {/* Live sync indicator */}
+          <div className="flex items-center gap-4">
+            {/* Active Stress Test indicator */}
+            {activeStressTest && (
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-lg"
+              >
+                <BoltIcon className="w-4 h-4 text-amber-400 animate-pulse" />
+                <span className="text-xs text-amber-300">
+                  {activeStressTest.name}
+                  {activeStressTest.progress !== undefined && (
+                    <span className="ml-2 text-amber-400/70">
+                      {activeStressTest.progress}%
+                    </span>
+                  )}
+                </span>
+              </motion.div>
+            )}
+            
+            {/* WebSocket status */}
+            <div className="flex items-center gap-1.5 text-xs">
+              <SignalIcon className={`w-4 h-4 ${
+                wsStatus === 'connected' ? 'text-emerald-400' : 
+                wsStatus === 'connecting' ? 'text-amber-400 animate-pulse' : 
+                'text-white/30'
+              }`} />
+              <span className={`${
+                wsStatus === 'connected' ? 'text-emerald-400' : 
+                wsStatus === 'connecting' ? 'text-amber-400' : 
+                'text-white/30'
+              }`}>
+                {wsStatus === 'connected' ? 'Live' : 
+                 wsStatus === 'connecting' ? 'Connecting...' : 
+                 'Offline'}
+              </span>
+            </div>
+          </div>
+        </div>
       </motion.div>
 
       {/* Stats Grid */}
@@ -271,26 +675,26 @@ export default function Dashboard() {
           <motion.div
             key={stat.name}
             variants={item}
-            className="glass rounded-2xl p-6 hover:glow-primary transition-shadow"
+            className="glass rounded-2xl p-6 border border-white/5"
           >
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-dark-muted text-sm">{stat.name}</p>
-                <p className="text-3xl font-display font-bold mt-2">{stat.value}</p>
-                <p className={`text-sm mt-2 ${stat.change.startsWith('+') ? 'text-risk-low' : 'text-risk-high'}`}>
+                <p className="text-white/50 text-xs">{stat.name}</p>
+                <p className="text-2xl font-display font-bold mt-2 text-white/90">{stat.value}</p>
+                <p className={`text-xs mt-2 ${stat.change.startsWith('+') ? 'text-white/50' : 'text-white/40'}`}>
                   {stat.change} from last month
                 </p>
               </div>
-              <div className={`p-3 rounded-xl ${stat.color === 'primary' ? 'bg-primary-500/20' : stat.color === 'accent' ? 'bg-accent-500/20' : 'bg-red-500/20'}`}>
-                <stat.icon className={`w-6 h-6 ${stat.color === 'primary' ? 'text-primary-400' : stat.color === 'accent' ? 'text-accent-400' : 'text-red-400'}`} />
+              <div className={`p-2.5 rounded-xl ${stat.color === 'primary' ? 'bg-primary-500/10 border border-primary-500/20' : stat.color === 'accent' ? 'bg-accent-500/10 border border-accent-500/20' : 'bg-white/5 border border-white/10'}`}>
+                <stat.icon className={`w-5 h-5 ${stat.color === 'primary' ? 'text-primary-400' : stat.color === 'accent' ? 'text-accent-400' : 'text-white/60'}`} />
               </div>
             </div>
           </motion.div>
         ))}
       </motion.div>
 
-      {/* Two Column Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Three Column Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* SENTINEL Real-time Alerts */}
         <motion.div
           initial={{ opacity: 0, x: -20 }}
@@ -300,46 +704,162 @@ export default function Dashboard() {
           <AlertPanel maxAlerts={5} compact={true} />
         </motion.div>
 
-        {/* Risk Distribution */}
+        {/* Climate Risk Monitor - LIVE DATA */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.45 }}
+        >
+          <ClimateWidget />
+        </motion.div>
+
+        {/* Risk Distribution - Enhanced with PieChart */}
         <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.4 }}
-          className="glass rounded-2xl p-6"
+          transition={{ delay: 0.5 }}
+          className="glass rounded-2xl p-6 border border-white/5"
         >
-          <h2 className="text-xl font-display font-semibold mb-4">Risk Distribution</h2>
-          <div className="space-y-4">
-            {[
-              { label: 'Climate Risk', value: 45, color: 'primary' },
-              { label: 'Physical Risk', value: 28, color: 'accent' },
-              { label: 'Network Risk', value: 62, color: 'risk-medium' },
-              { label: 'Financial Risk', value: 35, color: 'primary' },
-            ].map((risk) => (
-              <div key={risk.label}>
-                <div className="flex justify-between text-sm mb-1">
-                  <span>{risk.label}</span>
-                  <span className={
-                    risk.value > 60 ? 'text-risk-high' :
-                    risk.value > 40 ? 'text-risk-medium' : 'text-risk-low'
-                  }>{risk.value}%</span>
-                </div>
-                <div className="h-2 bg-dark-bg rounded-full overflow-hidden">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${risk.value}%` }}
-                    transition={{ duration: 1, delay: 0.5 }}
-                    className={`h-full rounded-full ${
-                      risk.color === 'primary' ? 'bg-primary-500' :
-                      risk.color === 'accent' ? 'bg-accent-500' :
-                      'bg-amber-500'
-                    }`}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
+          <h2 className="text-sm font-display font-semibold mb-4 text-white/80">Asset Risk Distribution</h2>
+          <PieChart
+            data={riskDistributionData}
+            size={200}
+            innerRadius={0.55}
+            showLegend={true}
+            showValues={true}
+            valueFormat="number"
+            title=""
+          />
         </motion.div>
       </div>
+
+      {/* NEW: Advanced Analytics Section */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.55 }}
+        className="mt-8"
+      >
+        <h2 className="text-xl font-display font-semibold mb-6">Advanced Analytics</h2>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          {/* Risk Trends Over Time */}
+          <div 
+            ref={riskTrendChartRef}
+            className={`glass rounded-2xl p-6 border border-white/5 transition-all ${
+              isRiskTrendFullscreen 
+                ? 'fixed inset-4 z-50 bg-dark-card' 
+                : ''
+            }`}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-3">
+                <h3 className="text-white/80 text-sm font-medium">
+                  Risk Trends ({riskTrendTimeRange === '1D' ? '24 Hours' : 
+                               riskTrendTimeRange === '1W' ? '7 Days' : 
+                               riskTrendTimeRange === '1M' ? '30 Days' : 
+                               riskTrendTimeRange === '3M' ? '90 Days' : 
+                               riskTrendTimeRange === '1Y' ? '1 Year' : 'All Time'})
+                </h3>
+                <span className="text-[10px] text-white/30 flex items-center gap-1">
+                  {wsStatus === 'connected' && (
+                    <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
+                  )}
+                  Updated {lastTrendUpdate.toLocaleTimeString()}
+                </span>
+              </div>
+              <ChartControls
+                showTimeRange={true}
+                timeRange={riskTrendTimeRange}
+                onTimeRangeChange={setRiskTrendTimeRange}
+                showExport={true}
+                chartRef={riskTrendChartRef}
+                exportFilename="risk-trends"
+                showFullscreen={true}
+                isFullscreen={isRiskTrendFullscreen}
+                onFullscreenToggle={() => setIsRiskTrendFullscreen(!isRiskTrendFullscreen)}
+                showRefresh={true}
+                onRefresh={handleRefreshTrends}
+                isRefreshing={isRefreshingTrends}
+              />
+            </div>
+            
+            {/* Trend Indicators */}
+            <div className="flex flex-wrap gap-3 mb-4">
+              {riskTrends.map(trend => (
+                <div 
+                  key={trend.id}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-white/5 rounded-lg"
+                >
+                  <div 
+                    className="w-2 h-2 rounded-full"
+                    style={{ backgroundColor: trend.color }}
+                  />
+                  <span className="text-xs text-white/70">{trend.name}</span>
+                  <span className="text-xs font-medium text-white/90">{trend.current}</span>
+                  <span className={`flex items-center text-xs font-medium ${
+                    trend.direction === 'up' ? 'text-red-400' : 
+                    trend.direction === 'down' ? 'text-emerald-400' : 
+                    'text-white/50'
+                  }`}>
+                    {trend.direction === 'up' && (
+                      <svg className="w-3 h-3 mr-0.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M5.293 9.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 7.414V15a1 1 0 11-2 0V7.414L6.707 9.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                      </svg>
+                    )}
+                    {trend.direction === 'down' && (
+                      <svg className="w-3 h-3 mr-0.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M14.707 10.293a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L9 12.586V5a1 1 0 012 0v7.586l2.293-2.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    )}
+                    {trend.direction === 'stable' && '—'}
+                    {trend.direction !== 'stable' && `${Math.abs(trend.change)}%`}
+                  </span>
+                </div>
+              ))}
+            </div>
+            
+            <TimeSeriesChart
+              series={riskTrendData}
+              height={isRiskTrendFullscreen ? 500 : 350}
+              showGrid={true}
+              showLegend={true}
+              showArea={true}
+              showStatistics={true}
+              yAxisLabel="Risk Score"
+              valueFormat="number"
+              thresholds={[
+                { value: 60, label: 'WARNING', color: '#f59e0b', style: 'dashed' },
+                { value: 80, label: 'CRITICAL', color: '#ef4444', style: 'dashed' },
+              ]}
+              annotations={riskTrendAnnotations}
+            />
+          </div>
+          
+          {/* Top Risk Assets - 3D Bar Chart */}
+          <div className="glass rounded-2xl p-6 border border-white/5 pb-4">
+            <BarChart3D
+              data={topRiskAssetsData}
+              height={400}
+              showGrid={true}
+              showLabels={true}
+              showValues={true}
+              title="Top Risk Assets"
+              valueFormat="number"
+              colorByRisk={true}
+            />
+          </div>
+        </div>
+        
+        {/* Scenario Comparison - Full Width */}
+        <div className="glass rounded-2xl p-6 border border-white/5 mt-10">
+          <ComparisonChart
+            scenarios={scenarioComparisonData}
+            title="Stress Test Scenario Comparison"
+            showDelta={true}
+          />
+        </div>
+      </motion.div>
 
       {/* Platform Layers - Real Data */}
       <motion.div
@@ -431,6 +951,16 @@ export default function Dashboard() {
             </div>
           </div>
         )}
+      </motion.div>
+      
+      {/* Recent Activity from Command Center */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.7 }}
+        className="mt-8"
+      >
+        <RecentActivityPanel events={recentEvents} maxItems={5} />
       </motion.div>
     </div>
   )

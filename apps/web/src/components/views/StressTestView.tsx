@@ -193,7 +193,7 @@ function Overlay() {
   return (
     <div className="absolute inset-0 pointer-events-none p-4 flex flex-col justify-between">
       <div>
-        <h2 className="text-sm font-medium text-cyan-400/80">Stress Testing</h2>
+        <h2 className="text-sm font-medium text-amber-400/80">Stress Testing</h2>
         <p className="text-xs text-white/40 mt-0.5">Climate Scenario: RCP 8.5</p>
       </div>
       
@@ -217,7 +217,7 @@ function Overlay() {
         <div className="flex items-center gap-2">
           <span className="text-[10px] text-white/40">T0</span>
           <div className="flex-1 h-0.5 bg-white/10 rounded-full overflow-hidden">
-            <div className="h-full w-1/3 bg-gradient-to-r from-cyan-500 to-orange-500 animate-pulse" />
+            <div className="h-full w-1/3 bg-gradient-to-r from-amber-500 to-orange-500 animate-pulse" />
           </div>
           <span className="text-[10px] text-white/40">2050</span>
         </div>

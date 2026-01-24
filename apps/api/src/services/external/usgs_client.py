@@ -141,3 +141,7 @@ class USGSClient:
     def clear_cache(self):
         """Clear cached data."""
         self._cache.clear()
+
+
+# Global service instance
+usgs_client = USGSClient()

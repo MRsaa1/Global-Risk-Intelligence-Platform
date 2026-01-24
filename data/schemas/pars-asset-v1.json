@@ -1,0 +1,58 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://pars.standard.org/v1/asset.json",
+  "title": "PARS Asset",
+  "description": "Physical Asset Risk Schema - Layer 5 Protocol. Universal standard for physical-financial data exchange.",
+  "type": "object",
+  "required": ["asset"],
+  "properties": {
+    "asset": {
+      "type": "object",
+      "description": "Physical asset with full PARS representation",
+      "required": ["identity"],
+      "properties": {
+        "identity": {
+          "type": "object",
+          "description": "Asset identity and PARS ID",
+          "properties": {
+            "pars_id": { "type": "string", "pattern": "^PARS-[A-Z]{2}-[A-Z]{2}-[A-Z0-9]+$", "description": "e.g. PARS-EU-ES-BCN-4782" },
+            "legal_entity_id": { "type": "string" },
+            "external_ids": { "type": "object", "additionalProperties": { "type": "string" } }
+          }
+        },
+        "physical": {
+          "type": "object",
+          "description": "Geometry and condition",
+          "properties": {
+            "geometry": { "type": "object" },
+            "condition": { "type": "object" }
+          }
+        },
+        "exposures": {
+          "type": "object",
+          "description": "Climate and infrastructure exposures",
+          "properties": {
+            "climate": { "type": "object" },
+            "infrastructure": { "type": "object" }
+          }
+        },
+        "financial": {
+          "type": "object",
+          "description": "Valuation and risk metrics",
+          "properties": {
+            "valuation": { "type": "object" },
+            "risk_metrics": { "type": "object" }
+          }
+        },
+        "provenance": {
+          "type": "object",
+          "description": "Data sources and verifications",
+          "properties": {
+            "data_sources": { "type": "array", "items": { "type": "object" } },
+            "verifications": { "type": "array", "items": { "type": "object" } }
+          }
+        }
+      }
+    }
+  }
+}

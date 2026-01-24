@@ -4,7 +4,7 @@
 
 :root {
   --color-primary: #0056e6;
-  --color-accent: #00e6b8;
+  --color-accent: #C9A962;
   --color-bg: #0a0f1a;
   --color-card: #111827;
 }
@@ -28,6 +28,26 @@
   background: #4b5563;
 }
 
+/* Custom scrollbar for modals and panels */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
 /* Glass effect */
 .glass {
   background: rgba(17, 24, 39, 0.8);
@@ -35,9 +55,17 @@
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-/* Gradient text */
+/* Gradient text - subtle professional */
 .gradient-text {
-  background: linear-gradient(135deg, #0056e6 0%, #00e6b8 100%);
+  background: linear-gradient(135deg, #e2e8f0 0%, #94a3b8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Accent gradient text */
+.gradient-text-accent {
+  background: linear-gradient(135deg, #C9A962 0%, #b8983a 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -63,7 +91,7 @@
 }
 
 .glow-accent {
-  box-shadow: 0 0 20px rgba(0, 230, 184, 0.3);
+  box-shadow: 0 0 20px rgba(201, 169, 98, 0.3);
 }
 
 /* Map container */
@@ -75,4 +103,25 @@
 .three-canvas {
   position: absolute;
   inset: 0;
+}
+
+/* Plotly chart smoothing */
+.js-plotly-plot .plotly {
+  transition: opacity 0.3s ease;
+}
+
+/* Prevent flash on chart load */
+.js-plotly-plot {
+  background: transparent !important;
+}
+
+/* Smooth page transitions */
+html, body {
+  background: #0a0f1a;
+}
+
+/* Prevent white flash on navigation */
+#root {
+  background: #0a0f1a;
+  min-height: 100vh;
 }

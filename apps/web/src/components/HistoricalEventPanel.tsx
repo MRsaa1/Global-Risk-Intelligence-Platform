@@ -695,7 +695,7 @@ export default function HistoricalEventPanel({ isOpen, onClose, eventId, onEvent
   
   const typeColors: Record<string, { bg: string; text: string; border: string }> = {
     financial: { bg: 'bg-blue-500/20', text: 'text-blue-400', border: 'border-blue-500/30' },
-    climate: { bg: 'bg-cyan-500/20', text: 'text-cyan-400', border: 'border-cyan-500/30' },
+    climate: { bg: 'bg-amber-500/20', text: 'text-amber-400', border: 'border-amber-500/30' },
     pandemic: { bg: 'bg-purple-500/20', text: 'text-purple-400', border: 'border-purple-500/30' },
     geopolitical: { bg: 'bg-orange-500/20', text: 'text-orange-400', border: 'border-orange-500/30' },
     infrastructure: { bg: 'bg-yellow-500/20', text: 'text-yellow-400', border: 'border-yellow-500/30' },
@@ -802,7 +802,7 @@ export default function HistoricalEventPanel({ isOpen, onClose, eventId, onEvent
                 <div className="space-y-2">
                   {event.lessonsLearned.map((lesson, i) => (
                     <div key={i} className="flex items-start gap-2">
-                      <svg className="w-4 h-4 text-cyan-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                       <span className="text-white/60 text-sm">{lesson}</span>
@@ -846,7 +846,7 @@ export default function HistoricalEventPanel({ isOpen, onClose, eventId, onEvent
               <div className="flex gap-3">
                 <button 
                   onClick={handleExport}
-                  className="px-4 py-2 bg-cyan-500/20 text-cyan-400 rounded-lg border border-cyan-500/30 hover:bg-cyan-500/30 transition-colors text-sm flex items-center gap-2"
+                  className="px-4 py-2 bg-amber-500/20 text-amber-400 rounded-lg border border-amber-500/30 hover:bg-amber-500/30 transition-colors text-sm flex items-center gap-2"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />

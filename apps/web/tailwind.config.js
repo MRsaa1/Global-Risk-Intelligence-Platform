@@ -20,18 +20,18 @@ export default {
           800: '#00224d',
           900: '#00111a',
         },
-        // Accent - Cyan/Teal
+        // Accent - Gold (Classic Wealth)
         accent: {
-          50: '#e6fffa',
-          100: '#b3fff0',
-          200: '#80ffe6',
-          300: '#4dffdc',
-          400: '#22d3ee',
-          500: '#06b6d4',
-          600: '#0891b2',
-          700: '#0e7490',
-          800: '#155e75',
-          900: '#164e63',
+          50: '#faf7f0',
+          100: '#f5ecd6',
+          200: '#e8d9b0',
+          300: '#dbc68a',
+          400: '#ceb364',
+          500: '#C9A962',
+          600: '#b8983a',
+          700: '#9a7d2e',
+          800: '#7c6323',
+          900: '#5e4a1a',
         },
         // Risk colors (matching screenshot)
         risk: {

@@ -22,9 +22,12 @@ try:
     from weasyprint import HTML, CSS
     from weasyprint.text.fonts import FontConfiguration
     HAS_WEASYPRINT = True
-except ImportError:
+except (ImportError, OSError) as e:
     HAS_WEASYPRINT = False
-    print("⚠️ WeasyPrint not installed. PDF generation will be disabled.")
+    HTML = None
+    CSS = None
+    FontConfiguration = None
+    print(f"⚠️ WeasyPrint not available: {e}. PDF generation will be disabled.")
 
 
 # Get template directory

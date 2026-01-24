@@ -115,8 +115,8 @@ function Building({
                 ]}
               >
                 <meshStandardMaterial
-                  color="#00e6b8"
-                  emissive="#00e6b8"
+                  color="#C9A962"
+                  emissive="#C9A962"
                   emissiveIntensity={0.2}
                   metalness={0.8}
                   roughness={0.2}

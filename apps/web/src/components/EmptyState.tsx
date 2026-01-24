@@ -29,12 +29,14 @@ export default function EmptyState({
       <h3 className="text-xl font-display font-semibold mb-2">{title}</h3>
       <p className="text-dark-muted max-w-md mb-6">{description}</p>
       {action && (
-        <button
+        <motion.button
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
           onClick={action.onClick}
-          className="px-6 py-2 bg-primary-500 text-white rounded-xl font-medium hover:bg-primary-600 transition-colors"
+          className="px-5 py-2.5 bg-primary-500 text-white rounded-xl font-medium text-sm hover:bg-primary-600 transition-colors"
         >
           {action.label}
-        </button>
+        </motion.button>
       )}
     </motion.div>
   )

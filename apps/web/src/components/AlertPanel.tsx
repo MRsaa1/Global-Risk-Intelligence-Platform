@@ -32,37 +32,47 @@ interface AlertSummary {
   total_exposure: number;
 }
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:9002';
-const WS_BASE = API_BASE.replace('http', 'ws');
+// Use relative path for production (works with nginx proxy or vite proxy)
+// In development: vite proxy handles /api -> localhost:8000
+// In production: nginx proxy handles /api -> backend:9002
+const API_BASE = import.meta.env.VITE_API_URL || '';
+// WebSocket: use same origin, replace http/https with ws/wss
+const getWSBase = () => {
+  if (import.meta.env.VITE_WS_URL) return import.meta.env.VITE_WS_URL;
+  const origin = window.location.origin;
+  return origin.replace(/^http/, 'ws');
+};
+const WS_BASE = getWSBase() + (API_BASE || '');
 
+// Professional muted severity colors (no emojis)
 const severityConfig = {
   critical: {
-    bg: 'bg-red-900/30',
-    border: 'border-red-500',
-    text: 'text-red-400',
-    badge: 'bg-red-600',
-    icon: '🚨',
+    bg: 'bg-white/5',
+    border: 'border-white/20',
+    text: 'text-white/80',
+    badge: 'bg-white/20',
+    icon: '',
   },
   high: {
-    bg: 'bg-orange-900/30',
-    border: 'border-orange-500',
-    text: 'text-orange-400',
-    badge: 'bg-orange-600',
-    icon: '⚠️',
+    bg: 'bg-accent-500/5',
+    border: 'border-accent-500/20',
+    text: 'text-accent-400',
+    badge: 'bg-accent-500/20',
+    icon: '',
   },
   warning: {
-    bg: 'bg-yellow-900/30',
-    border: 'border-yellow-500',
-    text: 'text-yellow-400',
-    badge: 'bg-yellow-600',
-    icon: '⚡',
+    bg: 'bg-accent-500/5',
+    border: 'border-accent-500/10',
+    text: 'text-accent-300',
+    badge: 'bg-accent-500/10',
+    icon: '',
   },
   info: {
-    bg: 'bg-blue-900/30',
-    border: 'border-blue-500',
-    text: 'text-blue-400',
-    badge: 'bg-blue-600',
-    icon: 'ℹ️',
+    bg: 'bg-primary-500/5',
+    border: 'border-primary-500/20',
+    text: 'text-primary-400',
+    badge: 'bg-primary-500/20',
+    icon: '',
   },
 };
 
@@ -186,7 +196,10 @@ export default function AlertPanel({
     
     ws.onclose = () => {
       setIsConnected(false);
-      console.log('Alert WebSocket disconnected');
+      // Don't spam console in dev mode - backend might not be running
+      if (!import.meta.env.DEV) {
+        console.log('Alert WebSocket disconnected');
+      }
       
       // Reconnect after 5 seconds
       reconnectTimeoutRef.current = window.setTimeout(() => {
@@ -194,8 +207,11 @@ export default function AlertPanel({
       }, 5000);
     };
     
-    ws.onerror = (error) => {
-      console.error('Alert WebSocket error:', error);
+    ws.onerror = () => {
+      // Don't spam console in dev mode - backend might not be running
+      if (!import.meta.env.DEV) {
+        console.warn('Alert WebSocket connection failed (backend may be offline)');
+      }
     };
     
     wsRef.current = ws;
@@ -270,11 +286,15 @@ export default function AlertPanel({
     connectWebSocket();
 
     return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
+      }
+      if (wsRef.current) {
+        // Only close if not already closed
+        if (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING) {
+          wsRef.current.close();
+        }
+        wsRef.current = null;
       }
     };
   }, [fetchAlerts, fetchSummary, checkMonitoringStatus, connectWebSocket]);
@@ -286,24 +306,24 @@ export default function AlertPanel({
   });
 
   return (
-    <div className="bg-slate-900 rounded-xl border border-slate-700 overflow-hidden">
+    <div className="glass rounded-xl border border-white/10 overflow-hidden">
       {/* Header */}
       {showHeader && (
         <div className="p-4 border-b border-slate-700">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3">
               <h3 className="text-lg font-semibold text-white">SENTINEL Alerts</h3>
-              <div className={`flex items-center gap-1 text-xs ${isConnected ? 'text-green-400' : 'text-red-400'}`}>
-                <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`} />
+              <div className={`flex items-center gap-1 text-xs ${isConnected ? 'text-primary-400' : 'text-white/40'}`}>
+                <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-primary-400' : 'bg-white/30'}`} />
                 {isConnected ? 'Live' : 'Disconnected'}
               </div>
             </div>
             <button
               onClick={toggleMonitoring}
-              className={`px-3 py-1 text-xs rounded-lg transition ${
+              className={`px-3 py-1 text-xs rounded-lg transition border ${
                 isMonitoring
-                  ? 'bg-green-600/20 text-green-400 hover:bg-green-600/30'
-                  : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                  ? 'bg-primary-500/10 text-primary-400 border-primary-500/20 hover:bg-primary-500/20'
+                  : 'bg-white/5 text-white/60 border-white/10 hover:bg-white/10'
               }`}
             >
               {isMonitoring ? 'Monitoring Active' : 'Start Monitoring'}
@@ -314,23 +334,23 @@ export default function AlertPanel({
           {summary && (
             <div className="flex items-center gap-4 text-sm">
               <div className="flex items-center gap-2">
-                <span className="text-slate-400">Total:</span>
+                <span className="text-white/50">Total:</span>
                 <span className="text-white font-medium">{summary.total}</span>
               </div>
               {summary.critical > 0 && (
                 <div className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-red-500" />
-                  <span className="text-red-400">{summary.critical} Critical</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-white/60" />
+                  <span className="text-white/70">{summary.critical} Critical</span>
                 </div>
               )}
               {summary.high > 0 && (
                 <div className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-orange-500" />
-                  <span className="text-orange-400">{summary.high} High</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-accent-500/60" />
+                  <span className="text-accent-400">{summary.high} High</span>
                 </div>
               )}
               {summary.total_exposure > 0 && (
-                <div className="ml-auto text-slate-400">
+                <div className="ml-auto text-white/50">
                   Exposure: <span className="text-white font-medium">{formatCurrency(summary.total_exposure)}</span>
                 </div>
               )}
@@ -346,7 +366,7 @@ export default function AlertPanel({
                 className={`px-2 py-1 text-xs rounded transition ${
                   filter === f
                     ? 'bg-blue-600 text-white'
-                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                    : 'bg-white/5 text-white/50 hover:bg-white/10'
                 }`}
               >
                 {f.charAt(0).toUpperCase() + f.slice(1)}
@@ -359,10 +379,12 @@ export default function AlertPanel({
       {/* Alerts List */}
       <div className={`${compact ? 'max-h-[300px]' : 'max-h-[500px]'} overflow-y-auto`}>
         {filteredAlerts.length === 0 ? (
-          <div className="p-8 text-center text-slate-500">
-            <div className="text-4xl mb-2">🛡️</div>
-            <p>No active alerts</p>
-            <p className="text-sm mt-1">SENTINEL is monitoring your portfolio</p>
+          <div className="p-8 text-center text-white/40">
+            <svg className="w-10 h-10 mx-auto mb-3 text-white/20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+            </svg>
+            <p className="text-sm">No active alerts</p>
+            <p className="text-xs mt-1 text-white/30">SENTINEL is monitoring your portfolio</p>
           </div>
         ) : (
           <div className="divide-y divide-slate-800">
@@ -373,7 +395,7 @@ export default function AlertPanel({
               return (
                 <div
                   key={alert.id}
-                  className={`p-4 ${config.bg} border-l-4 ${config.border} hover:bg-slate-800/50 transition cursor-pointer`}
+                  className={`p-4 ${config.bg} border-l-4 ${config.border} hover:bg-white/5/50 transition cursor-pointer`}
                   onClick={() => {
                     setExpandedAlert(isExpanded ? null : alert.id);
                     onAlertClick?.(alert);
@@ -387,16 +409,16 @@ export default function AlertPanel({
                           <span className={`px-2 py-0.5 text-xs font-medium rounded ${config.badge} text-white`}>
                             {alert.severity.toUpperCase()}
                           </span>
-                          <span className="text-xs text-slate-500">{formatTimeAgo(alert.created_at)}</span>
+                          <span className="text-xs text-white/40">{formatTimeAgo(alert.created_at)}</span>
                           {alert.acknowledged && (
-                            <span className="text-xs text-slate-500">• Acknowledged</span>
+                            <span className="text-xs text-white/40">• Acknowledged</span>
                           )}
                         </div>
                         <h4 className="text-white font-medium">{alert.title}</h4>
-                        <p className="text-sm text-slate-400 mt-1 line-clamp-2">{alert.message}</p>
+                        <p className="text-sm text-white/50 mt-1 line-clamp-2">{alert.message}</p>
                         
                         {alert.exposure > 0 && (
-                          <div className="text-sm text-slate-500 mt-1">
+                          <div className="text-sm text-white/40 mt-1">
                             Exposure: <span className={config.text}>{formatCurrency(alert.exposure)}</span>
                           </div>
                         )}
@@ -407,15 +429,15 @@ export default function AlertPanel({
                             {/* Affected Assets */}
                             {alert.asset_ids.length > 0 && (
                               <div>
-                                <p className="text-xs text-slate-500 mb-1">Affected Assets ({alert.asset_ids.length})</p>
+                                <p className="text-xs text-white/40 mb-1">Affected Assets ({alert.asset_ids.length})</p>
                                 <div className="flex flex-wrap gap-1">
                                   {alert.asset_ids.slice(0, 5).map(id => (
-                                    <span key={id} className="px-2 py-0.5 text-xs bg-slate-800 text-slate-300 rounded">
+                                    <span key={id} className="px-2 py-0.5 text-xs bg-white/5 text-white/70 rounded">
                                       {id}
                                     </span>
                                   ))}
                                   {alert.asset_ids.length > 5 && (
-                                    <span className="px-2 py-0.5 text-xs bg-slate-800 text-slate-500 rounded">
+                                    <span className="px-2 py-0.5 text-xs bg-white/5 text-white/40 rounded">
                                       +{alert.asset_ids.length - 5} more
                                     </span>
                                   )}
@@ -426,10 +448,10 @@ export default function AlertPanel({
                             {/* Recommended Actions */}
                             {alert.recommended_actions.length > 0 && (
                               <div>
-                                <p className="text-xs text-slate-500 mb-1">Recommended Actions</p>
+                                <p className="text-xs text-white/40 mb-1">Recommended Actions</p>
                                 <ul className="space-y-1">
                                   {alert.recommended_actions.map((action, i) => (
-                                    <li key={i} className="text-sm text-slate-300 flex items-start gap-2">
+                                    <li key={i} className="text-sm text-white/70 flex items-start gap-2">
                                       <span className="text-blue-400">→</span>
                                       {action}
                                     </li>
@@ -446,7 +468,7 @@ export default function AlertPanel({
                                     e.stopPropagation();
                                     acknowledgeAlert(alert.id);
                                   }}
-                                  className="px-3 py-1 text-xs bg-slate-700 text-slate-300 rounded hover:bg-slate-600 transition"
+                                  className="px-3 py-1 text-xs bg-white/10 text-white/70 rounded hover:bg-white/15 transition"
                                 >
                                   Acknowledge
                                 </button>
@@ -456,7 +478,7 @@ export default function AlertPanel({
                                   e.stopPropagation();
                                   resolveAlert(alert.id);
                                 }}
-                                className="px-3 py-1 text-xs bg-green-700 text-white rounded hover:bg-green-600 transition"
+                                className="px-3 py-1 text-xs bg-primary-500/20 text-primary-400 border border-primary-500/20 rounded hover:bg-primary-500/30 transition"
                               >
                                 Resolve
                               </button>
@@ -467,7 +489,7 @@ export default function AlertPanel({
                     </div>
                     
                     {/* Expand indicator */}
-                    <div className="text-slate-500 ml-2">
+                    <div className="text-white/40 ml-2">
                       <svg
                         className={`w-5 h-5 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
                         fill="none"

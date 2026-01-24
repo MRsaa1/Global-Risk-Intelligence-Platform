@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.config import settings
 from src.core.database import get_db
 from src.core.security import get_current_active_user
 from src.models.asset import Asset
@@ -17,6 +18,51 @@ from src.services.nvidia_earth2 import earth2_service, Earth2Model
 from src.services.nvidia_physics_nemo import physics_nemo_service
 
 router = APIRouter()
+
+
+# ==================== TEST ENDPOINT (no auth) ====================
+
+@router.post("/test/chat")
+async def test_nvidia_chat(message: str = "Hello, how are you?"):
+    """
+    Test NVIDIA LLM endpoint (no auth required).
+    For development and testing only.
+    """
+    import httpx
+    
+    api_key = settings.nvidia_api_key
+    if not api_key:
+        return {"error": "NVIDIA_API_KEY not configured"}
+    
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                "https://integrate.api.nvidia.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "meta/llama-3.1-8b-instruct",
+                    "messages": [{"role": "user", "content": message}],
+                    "max_tokens": 256,
+                },
+            )
+            
+            if response.status_code != 200:
+                return {
+                    "error": f"NVIDIA API error: {response.status_code}",
+                    "detail": response.text[:500],
+                }
+            
+            data = response.json()
+            return {
+                "status": "success",
+                "model": "meta/llama-3.1-8b-instruct",
+                "response": data.get("choices", [{}])[0].get("message", {}).get("content", ""),
+            }
+    except Exception as e:
+        return {"error": str(e)}
 
 
 # ==================== EARTH-2 ENDPOINTS ====================

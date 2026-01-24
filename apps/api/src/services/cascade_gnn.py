@@ -616,13 +616,176 @@ class CascadeGNNService:
             recommendations=recommendations,
         )
     
+    def build_graph_for_city_scenario(self, city_id: str, scenario_id: str) -> None:
+        """
+        Build a cascade graph from city infrastructure, financial centers, and scenario-type template.
+        Uses geodata for city-specific nodes; fills with scenario-typed template when sparse.
+        """
+        def _scenario_id_to_type(sid: str) -> str:
+            s = (sid or "").lower()
+            if s in ("seismic_shock", "flood_event", "hurricane") or s.startswith("climate") or s.startswith("sea_level"):
+                return "climate"
+            if s in ("credit_crunch", "market_crash", "liquidity_crisis") or "financial" in s:
+                return "financial"
+            if s in ("conflict_escalation", "sanctions_escalation", "regional_conflict_spillover", "trade_war_supply", "energy_shock"):
+                return "geopolitical"
+            if s in ("supply_chain", "cyber_attack") or s.startswith("tech_disruption"):
+                return "operational"
+            return "climate"
+
+        def _infra_type_to_sector(t: str) -> str:
+            if not t:
+                return "Infrastructure"
+            t = t.lower()
+            if "power" in t or "grid" in t:
+                return "Energy"
+            if "water" in t or "sewage" in t:
+                return "Infrastructure"
+            if "telecom" in t or "cyber" in t:
+                return "Technology"
+            if "hospital" in t or "health" in t:
+                return "Healthcare"
+            if "transport" in t or "port" in t or "airport" in t:
+                return "Logistics"
+            return "Infrastructure"
+
+        # Template nodes: (id, name, node_type, value, risk_score, sector, region)
+        _TEMPLATE_NODES: Dict[str, List[tuple]] = {
+            "climate": [
+                ("tpl_plant", "Power/Plant", NodeType.INFRASTRUCTURE, 60e6, 85, "Energy", "Template"),
+                ("tpl_grid", "Grid", NodeType.INFRASTRUCTURE, 70e6, 75, "Infrastructure", "Template"),
+                ("tpl_supply", "Supply Chain", NodeType.ASSET, 90e6, 65, "Logistics", "Template"),
+                ("tpl_port", "Port/Transport", NodeType.INFRASTRUCTURE, 45e6, 70, "Logistics", "Template"),
+                ("tpl_ind", "Industry", NodeType.ASSET, 55e6, 60, "Manufacturing", "Template"),
+            ],
+            "financial": [
+                ("tpl_bank", "Banking", NodeType.ASSET, 80e6, 90, "Finance", "Template"),
+                ("tpl_market", "Markets", NodeType.ASSET, 100e6, 85, "Finance", "Template"),
+                ("tpl_insurance", "Insurance", NodeType.ASSET, 70e6, 80, "Finance", "Template"),
+                ("tpl_credit", "Credit", NodeType.ASSET, 60e6, 75, "Finance", "Template"),
+                ("tpl_realestate", "Real Estate", NodeType.ASSET, 90e6, 70, "Finance", "Template"),
+            ],
+            "geopolitical": [
+                ("tpl_energy", "Energy", NodeType.ASSET, 95e6, 92, "Energy", "Template"),
+                ("tpl_gas", "Gas Supply", NodeType.ASSET, 80e6, 95, "Energy", "Template"),
+                ("tpl_grain", "Grain", NodeType.ASSET, 55e6, 88, "Agriculture", "Template"),
+                ("tpl_inflation", "Inflation", NodeType.ASSET, 100e6, 75, "Finance", "Template"),
+                ("tpl_defense", "Defense", NodeType.ASSET, 70e6, 35, "Defense", "Template"),
+            ],
+            "operational": [
+                ("tpl_plant", "Power/Plant", NodeType.INFRASTRUCTURE, 60e6, 85, "Energy", "Template"),
+                ("tpl_grid", "Grid", NodeType.INFRASTRUCTURE, 70e6, 75, "Infrastructure", "Template"),
+                ("tpl_supply", "Supply Chain", NodeType.ASSET, 90e6, 65, "Logistics", "Template"),
+                ("tpl_port", "Port/Transport", NodeType.INFRASTRUCTURE, 45e6, 70, "Logistics", "Template"),
+                ("tpl_ind", "Industry", NodeType.ASSET, 55e6, 60, "Manufacturing", "Template"),
+            ],
+        }
+        _TEMPLATE_EDGES: Dict[str, List[tuple]] = {
+            "climate": [
+                ("tpl_plant", "tpl_grid", EdgeType.OPERATIONAL, 0.9),
+                ("tpl_grid", "tpl_supply", EdgeType.SUPPLY, 0.85),
+                ("tpl_grid", "tpl_ind", EdgeType.SUPPLY, 0.8),
+                ("tpl_port", "tpl_supply", EdgeType.SUPPLY, 0.82),
+                ("tpl_ind", "tpl_supply", EdgeType.SUPPLY, 0.75),
+            ],
+            "financial": [
+                ("tpl_bank", "tpl_market", EdgeType.FINANCIAL, 0.88),
+                ("tpl_insurance", "tpl_bank", EdgeType.FINANCIAL, 0.85),
+                ("tpl_credit", "tpl_bank", EdgeType.FINANCIAL, 0.82),
+                ("tpl_market", "tpl_realestate", EdgeType.FINANCIAL, 0.75),
+                ("tpl_bank", "tpl_realestate", EdgeType.FINANCIAL, 0.72),
+            ],
+            "geopolitical": [
+                ("tpl_gas", "tpl_energy", EdgeType.SUPPLY, 0.95),
+                ("tpl_energy", "tpl_inflation", EdgeType.FINANCIAL, 0.85),
+                ("tpl_grain", "tpl_inflation", EdgeType.SUPPLY, 0.78),
+                ("tpl_defense", "tpl_energy", EdgeType.OPERATIONAL, 0.5),
+            ],
+            "operational": [
+                ("tpl_plant", "tpl_grid", EdgeType.OPERATIONAL, 0.9),
+                ("tpl_grid", "tpl_supply", EdgeType.SUPPLY, 0.85),
+                ("tpl_grid", "tpl_ind", EdgeType.SUPPLY, 0.8),
+                ("tpl_port", "tpl_supply", EdgeType.SUPPLY, 0.82),
+                ("tpl_ind", "tpl_supply", EdgeType.SUPPLY, 0.75),
+            ],
+        }
+
+        # Clear existing graph
+        self.nodes = {}
+        self.edges = []
+        self.nx_graph = None
+        self.pyg_data = None
+
+        from src.services.zone_visualization import zone_visualization_service
+
+        infra = zone_visualization_service.get_infrastructure_targets(city_id)
+        financial = zone_visualization_service.get_financial_centers(city_id)
+        sc_type = _scenario_id_to_type(scenario_id)
+        if sc_type not in _TEMPLATE_NODES:
+            sc_type = "climate"
+
+        # Add city infrastructure nodes
+        for t in infra:
+            nid = str(t.get("id", "")) or f"infra_{city_id}_{len(self.nodes)}"
+            if nid in self.nodes:
+                continue
+            crit = float(t.get("criticality", 0.5))
+            node = GraphNode(
+                id=nid,
+                node_type=NodeType.INFRASTRUCTURE,
+                name=str(t.get("name", nid)),
+                value=float(crit * 80e6),
+                risk_score=float(crit * 100),
+                sector=_infra_type_to_sector(str(t.get("type", ""))),
+                region=city_id,
+            )
+            self.add_node(node)
+
+        # Add city financial nodes
+        for c in financial:
+            nid = str(c.get("id", "")) or f"fin_{city_id}_{len(self.nodes)}"
+            if nid in self.nodes:
+                continue
+            exp = float(c.get("exposure", 50))
+            imp = float(c.get("systemic_importance", 0.5))
+            node = GraphNode(
+                id=nid,
+                node_type=NodeType.ASSET,
+                name=str(c.get("name", nid)),
+                value=float(exp * 1e9),
+                risk_score=float(imp * 100),
+                sector="Finance",
+                region=city_id,
+            )
+            self.add_node(node)
+
+        # Add template nodes (and edges) when sparse or always to give scenario shape
+        t_nodes = _TEMPLATE_NODES.get(sc_type, _TEMPLATE_NODES["climate"])
+        t_edges = _TEMPLATE_EDGES.get(sc_type, _TEMPLATE_EDGES["climate"])
+        for t in t_nodes:
+            nid, name, ntyp, val, risk, sec, reg = t
+            if nid not in self.nodes:
+                self.add_node(GraphNode(id=nid, node_type=ntyp, name=name, value=val, risk_score=risk, sector=sec, region=reg))
+        for e in t_edges:
+            src, tgt, etyp, w = e
+            if src in self.nodes and tgt in self.nodes:
+                self.edges.append(GraphEdge(source_id=src, target_id=tgt, edge_type=etyp, weight=w))
+
+        # Connect first city node to template if we have both
+        city_ids = [n for n in self.nodes if not str(n).startswith("tpl_")]
+        tpl_ids = [n for n in self.nodes if str(n).startswith("tpl_")]
+        if city_ids and tpl_ids:
+            self.edges.append(GraphEdge(source_id=city_ids[0], target_id=tpl_ids[0], edge_type=EdgeType.OPERATIONAL, weight=0.7))
+
+        self.build_graph()
+
     def create_sample_graph(self, num_nodes: int = 20):
         """Create a sample dependency graph for testing."""
         import random
-        
+
         sectors = ["Energy", "Finance", "Manufacturing", "Technology", "Healthcare"]
         regions = ["North", "South", "East", "West", "Central"]
-        
+
         # Create nodes
         for i in range(num_nodes):
             node = GraphNode(
@@ -635,7 +798,7 @@ class CascadeGNNService:
                 region=random.choice(regions),
             )
             self.add_node(node)
-        
+
         # Create edges (random connections)
         node_ids = list(self.nodes.keys())
         for i in range(num_nodes * 2):
@@ -649,7 +812,7 @@ class CascadeGNNService:
                     weight=random.uniform(0.3, 0.9),
                 )
                 self.add_edge(edge)
-        
+
         self.build_graph()
 
 

@@ -1,12 +1,22 @@
 /**
  * Stress Test Selector
  * =====================
- * 
- * Left panel component for selecting and configuring stress test scenarios.
- * Follows the HUD-style design of Command Center.
+ *
+ * Tabs: Regulatory Library (EBA, Fed, NGFS, BIS) and Extended scenarios.
+ * Collapsible "About the stress testing database" at the bottom.
  */
-import { useState } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+
+// Fallback when API is unavailable (mirrors stress_scenario_registry.py, unified schema)
+const STRESS_SCENARIO_LIBRARY_FALLBACK = [
+  { id: 'EBA_Adverse', name: 'EBA Adverse Scenario', source: 'EBA', regulator: 'EBA/ECB', type: 'financial' as const, horizon: 5, severity_numeric: 0.85, probability: 0.05, applicable_regulations: ['EBA', 'Basel', 'TCFD'], parameters: {} },
+  { id: 'FED_Severely_Adverse_CRE', name: 'Fed Severely Adverse (CRE shock)', source: 'Fed', regulator: 'Federal Reserve', type: 'financial' as const, horizon: 5, severity_numeric: 0.9, probability: 0.03, applicable_regulations: ['CCAR', 'DFAST'], parameters: {} },
+  { id: 'NGFS_SSP5_2050', name: 'NGFS SSP5-8.5 (2050)', source: 'NGFS', type: 'climate' as const, horizon: 2050, severity_numeric: 0.88, probability: 0.15, applicable_regulations: ['NGFS', 'TCFD'], parameters: {} },
+  { id: 'Flood_Extreme_100y', name: 'Flood Extreme (100y→10y)', source: 'NGFS', type: 'climate' as const, horizon: 2035, severity_numeric: 0.85, probability: 0.08, applicable_regulations: ['TCFD', 'NGFS'], parameters: {} },
+  { id: 'IMF_Systemic', name: 'IMF-style Systemic Crisis', source: 'IMF', regulator: 'IMF', type: 'financial' as const, horizon: 5, severity_numeric: 0.92, probability: 0.02, applicable_regulations: ['BIS', 'Basel'], parameters: {} },
+  { id: 'NGFS_SSP2_2040', name: 'NGFS SSP2-4.5 (Baseline)', source: 'NGFS', type: 'climate' as const, horizon: 2040, severity_numeric: 0.55, probability: 0.7, applicable_regulations: ['NGFS', 'TCFD'], parameters: {} },
+]
 
 // Professional SVG Icons
 const Icons = {
@@ -47,78 +57,21 @@ const Icons = {
   ),
 }
 
-// Stress test types with icons and colors
-const STRESS_TEST_TYPES = [
-  { 
-    id: 'climate', 
-    label: 'Climate',
-    icon: Icons.climate,
-    color: 'cyan',
-    scenarios: [
-      { id: 'flood-rhine', name: 'Rhine Valley Flood', severity: 0.85, probability: 0.05 },
-      { id: 'sea-level', name: 'Sea Level Rise +0.5m', severity: 0.60, probability: 0.70 },
-      { id: 'heatwave-eu', name: 'European Heatwave', severity: 0.55, probability: 0.30 },
-    ]
-  },
-  { 
-    id: 'financial', 
-    label: 'Financial',
-    icon: Icons.financial,
-    color: 'red',
-    scenarios: [
-      { id: 'liquidity-eu', name: 'Eurozone Liquidity Crisis', severity: 0.90, probability: 0.03 },
-      { id: 'credit-crunch', name: 'Credit Crunch', severity: 0.75, probability: 0.08 },
-    ]
-  },
-  { 
-    id: 'military', 
-    label: 'Geopolitical',
-    icon: Icons.military,
-    color: 'orange',
-    scenarios: [
-      { id: 'conflict-east', name: 'Eastern Europe Escalation', severity: 0.95, probability: 0.15 },
-      { id: 'blockade', name: 'Trade Route Blockade', severity: 0.70, probability: 0.10 },
-    ]
-  },
-  { 
-    id: 'pandemic', 
-    label: 'Pandemic',
-    icon: Icons.pandemic,
-    color: 'purple',
-    scenarios: [
-      { id: 'pandemic-x', name: 'Pandemic Variant X', severity: 0.80, probability: 0.10 },
-    ]
-  },
-  { 
-    id: 'political', 
-    label: 'Political',
-    icon: Icons.political,
-    color: 'yellow',
-    scenarios: [
-      { id: 'sanctions', name: 'Sanctions Package', severity: 0.65, probability: 0.25 },
-      { id: 'regime-change', name: 'Regime Transition', severity: 0.75, probability: 0.05 },
-    ]
-  },
-  { 
-    id: 'regulatory', 
-    label: 'Regulatory',
-    icon: Icons.regulatory,
-    color: 'blue',
-    scenarios: [
-      { id: 'basel-full', name: 'Basel IV Implementation', severity: 0.50, probability: 0.95 },
-    ]
-  },
-  { 
-    id: 'protest', 
-    label: 'Civil Unrest',
-    icon: Icons.protest,
-    color: 'amber',
-    scenarios: [
-      { id: 'mass-protest', name: 'Mass Civil Unrest', severity: 0.60, probability: 0.20 },
-      { id: 'general-strike', name: 'General Strike', severity: 0.55, probability: 0.15 },
-    ]
-  },
+// Extended: fallback when /scenarios/extended is unavailable (no Climate/Financial; Geopolitical, Pandemic, Political, Regulatory, Civil Unrest)
+const STRESS_EXTENDED_FALLBACK = [
+  { id: 'military', label: 'Geopolitical', icon: Icons.military, color: 'orange', scenarios: [{ id: 'Sanctions_Escalation', name: 'Sanctions Escalation', severity_numeric: 0.85, probability: 0.1 }, { id: 'Trade_War_Supply_Chain', name: 'Trade War / Supply Chain', severity_numeric: 0.78, probability: 0.12 }] },
+  { id: 'pandemic', label: 'Pandemic', icon: Icons.pandemic, color: 'purple', scenarios: [{ id: 'COVID19_Replay', name: 'COVID-19 Replay', severity_numeric: 0.8, probability: 0.1 }, { id: 'Pandemic_X', name: 'Pandemic X', severity_numeric: 0.85, probability: 0.05 }] },
+  { id: 'political', label: 'Political', icon: Icons.political, color: 'yellow', scenarios: [{ id: 'Sovereign_Debt_Crisis', name: 'Sovereign Debt Crisis', severity_numeric: 0.88, probability: 0.04 }, { id: 'Currency_Devaluation', name: 'Currency Devaluation', severity_numeric: 0.75, probability: 0.08 }] },
+  { id: 'regulatory', label: 'Regulatory', icon: Icons.regulatory, color: 'blue', scenarios: [{ id: 'Sudden_Capital_Increase', name: 'Sudden Capital Requirement Increase', severity_numeric: 0.7, probability: 0.15 }] },
+  { id: 'protest', label: 'Civil Unrest', icon: Icons.protest, color: 'amber', scenarios: [{ id: 'Urban_Riots_Asset_Damage', name: 'Urban Riots → Asset Damage', severity_numeric: 0.72, probability: 0.12 }, { id: 'Infrastructure_Sabotage', name: 'Infrastructure Sabotage', severity_numeric: 0.8, probability: 0.05 }] },
 ]
+
+const CATEGORY_COLORS: Record<string, string> = {
+  climate: 'cyan', financial: 'red', military: 'orange', pandemic: 'purple',
+  political: 'yellow', regulatory: 'blue', protest: 'amber',
+}
+
+type RegulatoryItem = typeof STRESS_SCENARIO_LIBRARY_FALLBACK[0]
 
 interface StressTestSelectorProps {
   onScenarioSelect: (scenario: {
@@ -127,22 +80,48 @@ interface StressTestSelectorProps {
     type: string
     severity: number
     probability: number
+    source?: string
+    regulator?: string
+    parameters?: Record<string, unknown>
   } | null) => void
   selectedScenario: string | null
   isCollapsed?: boolean
 }
 
-export default function StressTestSelector({ 
-  onScenarioSelect, 
+export default function StressTestSelector({
+  onScenarioSelect,
   selectedScenario,
-  isCollapsed = false 
+  isCollapsed = false,
 }: StressTestSelectorProps) {
+  const [activeTab, setActiveTab] = useState<'regulatory' | 'extended'>('regulatory')
+  const [regulatoryLibrary, setRegulatoryLibrary] = useState<RegulatoryItem[]>(STRESS_SCENARIO_LIBRARY_FALLBACK)
+  const [regulatoryLoading, setRegulatoryLoading] = useState(true)
+  const [extendedCategories, setExtendedCategories] = useState<Array<{ id: string; label: string; scenarios: Array<{ id: string; name: string; severity?: number; severity_numeric?: number; probability?: number }> }> | null>(null)
+  const [extendedLoading, setExtendedLoading] = useState(true)
   const [expandedType, setExpandedType] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [collapseInfoOpen, setCollapseInfoOpen] = useState(false)
 
-  // Color classes by type
+  useEffect(() => {
+    fetch('/api/v1/stress-tests/scenarios/library')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error('Not ok'))))
+      .then((data: RegulatoryItem[]) => setRegulatoryLibrary(Array.isArray(data) ? data : STRESS_SCENARIO_LIBRARY_FALLBACK))
+      .catch(() => setRegulatoryLibrary(STRESS_SCENARIO_LIBRARY_FALLBACK))
+      .finally(() => setRegulatoryLoading(false))
+  }, [])
+
+  useEffect(() => {
+    fetch('/api/v1/stress-tests/scenarios/extended')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error('Not ok'))))
+      .then((data: { categories?: Array<{ id: string; label: string; scenarios: Array<{ id: string; name: string; severity?: number; severity_numeric?: number; probability?: number }> }> }) => {
+        if (data?.categories?.length) setExtendedCategories(data.categories)
+      })
+      .catch(() => {})
+      .finally(() => setExtendedLoading(false))
+  }, [])
+
   const colorClasses: Record<string, { text: string; bg: string; border: string; glow: string }> = {
-    cyan: { text: 'text-cyan-400', bg: 'bg-cyan-500', border: 'border-cyan-500/30', glow: 'shadow-cyan-500/20' },
+    cyan: { text: 'text-amber-400', bg: 'bg-amber-500', border: 'border-amber-500/30', glow: 'shadow-amber-500/20' },
     red: { text: 'text-red-400', bg: 'bg-red-500', border: 'border-red-500/30', glow: 'shadow-red-500/20' },
     orange: { text: 'text-orange-400', bg: 'bg-orange-500', border: 'border-orange-500/30', glow: 'shadow-orange-500/20' },
     purple: { text: 'text-purple-400', bg: 'bg-purple-500', border: 'border-purple-500/30', glow: 'shadow-purple-500/20' },
@@ -151,19 +130,55 @@ export default function StressTestSelector({
     amber: { text: 'text-amber-400', bg: 'bg-amber-500', border: 'border-amber-500/30', glow: 'shadow-amber-500/20' },
   }
 
-  const handleScenarioClick = (type: typeof STRESS_TEST_TYPES[0], scenario: typeof STRESS_TEST_TYPES[0]['scenarios'][0]) => {
-    if (selectedScenario === scenario.id) {
+  const getSeverityNum = (s: { severity_numeric?: number; severity?: number | string }) =>
+    (s as { severity_numeric?: number }).severity_numeric ?? (typeof (s as { severity?: number }).severity === 'number' ? (s as { severity: number }).severity : 0.7)
+  const getHorizonLabel = (s: { horizon?: number; horizon_years?: number }) => {
+    const h = (s as { horizon?: number }).horizon ?? (s as { horizon_years?: number }).horizon_years
+    return typeof h === 'number' ? (h >= 2000 ? `${h}` : `${h}y`) : ''
+  }
+
+  const handleRegulatoryClick = (s: RegulatoryItem) => {
+    if (selectedScenario === s.id) {
       onScenarioSelect(null)
     } else {
       setIsLoading(true)
       setTimeout(() => {
         onScenarioSelect({
-          id: scenario.id,
-          name: scenario.name,
-          type: type.id,
-          severity: scenario.severity,
-          probability: scenario.probability,
+          id: s.id,
+          name: s.name,
+          type: s.type,
+          severity: getSeverityNum(s as RegulatoryItem),
+          probability: (s as { probability?: number }).probability ?? 0.1,
+          source: s.source,
+          regulator: (s as { regulator?: string }).regulator,
+          parameters: (s as { parameters?: Record<string, unknown> }).parameters,
         })
+        setIsLoading(false)
+      }, 300)
+    }
+  }
+
+  const extendedList = useMemo(
+    () =>
+      (extendedCategories?.length ? extendedCategories : STRESS_EXTENDED_FALLBACK).map((c) => ({
+        ...c,
+        icon: (c as { icon?: unknown }).icon ?? Icons[c.id as keyof typeof Icons],
+        color: ((c as { color?: string }).color) ?? CATEGORY_COLORS[c.id] ?? 'cyan',
+      })),
+    [extendedCategories]
+  )
+
+  const handleScenarioClick = (
+    category: { id: string; scenarios: Array<{ id: string; name: string; severity?: number; severity_numeric?: number; probability?: number }> },
+    scenario: { id: string; name: string; severity?: number; severity_numeric?: number; probability?: number }
+  ) => {
+    if (selectedScenario === scenario.id) {
+      onScenarioSelect(null)
+    } else {
+      setIsLoading(true)
+      const sev = (scenario as { severity_numeric?: number }).severity_numeric ?? (typeof (scenario as { severity?: number }).severity === 'number' ? (scenario as { severity: number }).severity : 0.7)
+      setTimeout(() => {
+        onScenarioSelect({ id: scenario.id, name: scenario.name, type: category.id, severity: sev, probability: (scenario as { probability?: number }).probability ?? 0.1 })
         setIsLoading(false)
       }, 300)
     }
@@ -172,22 +187,14 @@ export default function StressTestSelector({
   if (isCollapsed) {
     return (
       <div className="space-y-2">
-        {STRESS_TEST_TYPES.map((type) => {
+        {extendedList.map((type) => {
           const colors = colorClasses[type.color]
-          const hasActiveScenario = type.scenarios.some(s => s.id === selectedScenario)
-          
+          const hasActive = type.scenarios.some((s) => s.id === selectedScenario)
           return (
             <button
               key={type.id}
               onClick={() => setExpandedType(expandedType === type.id ? null : type.id)}
-              className={`
-                w-10 h-10 rounded-lg flex items-center justify-center
-                transition-all duration-300
-                ${hasActiveScenario 
-                  ? `${colors.border} border-2 ${colors.glow} shadow-lg ${colors.text}` 
-                  : 'border border-white/10 hover:border-white/30 text-white/50'
-                }
-              `}
+              className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-300 ${hasActive ? `${colors.border} border-2 ${colors.glow} shadow-lg ${colors.text}` : 'border border-white/10 hover:border-white/30 text-white/50'}`}
               title={type.label}
             >
               {type.icon}
@@ -200,131 +207,162 @@ export default function StressTestSelector({
 
   return (
     <div className="space-y-1">
-      {/* Header */}
-      <div className="flex items-center gap-2 mb-3">
-        <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-        <span className="text-white/30 text-[10px] uppercase tracking-[0.2em]">
-          Scenarios
-        </span>
+      {/* Tabs */}
+      <div className="flex gap-1 p-0.5 rounded-lg bg-white/5 border border-white/10 mb-3">
+        <button
+          onClick={() => setActiveTab('regulatory')}
+          className={`flex-1 text-[10px] uppercase tracking-wider py-1.5 px-2 rounded ${activeTab === 'regulatory' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' : 'text-white/50 hover:text-white/70'}`}
+        >
+          Regulatory Library
+        </button>
+        <button
+          onClick={() => setActiveTab('extended')}
+          className={`flex-1 text-[10px] uppercase tracking-wider py-1.5 px-2 rounded ${activeTab === 'extended' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' : 'text-white/50 hover:text-white/70'}`}
+        >
+          Extended
+        </button>
       </div>
 
-      {/* Scenario Types */}
-      {STRESS_TEST_TYPES.map((type) => {
-        const colors = colorClasses[type.color]
-        const isExpanded = expandedType === type.id
-        const hasActiveScenario = type.scenarios.some(s => s.id === selectedScenario)
-
-        return (
-          <div key={type.id} className="relative">
-            {/* Type Header */}
-            <button
-              onClick={() => setExpandedType(isExpanded ? null : type.id)}
-              className={`
-                w-full flex items-center gap-2 px-2 py-1.5 rounded-lg
-                transition-all duration-200
-                ${isExpanded || hasActiveScenario 
-                  ? `bg-white/5 ${colors.border} border` 
-                  : 'hover:bg-white/5 border border-transparent'
-                }
-              `}
-            >
-              <span className={hasActiveScenario ? colors.text : 'text-white/50'}>
-                {type.icon}
-              </span>
-              <span className={`text-xs flex-1 text-left ${hasActiveScenario ? colors.text : 'text-white/60'}`}>
-                {type.label}
-              </span>
-              <span className="text-white/20 text-[10px]">
-                {type.scenarios.length}
-              </span>
-              <svg 
-                className={`w-3 h-3 text-white/30 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                fill="none" 
-                stroke="currentColor" 
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-
-            {/* Scenarios Dropdown */}
-            <AnimatePresence>
-              {isExpanded && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="overflow-hidden"
-                >
-                  <div className={`mt-1 ml-4 border-l-2 ${colors.border} pl-2 space-y-0.5`}>
-                    {type.scenarios.map((scenario) => {
-                      const isActive = selectedScenario === scenario.id
-
-                      return (
-                        <button
-                          key={scenario.id}
-                          onClick={() => handleScenarioClick(type, scenario)}
-                          disabled={isLoading}
-                          className={`
-                            w-full flex items-center gap-2 px-2 py-1.5 rounded
-                            transition-all duration-200 text-left group
-                            ${isActive 
-                              ? `bg-white/10 ${colors.border} border` 
-                              : 'hover:bg-white/5 border border-transparent'
-                            }
-                          `}
-                        >
-                          {/* Active Indicator */}
-                          <div className={`
-                            w-1.5 h-1.5 rounded-full transition-all
-                            ${isActive ? `${colors.bg} animate-pulse` : 'bg-white/20'}
-                          `} />
-                          
-                          {/* Name */}
-                          <span className={`
-                            text-xs flex-1 truncate
-                            ${isActive ? 'text-white' : 'text-white/50 group-hover:text-white/70'}
-                          `}>
-                            {scenario.name}
+      {/* Regulatory Library */}
+      <AnimatePresence mode="wait">
+        {activeTab === 'regulatory' && (
+          <motion.div key="regulatory" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-1">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+              <span className="text-white/30 text-[10px] uppercase tracking-[0.2em]">EBA, Fed, NGFS, BIS</span>
+            </div>
+            {regulatoryLoading ? (
+              <div className="flex justify-center py-6">
+                <div className="w-5 h-5 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
+              </div>
+            ) : (
+              <div className="max-h-[280px] overflow-y-auto custom-scrollbar space-y-1 pr-1">
+                {regulatoryLibrary.map((s) => {
+                  const isActive = selectedScenario === s.id
+                  return (
+                    <button
+                      key={s.id}
+                      onClick={() => handleRegulatoryClick(s)}
+                      disabled={isLoading}
+                      className={`w-full text-left rounded-lg p-2 border transition-all ${isActive ? 'bg-white/10 border-amber-500/40' : 'border-white/10 hover:border-white/20 hover:bg-white/5'}`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className={`text-xs font-medium truncate ${isActive ? 'text-amber-400' : 'text-white/90'}`}>{s.name}</span>
+                        <span className={`text-[10px] font-mono shrink-0 ${getSeverityNum(s as RegulatoryItem) > 0.8 ? 'text-red-400' : getSeverityNum(s as RegulatoryItem) > 0.6 ? 'text-orange-400' : 'text-yellow-400'}`}>
+                          {(getSeverityNum(s as RegulatoryItem) * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                      <div className="mt-1 flex flex-wrap gap-1 text-[10px] text-white/50">
+                        {[s.source, (s as { regulator?: string }).regulator, getHorizonLabel(s as RegulatoryItem)].filter(Boolean).join(' · ')}
+                      </div>
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {(s as { applicable_regulations?: string[] }).applicable_regulations?.map((r) => (
+                          <span key={r} className="px-1.5 py-0.5 rounded bg-white/10 text-[9px] text-white/60">
+                            {r}
                           </span>
-                          
-                          {/* Severity Badge */}
-                          <span className={`
-                            text-[10px] font-mono px-1 py-0.5 rounded
-                            ${scenario.severity > 0.8 
-                              ? 'bg-red-500/20 text-red-400' 
-                              : scenario.severity > 0.6 
-                                ? 'bg-orange-500/20 text-orange-400'
-                                : 'bg-yellow-500/20 text-yellow-400'
-                            }
-                          `}>
-                            {(scenario.severity * 100).toFixed(0)}%
-                          </span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        )
-      })}
+                        ))}
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </motion.div>
+        )}
 
-      {/* Loading Indicator */}
-      <AnimatePresence>
-        {isLoading && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="flex items-center justify-center py-2"
-          >
-            <div className="w-4 h-4 border-2 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin" />
+        {activeTab === 'extended' && (
+          <motion.div key="extended" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-1">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+              <span className="text-white/30 text-[10px] uppercase tracking-[0.2em]">Scenarios</span>
+            </div>
+            {extendedList.map((type) => {
+              const colors = colorClasses[type.color]
+              const isExpanded = expandedType === type.id
+              const hasActive = type.scenarios.some((s) => s.id === selectedScenario)
+              return (
+                <div key={type.id} className="relative">
+                  <button
+                    onClick={() => setExpandedType(isExpanded ? null : type.id)}
+                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-all border ${isExpanded || hasActive ? `bg-white/5 ${colors.border}` : 'hover:bg-white/5 border-transparent'}`}
+                  >
+                    <span className={hasActive ? colors.text : 'text-white/50'}>{type.icon}</span>
+                    <span className={`text-xs flex-1 text-left ${hasActive ? colors.text : 'text-white/60'}`}>{type.label}</span>
+                    <span className="text-white/20 text-[10px]">{type.scenarios.length}</span>
+                    <svg className={`w-3 h-3 text-white/30 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  <AnimatePresence>
+                    {isExpanded && (
+                      <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
+                        <div className={`mt-1 ml-4 border-l-2 ${colors.border} pl-2 max-h-[240px] overflow-y-auto custom-scrollbar pr-1`}>
+                          {type.scenarios.map((sc) => {
+                            const isActive = selectedScenario === sc.id
+                            return (
+                              <button
+                                key={sc.id}
+                                onClick={() => handleScenarioClick(type, sc)}
+                                disabled={isLoading}
+                                className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-left group border transition-all ${isActive ? `bg-white/10 ${colors.border}` : 'border-transparent hover:bg-white/5'}`}
+                              >
+                                <div className={`w-1.5 h-1.5 rounded-full ${isActive ? `${colors.bg} animate-pulse` : 'bg-white/20'}`} />
+                                <span className={`text-xs flex-1 truncate ${isActive ? 'text-white' : 'text-white/50 group-hover:text-white/70'}`}>{sc.name}</span>
+                                <span className={`text-[10px] font-mono px-1 py-0.5 rounded ${getSeverityNum(sc) > 0.8 ? 'bg-red-500/20 text-red-400' : getSeverityNum(sc) > 0.6 ? 'bg-orange-500/20 text-orange-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
+                                  {(getSeverityNum(sc) * 100).toFixed(0)}%
+                                </span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )
+            })}
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Loading */}
+      <AnimatePresence>
+        {isLoading && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex justify-center py-2">
+            <div className="w-4 h-4 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Collapsible: About the stress testing database */}
+      <div className="mt-3 border-t border-white/10 pt-2">
+        <button
+          onClick={() => setCollapseInfoOpen((v) => !v)}
+          className="w-full flex items-center justify-between text-white/40 hover:text-white/60 text-[10px] uppercase tracking-wider"
+        >
+          <span>About the stress testing database</span>
+          <svg className={`w-3 h-3 transition-transform ${collapseInfoOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        <AnimatePresence>
+          {collapseInfoOpen && (
+            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
+              <div className="pt-2 space-y-2 text-[11px] text-white/50 leading-relaxed">
+                <p>
+                  The stress testing database is not a single dataset but four layers: (1) regulatory scenarios (EBA, Fed, NGFS, BIS), (2) macroeconomic time series, (3) climate scenarios, (4) financial proxies (PD, LGD, capital impact).
+                </p>
+                <p>
+                  Sources: EBA/ECB — Adverse/Baseline; Federal Reserve — CCAR/DFAST, Severely Adverse; NGFS — SSP1-2.6, SSP2-4.5, SSP5-8.5; BIS/IMF — system-wide and contagion scenarios.
+                </p>
+                <p>
+                  <span className="text-white/70">For this demo:</span> regulator-recognized scenarios from EBA, Federal Reserve, NGFS, and BIS, adapted to portfolios and jurisdictions.
+                </p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   )
 }

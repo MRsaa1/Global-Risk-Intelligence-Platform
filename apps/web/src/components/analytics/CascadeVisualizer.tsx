@@ -90,16 +90,16 @@ function formatCurrency(value: number): string {
   return `$${value.toFixed(0)}`
 }
 
-// Sector configuration with professional colors
+// Sector configuration with professional MUTED colors
 const sectorConfig: Record<string, { color: string; label: string }> = {
-  Energy: { color: '#f59e0b', label: 'Energy' },
-  Finance: { color: '#3b82f6', label: 'Finance' },
-  Manufacturing: { color: '#8b5cf6', label: 'Manufacturing' },
-  Technology: { color: '#06b6d4', label: 'Technology' },
-  Healthcare: { color: '#10b981', label: 'Healthcare' },
-  Logistics: { color: '#f97316', label: 'Logistics' },
-  Infrastructure: { color: '#ec4899', label: 'Infrastructure' },
-  Default: { color: '#6b7280', label: 'Asset' },
+  Energy: { color: '#8a7a5a', label: 'Energy' },         // muted gold/brown
+  Finance: { color: '#4a6a8a', label: 'Finance' },       // muted steel blue
+  Manufacturing: { color: '#6a5a7a', label: 'Manufacturing' }, // muted purple
+  Technology: { color: '#7a8a7a', label: 'Technology' },  // muted sage
+  Healthcare: { color: '#5a7a6a', label: 'Healthcare' },  // muted teal
+  Logistics: { color: '#8a6a5a', label: 'Logistics' },    // muted terracotta
+  Infrastructure: { color: '#5a6a7a', label: 'Infrastructure' }, // muted slate
+  Default: { color: '#6a7080', label: 'Asset' },         // neutral gray
 }
 
 // Professional SVG icon paths for each sector
@@ -221,23 +221,28 @@ const sectorIcons: Record<string, (ctx: CanvasRenderingContext2D, x: number, y: 
 }
 
 // Main Component
-export default function CascadeVisualizer() {
+export interface CascadeVisualizerProps {
+  cityId?: string
+  scenarioId?: string
+}
+
+export default function CascadeVisualizer({ cityId, scenarioId }: CascadeVisualizerProps = {}) {
   const graphRef = useRef<ForceGraphMethods>()
   const containerRef = useRef<HTMLDivElement>(null)
-  const [dimensions, setDimensions] = useState({ width: 1200, height: 700 })
+  const [dimensions, setDimensions] = useState({ width: 1200, height: 896 })
   const [selectedNode, setSelectedNode] = useState<FGNode | null>(null)
   const [triggerNode, setTriggerNode] = useState<string>('asset_0')
   const [triggerSeverity, setTriggerSeverity] = useState(0.8)
   const [graphData, setGraphData] = useState<{ nodes: GraphNode[]; edges: GraphEdge[] }>({ nodes: [], edges: [] })
   
-  // Responsive dimensions - EXTRA LARGE (50% taller)
+  // Responsive dimensions - 20% smaller height (from previous size)
   useEffect(() => {
     const updateDimensions = () => {
       if (containerRef.current) {
         const rect = containerRef.current.getBoundingClientRect()
         setDimensions({ 
           width: Math.max(1000, rect.width), 
-          height: Math.max(900, window.innerHeight - 200) 
+          height: Math.max(1152, (window.innerHeight * 1.5) * 0.64) 
         })
       }
     }
@@ -254,6 +259,24 @@ export default function CascadeVisualizer() {
       return res.json()
     },
     onSuccess: () => fetchGraph(),
+  })
+
+  // Build graph from city and scenario context
+  const buildFromContextMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch('/api/v1/whatif/cascade/build-from-context', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ city_id: cityId!, scenario_id: scenarioId! }),
+      })
+      if (!res.ok) throw new Error('Failed to build graph from context')
+      return res.json() as Promise<{ nodes: GraphNode[]; edges: GraphEdge[] }>
+    },
+    onSuccess: (data) => {
+      setGraphData({ nodes: data.nodes, edges: data.edges })
+      if (data.nodes.length > 0) setTriggerNode(data.nodes[0].id)
+      simulateMutation.reset()
+    },
   })
   
   // Fetch graph
@@ -295,17 +318,21 @@ export default function CascadeVisualizer() {
     },
   })
   
-  // Initialize
+  // Initialize: build-from-context when both cityId and scenarioId set, else sample
   useEffect(() => {
-    createGraphMutation.mutate()
-  }, [])
+    if (cityId && scenarioId) {
+      buildFromContextMutation.mutate()
+    } else {
+      createGraphMutation.mutate()
+    }
+  }, [cityId, scenarioId])
   
   // Configure force simulation after graph loads
   useEffect(() => {
     if (graphRef.current && graphData.nodes.length > 0) {
-      // Increase repulsion force to spread nodes
-      graphRef.current.d3Force('charge')?.strength(-800)
-      graphRef.current.d3Force('link')?.distance(150)
+      // Increase repulsion force to spread nodes even further apart
+      graphRef.current.d3Force('charge')?.strength(-2000)  // Increased for more spacing between nodes
+      graphRef.current.d3Force('link')?.distance(400)  // Increased to spread nodes further apart
       // Add center force
       graphRef.current.d3Force('center')?.strength(0.05)
     }
@@ -324,7 +351,7 @@ export default function CascadeVisualizer() {
       
       return {
         ...node,
-        color: isTrigger ? '#ef4444' : isContainment ? '#22c55e' : isAffected ? `rgba(239, 68, 68, ${0.4 + impact * 0.6})` : config.color,
+        color: isTrigger ? '#8a4a4a' : isContainment ? '#4a7a5a' : isAffected ? `rgba(138, 74, 74, ${0.5 + impact * 0.5})` : config.color,
         isAffected,
         isTrigger,
         isContainment,
@@ -359,19 +386,19 @@ export default function CascadeVisualizer() {
     const baseSize = 22 + Math.log10(node.value / 1_000_000 + 1) * 6
     const size = baseSize
     
-    // Glow effect for affected/trigger nodes
+    // Glow effect for affected/trigger nodes - MUTED
     if (node.isTrigger || node.isAffected) {
-      const glowSize = size * 2
+      const glowSize = size * 1.8
       const gradient = ctx.createRadialGradient(x, y, size * 0.5, x, y, glowSize)
       
       if (node.isTrigger) {
-        gradient.addColorStop(0, 'rgba(239, 68, 68, 0.8)')
-        gradient.addColorStop(0.4, 'rgba(239, 68, 68, 0.4)')
+        gradient.addColorStop(0, 'rgba(138, 74, 74, 0.6)')
+        gradient.addColorStop(0.5, 'rgba(138, 74, 74, 0.3)')
         gradient.addColorStop(1, 'transparent')
       } else {
         const intensity = node.impact || 0.3
-        gradient.addColorStop(0, `rgba(239, 68, 68, ${intensity * 0.6})`)
-        gradient.addColorStop(0.4, `rgba(239, 68, 68, ${intensity * 0.3})`)
+        gradient.addColorStop(0, `rgba(138, 74, 74, ${intensity * 0.4})`)
+        gradient.addColorStop(0.5, `rgba(138, 74, 74, ${intensity * 0.2})`)
         gradient.addColorStop(1, 'transparent')
       }
       
@@ -381,12 +408,12 @@ export default function CascadeVisualizer() {
       ctx.fill()
     }
     
-    // Containment point glow (green)
+    // Containment point glow - MUTED green
     if (node.isContainment) {
-      const glowSize = size * 1.8
+      const glowSize = size * 1.6
       const gradient = ctx.createRadialGradient(x, y, size * 0.5, x, y, glowSize)
-      gradient.addColorStop(0, 'rgba(34, 197, 94, 0.7)')
-      gradient.addColorStop(0.5, 'rgba(34, 197, 94, 0.3)')
+      gradient.addColorStop(0, 'rgba(74, 122, 90, 0.5)')
+      gradient.addColorStop(0.5, 'rgba(74, 122, 90, 0.2)')
       gradient.addColorStop(1, 'transparent')
       ctx.beginPath()
       ctx.arc(x, y, glowSize, 0, Math.PI * 2)
@@ -397,10 +424,10 @@ export default function CascadeVisualizer() {
     // Main node circle with gradient
     const baseColor = node.color || '#6b7280'
     
-    // Outer ring
+    // Outer ring - subtle
     ctx.beginPath()
-    ctx.arc(x, y, size + 3, 0, Math.PI * 2)
-    ctx.fillStyle = node.isTrigger ? 'rgba(255,255,255,0.9)' : node.isContainment ? 'rgba(34, 197, 94, 0.8)' : 'rgba(255,255,255,0.15)'
+    ctx.arc(x, y, size + 2, 0, Math.PI * 2)
+    ctx.fillStyle = node.isTrigger ? 'rgba(255,255,255,0.6)' : node.isContainment ? 'rgba(74, 122, 90, 0.6)' : 'rgba(255,255,255,0.1)'
     ctx.fill()
     
     // Main circle
@@ -474,22 +501,22 @@ export default function CascadeVisualizer() {
     ctx.lineTo(target.x, target.y)
     
     if (isActive) {
-      // Animated glow for active links
-      ctx.strokeStyle = 'rgba(239, 68, 68, 0.4)'
-      ctx.lineWidth = 6
+      // Animated glow for active links - muted
+      ctx.strokeStyle = 'rgba(138, 74, 74, 0.3)'
+      ctx.lineWidth = 4
       ctx.stroke()
       
-      ctx.strokeStyle = '#ef4444'
-      ctx.lineWidth = 2
+      ctx.strokeStyle = 'rgba(138, 74, 74, 0.7)'
+      ctx.lineWidth = 1.5
     } else {
-      ctx.strokeStyle = 'rgba(100, 116, 139, 0.25)'
+      ctx.strokeStyle = 'rgba(100, 116, 139, 0.2)'
       ctx.lineWidth = 1
     }
     ctx.stroke()
     
     // Arrow
     const angle = Math.atan2(target.y - source.y, target.x - source.x)
-    const arrowLen = 10
+    const arrowLen = 8
     const arrowPos = 0.65
     const arrowX = source.x + (target.x - source.x) * arrowPos
     const arrowY = source.y + (target.y - source.y) * arrowPos
@@ -505,7 +532,7 @@ export default function CascadeVisualizer() {
       arrowY - arrowLen * Math.sin(angle + Math.PI / 7)
     )
     ctx.closePath()
-    ctx.fillStyle = isActive ? '#ef4444' : 'rgba(100, 116, 139, 0.4)'
+    ctx.fillStyle = isActive ? 'rgba(138, 74, 74, 0.7)' : 'rgba(100, 116, 139, 0.3)'
     ctx.fill()
   }, [])
   
@@ -545,13 +572,17 @@ export default function CascadeVisualizer() {
             </button>
             <button
               onClick={() => {
-                createGraphMutation.mutate()
-                simulateMutation.reset()
+                if (cityId && scenarioId) {
+                  buildFromContextMutation.mutate()
+                } else {
+                  createGraphMutation.mutate()
+                  simulateMutation.reset()
+                }
               }}
-              disabled={createGraphMutation.isPending}
+              disabled={createGraphMutation.isPending || buildFromContextMutation.isPending}
               className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-sm text-white/60 flex items-center gap-2 transition-colors"
             >
-              <ArrowPathIcon className={`w-4 h-4 ${createGraphMutation.isPending ? 'animate-spin' : ''}`} />
+              <ArrowPathIcon className={`w-4 h-4 ${(createGraphMutation.isPending || buildFromContextMutation.isPending) ? 'animate-spin' : ''}`} />
               Reset Graph
             </button>
           </div>
@@ -600,10 +631,10 @@ export default function CascadeVisualizer() {
                 ctx.fill()
               }}
               linkCanvasObject={linkCanvasObject}
-              linkDirectionalParticles={3}
-              linkDirectionalParticleSpeed={0.004}
-              linkDirectionalParticleWidth={3}
-              linkDirectionalParticleColor={(link: any) => link.isActive ? '#ef4444' : '#334155'}
+              linkDirectionalParticles={2}
+              linkDirectionalParticleSpeed={0.003}
+              linkDirectionalParticleWidth={2}
+              linkDirectionalParticleColor={(link: any) => link.isActive ? '#8a4a4a' : '#4a5568'}
               onNodeClick={handleNodeClick}
               cooldownTicks={200}
               d3AlphaDecay={0.01}
@@ -617,7 +648,7 @@ export default function CascadeVisualizer() {
           )}
           
           {/* Loading overlay */}
-          {createGraphMutation.isPending && (
+          {(createGraphMutation.isPending || buildFromContextMutation.isPending) && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm">
               <div className="flex flex-col items-center gap-3">
                 <div className="w-10 h-10 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
@@ -630,15 +661,15 @@ export default function CascadeVisualizer() {
         {/* Legend */}
         <div className="mt-4 flex flex-wrap items-center gap-6 text-xs text-white/50">
           <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded-full bg-red-500 shadow-lg shadow-red-500/50" />
+            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#8a4a4a' }} />
             <span>Trigger Node</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded-full bg-red-500/50" />
+            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: 'rgba(138, 74, 74, 0.6)' }} />
             <span>Affected</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/50" />
+            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#4a7a5a' }} />
             <span>Containment Point</span>
           </div>
           <div className="w-px h-4 bg-white/20" />
@@ -691,7 +722,7 @@ export default function CascadeVisualizer() {
           <button
             onClick={() => simulateMutation.mutate()}
             disabled={simulateMutation.isPending}
-            className="w-full py-3 bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all shadow-lg shadow-red-500/25"
+            className="w-full py-3 bg-primary-500/20 hover:bg-primary-500/30 border border-primary-500/30 text-primary-300 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all"
           >
             {simulateMutation.isPending ? (
               <ArrowPathIcon className="w-4 h-4 animate-spin" />
@@ -738,11 +769,11 @@ export default function CascadeVisualizer() {
                 <div className="pt-3 border-t border-white/10">
                   <div className="flex items-center justify-between text-xs mb-1">
                     <span className="text-white/40">Cascade Impact</span>
-                    <span className="text-red-400 font-medium">{(selectedNode.impact * 100).toFixed(0)}%</span>
+                    <span className="text-white/70 font-medium">{(selectedNode.impact * 100).toFixed(0)}%</span>
                   </div>
-                  <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                  <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
                     <motion.div 
-                      className="h-full bg-gradient-to-r from-red-500 to-orange-500 rounded-full"
+                      className="h-full bg-accent-500 rounded-full"
                       initial={{ width: 0 }}
                       animate={{ width: `${selectedNode.impact * 100}%` }}
                     />
@@ -765,14 +796,14 @@ export default function CascadeVisualizer() {
           {simulateMutation.data ? (
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
-                <div className="text-center p-3 bg-red-500/10 rounded-lg border border-red-500/20">
-                  <div className="text-2xl font-bold text-red-400">
+                <div className="text-center p-3 bg-white/5 rounded-lg border border-white/10">
+                  <div className="text-2xl font-bold text-white/80">
                     {simulateMutation.data.affected_count}
                   </div>
                   <div className="text-[10px] text-white/40">Nodes Affected</div>
                 </div>
-                <div className="text-center p-3 bg-orange-500/10 rounded-lg border border-orange-500/20">
-                  <div className="text-lg font-bold text-orange-400">
+                <div className="text-center p-3 bg-white/5 rounded-lg border border-white/10">
+                  <div className="text-lg font-bold text-accent-400">
                     {formatCurrency(simulateMutation.data.total_loss)}
                   </div>
                   <div className="text-[10px] text-white/40">Total Loss</div>
@@ -784,7 +815,7 @@ export default function CascadeVisualizer() {
                   <span className="text-xs text-white/40">Containment Points</span>
                   <div className="flex flex-wrap gap-1 mt-1">
                     {simulateMutation.data.containment_points.map(p => (
-                      <span key={p} className="text-xs px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded-full border border-emerald-500/30">
+                      <span key={p} className="text-xs px-2 py-0.5 bg-white/5 text-white/70 rounded border border-white/10">
                         {p.replace('asset_', 'A')}
                       </span>
                     ))}
@@ -813,12 +844,12 @@ export default function CascadeVisualizer() {
                     {vulnerabilityMutation.data.network_resilience_score.toFixed(0)}%
                   </span>
                 </div>
-                <div className="h-3 bg-white/10 rounded-full overflow-hidden">
+                <div className="h-2 bg-white/5 rounded-full overflow-hidden">
                   <motion.div 
                     className={`h-full rounded-full ${
-                      vulnerabilityMutation.data.network_resilience_score >= 70 ? 'bg-gradient-to-r from-emerald-500 to-green-400' :
-                      vulnerabilityMutation.data.network_resilience_score >= 40 ? 'bg-gradient-to-r from-amber-500 to-yellow-400' : 
-                      'bg-gradient-to-r from-red-500 to-orange-400'
+                      vulnerabilityMutation.data.network_resilience_score >= 70 ? 'bg-primary-500' :
+                      vulnerabilityMutation.data.network_resilience_score >= 40 ? 'bg-accent-500' : 
+                      'bg-white/40'
                     }`}
                     initial={{ width: 0 }}
                     animate={{ width: `${vulnerabilityMutation.data.network_resilience_score}%` }}
@@ -832,7 +863,7 @@ export default function CascadeVisualizer() {
                   <span className="text-xs text-white/40">Single Points of Failure</span>
                   <div className="flex flex-wrap gap-1 mt-1">
                     {vulnerabilityMutation.data.single_points_of_failure.slice(0, 4).map(s => (
-                      <span key={s} className="text-xs px-2 py-0.5 bg-red-500/20 text-red-400 rounded-full border border-red-500/30">
+                      <span key={s} className="text-xs px-2 py-0.5 bg-white/5 text-white/60 rounded border border-white/10">
                         {s.replace('asset_', 'A')}
                       </span>
                     ))}

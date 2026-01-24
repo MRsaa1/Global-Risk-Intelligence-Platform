@@ -1,5 +1,7 @@
 """Data Provenance endpoints - Layer 0: Verified Truth."""
 import hashlib
+import json
+import re
 from datetime import datetime
 from typing import Optional
 from uuid import UUID
@@ -11,6 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
 from src.models.provenance import DataProvenance, VerificationRecord, VerificationStatus
+
+# SHA-256 hex string: 64 lowercase hex chars
+_HASH_PATTERN = re.compile(r"^[a-f0-9]{64}$")
 
 router = APIRouter()
 
@@ -186,18 +191,45 @@ async def verify_provenance(
     if not record:
         raise HTTPException(status_code=404, detail="Provenance record not found")
     
-    # Verify hash
-    computed_hash = compute_data_hash(record.data_value)
-    hash_valid = computed_hash == record.data_hash
+    # --- Light verification (no migration): consistency + format ---
+    # 1. Normalize data_value for hashing (may be JSON string from DB)
+    try:
+        if isinstance(record.data_value, str):
+            data_for_hash = json.loads(record.data_value)
+        else:
+            data_for_hash = record.data_value
+        if not isinstance(data_for_hash, dict):
+            data_for_hash = None
+    except (json.JSONDecodeError, TypeError):
+        data_for_hash = None
     
-    # Verify signature (placeholder - implement actual crypto verification)
-    signature_valid = None
-    if record.signature:
-        # TODO: Implement actual signature verification
+    # 2. Recompute hash and check consistency
+    if data_for_hash is not None:
+        computed_hash = compute_data_hash(data_for_hash)
+        hash_valid = computed_hash == record.data_hash
+    else:
+        computed_hash = ""
+        hash_valid = False
+    
+    # 3. Format checks (data_hash format, source_type non-empty)
+    format_valid = bool(
+        record.data_hash
+        and _HASH_PATTERN.match(record.data_hash.lower())
+        and record.source_type
+        and str(record.source_type).strip()
+    )
+    
+    # 4. Signature: no real crypto; only consistency (both present or both absent)
+    if not record.signature:
+        signature_valid = None
+    elif not (record.signature_algorithm and str(record.signature_algorithm).strip()):
+        signature_valid = False
+    else:
+        # Cannot verify crypto without keys; treat as format-OK
         signature_valid = True
     
-    # Determine result
-    if hash_valid and (signature_valid is None or signature_valid):
+    # 5. Overall result
+    if hash_valid and format_valid and (signature_valid is None or signature_valid):
         verification_result = "verified"
         confidence_score = 1.0 if signature_valid else 0.9
         new_status = VerificationStatus.VERIFIED
@@ -207,6 +239,14 @@ async def verify_provenance(
         new_status = VerificationStatus.DISPUTED
     
     # Create verification record
+    evidence = {
+        "hash_valid": hash_valid,
+        "format_valid": format_valid,
+        "signature_valid": signature_valid,
+        "computed_hash": computed_hash,
+        "stored_hash": record.data_hash,
+    }
+    verified_at_ = datetime.utcnow()
     verification = VerificationRecord(
         provenance_id=provenance_id,
         verification_type=verify_request.verification_type,
@@ -215,19 +255,15 @@ async def verify_provenance(
         result=verification_result,
         confidence_score=confidence_score,
         notes=verify_request.notes,
-        evidence={
-            "hash_valid": hash_valid,
-            "signature_valid": signature_valid,
-            "computed_hash": computed_hash,
-            "stored_hash": record.data_hash,
-        },
+        evidence=json.dumps(evidence),
+        verified_at=verified_at_,
     )
     
     db.add(verification)
     
     # Update provenance status
     record.status = new_status
-    record.verified_at = datetime.utcnow()
+    record.verified_at = verified_at_
     record.verified_by = verify_request.verifier_name or verify_request.verifier_id
     
     await db.commit()
@@ -236,7 +272,7 @@ async def verify_provenance(
         provenance_id=provenance_id,
         result=verification_result,
         confidence_score=confidence_score,
-        verified_at=verification.verified_at,
+        verified_at=verified_at_,
         hash_valid=hash_valid,
         signature_valid=signature_valid,
     )

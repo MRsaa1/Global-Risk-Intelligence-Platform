@@ -99,6 +99,12 @@ class CascadeSimRequest(BaseModel):
     propagation_threshold: float = Field(0.1, ge=0, le=1)
 
 
+class BuildFromContextRequest(BaseModel):
+    """Build cascade graph from city and scenario context."""
+    city_id: str
+    scenario_id: str
+
+
 class ScenarioResponse(BaseModel):
     """Scenario response."""
     id: str
@@ -417,6 +423,39 @@ async def build_cascade_graph():
         "status": "built",
         "nodes": len(cascade_gnn_service.nodes),
         "edges": len(cascade_gnn_service.edges),
+    }
+
+
+@router.post("/cascade/build-from-context")
+async def build_cascade_from_context(request: BuildFromContextRequest):
+    """Build cascade graph from city and scenario context (geodata + scenario-type template)."""
+    cascade_gnn_service.build_graph_for_city_scenario(
+        city_id=request.city_id,
+        scenario_id=request.scenario_id,
+    )
+    return {
+        "status": "built",
+        "nodes": [
+            {
+                "id": n.id,
+                "name": n.name,
+                "type": n.node_type.value,
+                "value": n.value,
+                "risk_score": n.risk_score,
+                "sector": n.sector,
+                "region": n.region,
+            }
+            for n in cascade_gnn_service.nodes.values()
+        ],
+        "edges": [
+            {
+                "source": e.source_id,
+                "target": e.target_id,
+                "type": e.edge_type.value,
+                "weight": e.weight,
+            }
+            for e in cascade_gnn_service.edges
+        ],
     }
 
 

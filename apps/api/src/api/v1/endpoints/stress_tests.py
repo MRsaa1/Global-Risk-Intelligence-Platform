@@ -30,6 +30,8 @@ from src.models.stress_test import (
     OrganizationType,
 )
 from src.models.asset import Asset
+from src.services.event_emitter import event_emitter
+from src.models.events import EventTypes
 
 router = APIRouter(prefix="/stress-tests", tags=["Stress Tests"])
 
@@ -290,6 +292,20 @@ async def create_stress_test(
     }
 
 
+@router.get("/scenarios/library")
+async def get_stress_scenario_library():
+    """Regulatory stress scenario library (EBA, Fed, NGFS, IMF). Full schema: type, severity_numeric, horizon."""
+    from src.services.stress_scenario_registry import get_stress_scenario_library as _get_library
+    return _get_library()
+
+
+@router.get("/scenarios/extended")
+async def get_extended_scenarios():
+    """Extended stress scenario tree (by category)."""
+    from src.services.stress_scenario_registry import get_extended_scenarios_tree
+    return get_extended_scenarios_tree()
+
+
 @router.get("/{test_id}", response_model=StressTestResponse)
 async def get_stress_test(
     test_id: str,
@@ -399,8 +415,19 @@ async def delete_stress_test(
     if not test:
         raise HTTPException(status_code=404, detail="Stress test not found")
     
+    test_name = test.name
     await session.delete(test)
     await session.commit()
+    
+    # Emit stress test deleted event
+    await event_emitter.emit(
+        event_type=EventTypes.STRESS_TEST_DELETED,
+        entity_type="stress_test",
+        entity_id=test_id,
+        action="deleted",
+        data={"name": test_name},
+        intent=False,
+    )
 
 
 # =============================================================================
@@ -437,6 +464,21 @@ async def create_risk_zone(
     session.add(zone)
     await session.commit()
     await session.refresh(zone)
+    
+    # Emit zone created event
+    await event_emitter.emit(
+        event_type=EventTypes.RISK_ZONE_CREATED,
+        entity_type="zone",
+        entity_id=zone.id,
+        action="created",
+        data={
+            "name": zone.name,
+            "zone_level": zone.zone_level,
+            "stress_test_id": test_id,
+            "risk_score": zone.risk_score,
+        },
+        intent=False,
+    )
     
     return zone
 
@@ -710,6 +752,15 @@ Write in English only."""
     # Save to database
     test_id = str(uuid4())
     
+    # Emit stress test started event
+    started_event = await event_emitter.emit_stress_test_started(
+        test_id=test_id,
+        name=result.event_name,
+        test_type=result.event_type.value if hasattr(result.event_type, 'value') else str(result.event_type),
+        severity=request.severity,
+        probability=0.5,
+    )
+    
     # Create stress test record
     stress_test = StressTest(
         id=test_id,
@@ -769,6 +820,18 @@ Write in English only."""
     session.add(report)
     
     await session.commit()
+    
+    # Emit stress test completed event
+    await event_emitter.emit_stress_test_completed(
+        test_id=test_id,
+        name=result.event_name,
+        result={
+            "zones": len(result.zones),
+            "expected_loss": result.total_loss,
+            "buildings_affected": result.total_buildings_affected,
+        },
+        caused_by=started_event.event_id,
+    )
     
     return QuickStressTestResponse(
         id=test_id,
@@ -870,6 +933,15 @@ async def execute_nvidia_enhanced_stress_test(
     # Save to database
     test_id = str(uuid4())
     
+    # Emit stress test started event
+    started_event = await event_emitter.emit_stress_test_started(
+        test_id=test_id,
+        name=zones_result.event_name,
+        test_type=event_type.value,
+        severity=adjusted_severity,
+        probability=0.5,
+    )
+    
     stress_test = StressTest(
         id=test_id,
         name=zones_result.event_name,
@@ -907,6 +979,19 @@ async def execute_nvidia_enhanced_stress_test(
         session.add(risk_zone)
     
     await session.commit()
+    
+    # Emit stress test completed event
+    await event_emitter.emit_stress_test_completed(
+        test_id=test_id,
+        name=zones_result.event_name,
+        result={
+            "zones": len(zones_result.zones),
+            "expected_loss": zones_result.total_loss,
+            "buildings_affected": zones_result.total_buildings_affected,
+            "nvidia_services": pipeline_result.nvidia_services_used,
+        },
+        caused_by=started_event.event_id,
+    )
     
     logger.info(
         "NVIDIA-enhanced stress test completed",
@@ -1001,6 +1086,15 @@ async def run_stress_test(
     test.status = StressTestStatus.RUNNING.value
     await session.commit()
     
+    # Emit stress test started event
+    started_event = await event_emitter.emit_stress_test_started(
+        test_id=test_id,
+        name=test.name,
+        test_type=test.test_type,
+        severity=test.severity,
+        probability=test.probability,
+    )
+    
     try:
         # Find affected assets based on location
         if test.center_latitude and test.center_longitude and test.radius_km:
@@ -1013,6 +1107,14 @@ async def run_stress_test(
                 )
             )
             assets = affected_assets.scalars().all()
+            
+            # Emit progress update - 25%
+            await event_emitter.emit_stress_test_progress(
+                test_id=test_id,
+                progress=25,
+                status="running",
+                message="Finding affected assets...",
+            )
             
             # Filter by approximate distance
             affected = []
@@ -1027,12 +1129,29 @@ async def run_stress_test(
             
             test.affected_assets_count = len(affected)
             
+            # Emit progress update - 50%
+            await event_emitter.emit_stress_test_progress(
+                test_id=test_id,
+                progress=50,
+                status="running",
+                message=f"Found {len(affected)} affected assets",
+            )
+            
             # Calculate total exposure and expected loss
             total_exposure = sum(a.current_valuation or 0 for a in affected)
             test.total_exposure = total_exposure
             test.expected_loss = total_exposure * abs(test.valuation_impact_pct) / 100 * test.probability
             
+            # Emit progress update - 75%
+            await event_emitter.emit_stress_test_progress(
+                test_id=test_id,
+                progress=75,
+                status="running",
+                message="Creating risk zones...",
+            )
+            
             # Create/update risk zones based on severity
+            created_zones = []
             if affected:
                 # Create concentric zones
                 zones_data = [
@@ -1054,14 +1173,49 @@ async def run_stress_test(
                         name=f"{zone_level.value.title()} Zone",
                     )
                     session.add(zone)
+                    created_zones.append(zone)
+            
+            await session.flush()  # Flush to get zone IDs
+            
+            # Emit zone created events
+            for zone in created_zones:
+                await event_emitter.emit_risk_zone_created(
+                    zone_id=zone.id,
+                    zone_name=zone.name or f"{zone.zone_level} Zone",
+                    zone_level=zone.zone_level,
+                    risk_score=zone.risk_score,
+                    stress_test_id=test_id,
+                    caused_by=started_event.event_id,
+                )
         
         test.status = StressTestStatus.COMPLETED.value
         await session.commit()
         await session.refresh(test)
         
+        # Emit stress test completed event
+        await event_emitter.emit_stress_test_completed(
+            test_id=test_id,
+            name=test.name,
+            result={
+                "zones": len(created_zones) if 'created_zones' in locals() else 0,
+                "affected_assets": test.affected_assets_count,
+                "expected_loss": test.expected_loss,
+            },
+            caused_by=started_event.event_id,
+        )
+        
     except Exception as e:
         test.status = StressTestStatus.FAILED.value
         await session.commit()
+        
+        # Emit stress test failed event
+        await event_emitter.emit_stress_test_failed(
+            test_id=test_id,
+            name=test.name,
+            error=str(e),
+            caused_by=started_event.event_id,
+        )
+        
         raise HTTPException(status_code=500, detail=str(e))
     
     return await get_stress_test(test_id, session)

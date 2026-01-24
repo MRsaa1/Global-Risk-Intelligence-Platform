@@ -79,7 +79,7 @@ export default function RiskGraphPanel({ data }: RiskGraphPanelProps) {
   const getEdgeColor = (weight: number) => {
     if (weight >= 0.8) return '#ef4444'
     if (weight >= 0.6) return '#f59e0b'
-    return '#22d3ee'
+    return '#C9A962'
   }
 
   const getNode = (id: string) => nodes.find(n => n.id === id)
@@ -89,7 +89,7 @@ export default function RiskGraphPanel({ data }: RiskGraphPanelProps) {
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-[#1a2535]">
         <div className="flex items-center gap-2">
-          <svg className="w-4 h-4 text-cyan-400" fill="currentColor" viewBox="0 0 20 20">
+          <svg className="w-4 h-4 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
             <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" />
           </svg>
           <span className="text-white font-medium text-sm">Portfolio Risk Graph</span>
@@ -263,7 +263,7 @@ export default function RiskGraphPanel({ data }: RiskGraphPanelProps) {
 
           <div>
             <div className="text-gray-500 text-[10px]">Critical Links:</div>
-            <div className="text-cyan-400 text-xl font-bold">{data.criticalLinks}</div>
+            <div className="text-amber-400 text-xl font-bold">{data.criticalLinks}</div>
           </div>
 
           {data.cascadeDetected && (

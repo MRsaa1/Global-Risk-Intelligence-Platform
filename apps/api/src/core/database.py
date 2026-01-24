@@ -57,11 +57,26 @@ database_url = get_database_url()
 # Determine if using SQLite
 is_sqlite = database_url.startswith("sqlite")
 
+
+def _get_engine_kwargs() -> dict:
+    """Get optimized engine configuration."""
+    if is_sqlite:
+        return {}  # SQLite doesn't support pooling options
+    
+    # PostgreSQL optimized settings
+    return {
+        "pool_size": 20,           # Number of connections in pool
+        "max_overflow": 30,        # Extra connections beyond pool_size
+        "pool_timeout": 30,        # Seconds to wait for connection
+        "pool_recycle": 1800,      # Recycle connections after 30 min
+        "pool_pre_ping": True,     # Verify connections before use
+    }
+
+
 engine = create_async_engine(
     database_url,
     echo=settings.debug,
-    # SQLite doesn't support pool_size
-    **({} if is_sqlite else {"pool_size": 10, "max_overflow": 20}),
+    **_get_engine_kwargs(),
 )
 
 AsyncSessionLocal = async_sessionmaker(

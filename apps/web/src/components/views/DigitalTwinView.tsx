@@ -232,7 +232,7 @@ function Overlay() {
     <div className="absolute inset-0 pointer-events-none p-4 flex flex-col justify-between">
       {/* Title */}
       <div>
-        <h2 className="text-sm font-medium text-cyan-400/80">Digital Twin</h2>
+        <h2 className="text-sm font-medium text-amber-400/80">Digital Twin</h2>
         <p className="text-xs text-white/40 mt-0.5">Shanghai Industrial Complex</p>
       </div>
       

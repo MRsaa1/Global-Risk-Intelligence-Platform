@@ -62,28 +62,91 @@ async function loadHotspots(scenario?: string): Promise<Hotspot[]> {
     if (!response.ok) throw new Error('API error')
     
     const geojson = await response.json()
-    return geojson.features.map((f: any) => ({
-      id: f.id,
-      lat: f.geometry.coordinates[1],
-      lng: f.geometry.coordinates[0],
-      risk: f.properties.risk_score,
-      name: f.properties.name,
-      value: f.properties.exposure,
-      assets_count: f.properties.assets_count,
-      pd_1y: f.properties.pd_1y,
-      lgd: f.properties.lgd,
-    }))
+    return geojson.features.map((f: any) => {
+      // Normalize risk_score: API returns 0-100, we need 0-1
+      const rawRisk = f.properties.risk_score || 0
+      const normalizedRisk = rawRisk > 1 ? rawRisk / 100 : rawRisk
+      
+      return {
+        id: f.id,
+        lat: f.geometry.coordinates[1],
+        lng: f.geometry.coordinates[0],
+        risk: Math.max(0, Math.min(1, normalizedRisk)), // Clamp to 0-1 range
+        name: f.properties.name,
+        value: f.properties.exposure,
+        assets_count: f.properties.assets_count,
+        pd_1y: f.properties.pd_1y,
+        lgd: f.properties.lgd,
+      }
+    })
   } catch (e) {
     console.warn('Failed to load hotspots from API, using fallback:', e)
     return FALLBACK_HOTSPOTS
   }
 }
 
-function getRiskColor(risk: number): Cesium.Color {
-  if (risk > 0.8) return Cesium.Color.fromCssColorString('#ff2222').withAlpha(0.9)
-  if (risk > 0.6) return Cesium.Color.fromCssColorString('#ff8822').withAlpha(0.9)
-  if (risk > 0.4) return Cesium.Color.fromCssColorString('#ffcc22').withAlpha(0.9)
-  return Cesium.Color.fromCssColorString('#22ff66').withAlpha(0.9)
+// ===========================================
+// FIERY GLOW COLOR SYSTEM - Gradient from center to edges
+// ===========================================
+
+// Fiery gradient colors for 6-layer hotspot structure
+interface FireGlowColors {
+  center: Cesium.Color       // White/bright yellow (innermost)
+  coreInner: Cesium.Color    // Bright yellow
+  coreOuter: Cesium.Color    // Yellow-orange
+  glowInner: Cesium.Color    // Bright orange
+  glowMiddle: Cesium.Color   // Orange
+  glowOuter: Cesium.Color    // Red-orange (outermost glow)
+  ring: Cesium.Color         // Red for zone rings
+}
+
+function getFireGlowColors(risk: number): FireGlowColors {
+  if (risk > 0.8) {
+    // CRITICAL - PURE RED
+    return {
+      center: Cesium.Color.fromCssColorString('#ff0000'),      // Bright red center
+      coreInner: Cesium.Color.fromCssColorString('#ff1a1a'),   // Red
+      coreOuter: Cesium.Color.fromCssColorString('#ff3333'),   // Light red
+      glowInner: Cesium.Color.fromCssColorString('#cc0000'),   // Dark red
+      glowMiddle: Cesium.Color.fromCssColorString('#990000'),  // Darker red
+      glowOuter: Cesium.Color.fromCssColorString('#660000'),   // Deep red
+      ring: Cesium.Color.fromCssColorString('#ff0000'),        // Pure red for rings
+    }
+  }
+  if (risk > 0.6) {
+    // HIGH - PURE ORANGE
+    return {
+      center: Cesium.Color.fromCssColorString('#ff6600'),      // Bright orange center
+      coreInner: Cesium.Color.fromCssColorString('#ff7722'),   // Orange
+      coreOuter: Cesium.Color.fromCssColorString('#ff8833'),   // Light orange
+      glowInner: Cesium.Color.fromCssColorString('#cc5200'),   // Dark orange
+      glowMiddle: Cesium.Color.fromCssColorString('#993d00'),  // Darker orange
+      glowOuter: Cesium.Color.fromCssColorString('#662900'),   // Deep orange
+      ring: Cesium.Color.fromCssColorString('#ff6600'),        // Pure orange for rings
+    }
+  }
+  if (risk > 0.4) {
+    // MEDIUM - PURE YELLOW
+    return {
+      center: Cesium.Color.fromCssColorString('#ffcc00'),      // Bright yellow center
+      coreInner: Cesium.Color.fromCssColorString('#ffd633'),   // Yellow
+      coreOuter: Cesium.Color.fromCssColorString('#ffe066'),   // Light yellow
+      glowInner: Cesium.Color.fromCssColorString('#cca300'),   // Dark yellow
+      glowMiddle: Cesium.Color.fromCssColorString('#997a00'),  // Darker yellow
+      glowOuter: Cesium.Color.fromCssColorString('#665200'),   // Deep yellow
+      ring: Cesium.Color.fromCssColorString('#ffcc00'),        // Pure yellow for rings
+    }
+  }
+  // LOW - PURE GREEN
+  return {
+    center: Cesium.Color.fromCssColorString('#00cc00'),        // Bright green center
+    coreInner: Cesium.Color.fromCssColorString('#33cc33'),     // Green
+    coreOuter: Cesium.Color.fromCssColorString('#66cc66'),     // Light green
+    glowInner: Cesium.Color.fromCssColorString('#009900'),     // Dark green
+    glowMiddle: Cesium.Color.fromCssColorString('#006600'),    // Darker green
+    glowOuter: Cesium.Color.fromCssColorString('#003300'),     // Deep green
+    ring: Cesium.Color.fromCssColorString('#00cc00'),          // Pure green for rings
+  }
 }
 
 // Zone level to color
@@ -94,6 +157,251 @@ function getZoneLevelColor(level: string): Cesium.Color {
     case 'medium':   return Cesium.Color.fromCssColorString('#ffcc22')
     default:         return Cesium.Color.fromCssColorString('#22ff66')
   }
+}
+
+// ===========================================
+// ENHANCED FIRE GLOW CANVAS SYSTEM
+// ===========================================
+
+// Create enhanced fire glow canvas with bright white core and smooth gradient
+function createEnhancedFireGlow(
+  width: number,
+  height: number,
+  intensity: number
+): HTMLCanvasElement {
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d')!
+
+  const centerX = width / 2
+  const centerY = height / 2
+  const radius = Math.min(centerX, centerY)
+
+  // Main radial gradient with 10 color stops for smooth transition
+  const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius)
+  
+  // BRIGHT WHITE CORE - like reference image
+  gradient.addColorStop(0, `rgba(255, 255, 255, ${intensity})`)
+  gradient.addColorStop(0.05, `rgba(255, 255, 240, ${intensity})`)
+  
+  // BRIGHT YELLOW-ORANGE
+  gradient.addColorStop(0.15, `rgba(255, 220, 100, ${intensity * 0.95})`)
+  gradient.addColorStop(0.25, `rgba(255, 180, 60, ${intensity * 0.9})`)
+  
+  // SATURATED ORANGE
+  gradient.addColorStop(0.4, `rgba(255, 130, 30, ${intensity * 0.8})`)
+  gradient.addColorStop(0.55, `rgba(255, 90, 20, ${intensity * 0.65})`)
+  
+  // DEEP RED-ORANGE
+  gradient.addColorStop(0.7, `rgba(220, 50, 10, ${intensity * 0.45})`)
+  gradient.addColorStop(0.82, `rgba(180, 30, 5, ${intensity * 0.25})`)
+  
+  // DARK RED FADE TO TRANSPARENT
+  gradient.addColorStop(0.92, `rgba(120, 15, 0, ${intensity * 0.1})`)
+  gradient.addColorStop(1, 'rgba(80, 10, 0, 0)')
+
+  ctx.fillStyle = gradient
+  ctx.fillRect(0, 0, width, height)
+
+  // Add "spark" overlays - bright points using screen blend mode
+  ctx.globalCompositeOperation = 'screen'
+  
+  for (let i = 0; i < 3; i++) {
+    const angle = (i * Math.PI * 2) / 3
+    const distance = radius * 0.2
+    const x = centerX + Math.cos(angle) * distance
+    const y = centerY + Math.sin(angle) * distance
+    
+    const sparkGradient = ctx.createRadialGradient(x, y, 0, x, y, radius * 0.3)
+    sparkGradient.addColorStop(0, `rgba(255, 255, 200, ${intensity * 0.4})`)
+    sparkGradient.addColorStop(0.5, `rgba(255, 150, 50, ${intensity * 0.2})`)
+    sparkGradient.addColorStop(1, 'rgba(255, 100, 0, 0)')
+    
+    ctx.fillStyle = sparkGradient
+    ctx.fillRect(0, 0, width, height)
+  }
+
+  return canvas
+}
+
+// Create small sparkle canvas for particle effects
+function createSparkCanvas(width: number, height: number): HTMLCanvasElement {
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d')!
+
+  const centerX = width / 2
+  const centerY = height / 2
+
+  const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, width / 2)
+  gradient.addColorStop(0, 'rgba(255, 255, 200, 1)')
+  gradient.addColorStop(0.3, 'rgba(255, 200, 100, 0.8)')
+  gradient.addColorStop(0.6, 'rgba(255, 150, 50, 0.4)')
+  gradient.addColorStop(1, 'rgba(255, 100, 0, 0)')
+
+  ctx.fillStyle = gradient
+  ctx.fillRect(0, 0, width, height)
+
+  return canvas
+}
+
+// Sparkle entity with animation phase
+interface SparkleEntity {
+  entity: Cesium.Entity
+  phase: number
+}
+
+// Add sparkle particles around a hotspot
+function addSparkles(
+  viewer: Cesium.Viewer,
+  longitude: number,
+  latitude: number,
+  spotId: string,
+  count: number = 20
+): SparkleEntity[] {
+  const sparkles: SparkleEntity[] = []
+
+  for (let i = 0; i < count; i++) {
+    // Random offset around center
+    const angle = Math.random() * Math.PI * 2
+    const distance = 20000 + Math.random() * 100000 // 20-120 km
+    
+    const offsetLon = longitude + (Math.cos(angle) * distance) / 111320
+    const offsetLat = latitude + (Math.sin(angle) * distance) / 110540
+    
+    const sparkCanvas = createSparkCanvas(16, 16)
+    
+    const sparkle = viewer.entities.add({
+      id: `hotspot-sparkle-${spotId}-${i}`,
+      position: Cesium.Cartesian3.fromDegrees(offsetLon, offsetLat, Math.random() * 30000),
+      billboard: {
+        image: sparkCanvas,
+        scale: 0.5 + Math.random() * 1.0,
+        color: Cesium.Color.WHITE,
+        heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      }
+    })
+    
+    sparkles.push({ entity: sparkle, phase: Math.random() * Math.PI * 2 })
+  }
+
+  return sparkles
+}
+
+// Fire marker structure for animation
+interface FireMarker {
+  spotId: string
+  core: Cesium.Entity
+  innerGlow: Cesium.Entity
+  outerGlow: Cesium.Entity
+  halos: Cesium.Entity[]
+  sparkles: SparkleEntity[]
+}
+
+// Animate fire halos with flicker and pulse
+function animateEnhancedFireHalo(viewer: Cesium.Viewer, markers: FireMarker[]) {
+  const startTime = Date.now()
+
+  const animationCallback = () => {
+    if (viewer.isDestroyed()) return
+    
+    const elapsed = (Date.now() - startTime) / 1000
+
+    markers.forEach((marker, index) => {
+      const offset = index * 0.4
+      
+      // Main pulse (slow breathing)
+      const pulse = Math.sin(elapsed * 1.2 + offset) * 0.25 + 0.75 // 0.5 to 1.0
+      
+      // Fast flicker (fire-like)
+      const flicker = Math.sin(elapsed * 8 + offset * 3) * 0.1 + 0.9 // 0.8 to 1.0
+      
+      // Combined intensity
+      const combinedIntensity = pulse * flicker
+
+      // Animate core (small scale: 0.3 base)
+      if (marker.core?.billboard) {
+        marker.core.billboard.scale = new Cesium.ConstantProperty(0.3 * combinedIntensity)
+      }
+
+      // Animate inner glow (small scale: 0.8 base)
+      if (marker.innerGlow?.billboard) {
+        marker.innerGlow.billboard.scale = new Cesium.ConstantProperty(0.8 * pulse)
+        const alpha = 0.5 * combinedIntensity
+        marker.innerGlow.billboard.color = new Cesium.ConstantProperty(
+          new Cesium.Color(1.0, 0.5, 0.1, alpha)
+        )
+      }
+
+      // Animate halo rings (wave expansion) - smaller radii
+      marker.halos?.forEach((halo, i) => {
+        if (halo?.ellipse) {
+          const baseRadius = 50000 + (i * 40000)
+          const wave = Math.sin(elapsed * 1.5 - i * 0.8 + offset) * 0.2 + 0.8
+          halo.ellipse.semiMajorAxis = new Cesium.ConstantProperty(baseRadius * wave)
+          halo.ellipse.semiMinorAxis = new Cesium.ConstantProperty(baseRadius * wave)
+          
+          const alpha = (0.08 - i * 0.02) * pulse // Very low alpha
+          halo.ellipse.material = new Cesium.Color(1.0, 0.4, 0.1, alpha) as unknown as Cesium.MaterialProperty
+        }
+      })
+
+      // Animate outer glow (small scale: 2.0 base)
+      if (marker.outerGlow?.billboard) {
+        const slowPulse = Math.sin(elapsed * 0.8 + offset) * 0.15 + 0.85
+        marker.outerGlow.billboard.scale = new Cesium.ConstantProperty(2.0 * slowPulse)
+        marker.outerGlow.billboard.color = new Cesium.ConstantProperty(
+          new Cesium.Color(1.0, 0.3, 0.0, 0.15 * pulse)
+        )
+      }
+
+      // Animate sparkles
+      marker.sparkles?.forEach((sparkle) => {
+        const sparkPulse = Math.sin(elapsed * 5 + sparkle.phase) * 0.5 + 0.5
+        if (sparkle.entity?.billboard) {
+          sparkle.entity.billboard.color = new Cesium.ConstantProperty(
+            new Cesium.Color(1.0, 0.8, 0.4, sparkPulse)
+          )
+        }
+      })
+    })
+  }
+
+  // Register animation on preRender
+  viewer.scene.preRender.addEventListener(animationCallback)
+  
+  return animationCallback // Return for potential cleanup
+}
+
+// Apply hotspot visibility from risk filter; reusable from init and useEffect
+function applyVisibility(
+  viewer: Cesium.Viewer | null,
+  entityMap: Map<string, Cesium.Entity[]>,
+  spots: Hotspot[],
+  filter: 'critical' | 'high' | 'medium' | 'low' | null
+): void {
+  if (!viewer || viewer.isDestroyed()) return
+  if (entityMap.size === 0) return
+  const shouldShow = (risk: number): boolean => {
+    if (!filter) return true
+    switch (filter) {
+      case 'critical': return risk > 0.8
+      case 'high': return risk > 0.6 && risk <= 0.8
+      case 'medium': return risk > 0.4 && risk <= 0.6
+      case 'low': return risk <= 0.4
+      default: return false
+    }
+  }
+  spots.forEach((spot) => {
+    const entities = entityMap.get(spot.id)
+    if (!entities) return
+    const visible = shouldShow(spot.risk)
+    entities.forEach((e) => { e.show = visible })
+  })
+  viewer.scene.requestRender()
 }
 
 // Risk Zone from Stress Test
@@ -140,7 +448,7 @@ function getAssetTypeColor(type: string): Cesium.Color {
   switch (type) {
     case 'bank': return Cesium.Color.fromCssColorString('#3b82f6') // blue
     case 'enterprise': return Cesium.Color.fromCssColorString('#8b5cf6') // purple
-    case 'developer': return Cesium.Color.fromCssColorString('#06b6d4') // cyan
+    case 'developer': return Cesium.Color.fromCssColorString('#C9A962') // gold
     case 'insurer': return Cesium.Color.fromCssColorString('#10b981') // emerald
     case 'infrastructure': return Cesium.Color.fromCssColorString('#f59e0b') // amber
     case 'military': return Cesium.Color.fromCssColorString('#64748b') // slate
@@ -242,8 +550,8 @@ export default function CesiumGlobe({
           // No base layer initially - we'll add async
           baseLayer: false,
           
-          // Performance
-          requestRenderMode: true,
+          // Continuous render loop (requestRenderMode:true ломало отрисовку entity)
+          requestRenderMode: false,
           maximumRenderTimeChange: Infinity,
           
           // Globe settings
@@ -272,14 +580,15 @@ export default function CesiumGlobe({
         try {
           if (!isMounted || !viewer || viewer.isDestroyed()) return
           
-          // NASA Black Marble - city lights
+          // NASA Black Marble - city lights with balanced visibility
           const nasaBlackMarble = await Cesium.IonImageryProvider.fromAssetId(3812)
           if (!isMounted || !viewer || viewer.isDestroyed()) return
           const nightLayer = viewer.imageryLayers.addImageryProvider(nasaBlackMarble)
-          nightLayer.brightness = 1.4
-          nightLayer.contrast = 1.5
-          nightLayer.saturation = 1.2
-          console.log('✅ NASA Black Marble loaded (city lights)')
+          nightLayer.brightness = 1.0        // Normal brightness
+          nightLayer.contrast = 1.2          // Slight contrast boost
+          nightLayer.saturation = 0.8        // Reduce saturation to prevent red tint
+          nightLayer.gamma = 1.0             // Normal gamma
+          console.log('✅ NASA Black Marble loaded (balanced settings)')
           
         } catch (e) {
           console.warn('NASA imagery failed:', e)
@@ -348,130 +657,146 @@ export default function CesiumGlobe({
         }
         
         // =============================================
-        // NASA BLACK MARBLE VISUALIZATION - Night view (clean)
+        // CLEAN NIGHT VIEW - Visible ocean, no globe outline
         // =============================================
-        // Disable all atmosphere - pure clean view
+        
+        // Disable sky atmosphere completely (no outline/glow around globe)
         if (viewer.scene.skyAtmosphere) {
           viewer.scene.skyAtmosphere.show = false
         }
+        
+        // Disable ground atmosphere (no rim/edge glow)
         globe.showGroundAtmosphere = false
         
-        // Pure dark background (space)
-        scene.backgroundColor = Cesium.Color.fromCssColorString('#000005')
+        // Pure dark space background
+        scene.backgroundColor = Cesium.Color.fromCssColorString('#000000')
         
-        // Ocean base color - visible blue
-        globe.baseColor = Cesium.Color.fromCssColorString('#0c1e35')
+        // VISIBLE BLUE OCEAN - distinct from black space
+        globe.baseColor = Cesium.Color.fromCssColorString('#0a1628')
         
-        console.log('✅ Night visualization configured')
+        // Enable depth test so ellipses don't show through the back of the globe
+        globe.depthTestAgainstTerrain = true
+        
+        console.log('✅ Clean night visualization configured (visible ocean)')
 
         // =============================================
-        // HOTSPOTS - Glowing risk indicators
+        // HOTSPOTS - HALO GLOW SYSTEM
         // =============================================
         if (!isMounted || !viewer || viewer.isDestroyed()) return
         const loadedHotspots = await loadHotspots(scenario)
         if (!isMounted || !viewer || viewer.isDestroyed()) return
         setHotspots(loadedHotspots) // Save to state for parent component
         
-        // Create glowing hotspot entities with multiple rings
+        // Create glowing hotspot entities with billboard + ellipse rings (no animation)
         const entityMap = new Map<string, Cesium.Entity[]>()
         
         loadedHotspots.forEach((spot) => {
           const entities: Cesium.Entity[] = []
-          const baseRadius = 150000 + spot.risk * 200000 // 150-350 km
-          const color = getRiskColor(spot.risk)
+          
+          // Get fire gradient colors for center point
+          const colors = getFireGlowColors(spot.risk)
           const position = Cesium.Cartesian3.fromDegrees(spot.lng, spot.lat, 0)
           
-          // Ring 1 - Outer glow (largest, most transparent)
-          const ring1 = viewer.entities.add({
-            id: `hotspot-ring1-${spot.id}`,
-            position,
-            ellipse: {
-              semiMajorAxis: baseRadius * 2.5,
-              semiMinorAxis: baseRadius * 2.5,
-              height: 0,
-              material: color.withAlpha(0.08),
-              outline: true,
-              outlineColor: color.withAlpha(0.15),
-              outlineWidth: 1,
-            },
-            show: false, // Hidden by default, shown when filter active
-          })
-          entities.push(ring1)
+          // ========================================
+          // GLOW HALO - Billboard + Ellipse rings for ALL risk levels
+          // ========================================
+          // Get glow color based on risk level
+          const glowColor = spot.risk > 0.8 
+            ? { r: 1.0, g: 0.2, b: 0.0 }   // Critical - Red
+            : spot.risk > 0.6 
+              ? { r: 1.0, g: 0.5, b: 0.0 } // High - Orange
+              : spot.risk > 0.4 
+                ? { r: 1.0, g: 0.8, b: 0.0 } // Medium - Yellow
+                : { r: 0.2, g: 0.9, b: 0.3 } // Low - Green
           
-          // Ring 2 - Middle ring
-          const ring2 = viewer.entities.add({
-            id: `hotspot-ring2-${spot.id}`,
-            position,
-            ellipse: {
-              semiMajorAxis: baseRadius * 1.8,
-              semiMinorAxis: baseRadius * 1.8,
-              height: 0,
-              material: color.withAlpha(0.12),
-              outline: true,
-              outlineColor: color.withAlpha(0.25),
-              outlineWidth: 1.5,
-            },
-            show: false,
-          })
-          entities.push(ring2)
+          // Scale intensity by risk (higher risk = slightly brighter)
+          const riskMultiplier = 0.7 + spot.risk * 0.3 // 0.7 to 1.0
           
-          // Ring 3 - Inner ring (brighter)
-          const ring3 = viewer.entities.add({
-            id: `hotspot-ring3-${spot.id}`,
-            position,
-            ellipse: {
-              semiMajorAxis: baseRadius * 1.2,
-              semiMinorAxis: baseRadius * 1.2,
-              height: 0,
-              material: color.withAlpha(0.20),
-              outline: true,
-              outlineColor: color.withAlpha(0.40),
-              outlineWidth: 2,
+          // --- CORE GLOW (128x128 canvas, scale 0.32) --- 1.1% intensity
+          const coreCanvas = createEnhancedFireGlow(128, 128, 0.32 * riskMultiplier)
+          const core = viewer!.entities.add({
+            id: `hotspot-core-bb-${spot.id}`,
+            position: position,
+            billboard: {
+              image: coreCanvas,
+              scale: 0.32,
+              color: new Cesium.Color(glowColor.r, glowColor.g, glowColor.b, 0.8),
+              heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
             },
-            show: false,
-          })
-          entities.push(ring3)
-          
-          // Core - Bright center
-          const core = viewer.entities.add({
-            id: `hotspot-core-${spot.id}`,
-            position,
-            ellipse: {
-              semiMajorAxis: baseRadius * 0.6,
-              semiMinorAxis: baseRadius * 0.6,
-              height: 0,
-              material: color.withAlpha(0.45),
-              outline: true,
-              outlineColor: color.withAlpha(0.8),
-              outlineWidth: 3,
-            },
-            show: false,
           })
           entities.push(core)
+
+          // --- INNER GLOW (256x256 canvas, scale 0.85) --- 1.1% intensity
+          const innerGlowCanvas = createEnhancedFireGlow(256, 256, 0.16 * riskMultiplier)
+          const innerGlow = viewer!.entities.add({
+            id: `hotspot-inner-glow-${spot.id}`,
+            position: position,
+            billboard: {
+              image: innerGlowCanvas,
+              scale: 0.85,
+              color: new Cesium.Color(glowColor.r, glowColor.g, glowColor.b, 0.45),
+              heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+            },
+          })
+          entities.push(innerGlow)
+
+          // --- OUTER GLOW (512x512 canvas, scale 2.0) --- 1.1% intensity
+          const outerGlowCanvas = createEnhancedFireGlow(512, 512, 0.06 * riskMultiplier)
+          const outerGlow = viewer!.entities.add({
+            id: `hotspot-outer-glow-${spot.id}`,
+            position: position,
+            billboard: {
+              image: outerGlowCanvas,
+              scale: 2.0,
+              color: new Cesium.Color(glowColor.r, glowColor.g, glowColor.b, 0.12),
+              heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+            },
+          })
+          entities.push(outerGlow)
+
+          // --- ELLIPSE HALO RINGS (3 rings) - on ground ---
+          for (let i = 0; i < 3; i++) {
+            const radius = 50000 + (i * 40000)
+            const halo = viewer!.entities.add({
+              id: `hotspot-halo-${i}-${spot.id}`,
+              position: position,
+              ellipse: {
+                semiMinorAxis: radius,
+                semiMajorAxis: radius,
+                material: new Cesium.Color(glowColor.r, glowColor.g, glowColor.b, (0.08 - i * 0.022) * riskMultiplier),
+                height: 0,
+                outline: false,
+              },
+            })
+            entities.push(halo)
+          }
+
+          console.log(`✨ Created glow for ${spot.name} (${spot.risk > 0.8 ? 'critical' : spot.risk > 0.6 ? 'high' : spot.risk > 0.4 ? 'medium' : 'low'})`)
           
-          // Center point - Brightest
-          const center = viewer.entities.add({
+          // Center point - Small, semi-transparent with subtle glow
+          const centerPointSize = spot.risk > 0.8 ? 8 : spot.risk > 0.6 ? 7 : spot.risk > 0.4 ? 6 : 5
+          const center = viewer!.entities.add({
             id: `hotspot-center-${spot.id}`,
             position: Cesium.Cartesian3.fromDegrees(spot.lng, spot.lat, 5000),
             point: {
-              pixelSize: 12 + spot.risk * 8,
-              color: Cesium.Color.WHITE.withAlpha(0.95),
-              outlineColor: color.withAlpha(0.9),
-              outlineWidth: 3,
-              scaleByDistance: new Cesium.NearFarScalar(1e6, 1.5, 1e8, 0.5),
+              pixelSize: centerPointSize,
+              color: colors.center.withAlpha(0.5),  // Semi-transparent center
+              outlineColor: colors.ring.withAlpha(0.6),  // Semi-transparent outline
+              outlineWidth: 1.5,
+              scaleByDistance: new Cesium.NearFarScalar(1e6, 1.2, 1e8, 0.4),
             },
             label: {
               text: spot.name,
               font: '13px Inter, sans-serif',
-              fillColor: Cesium.Color.WHITE,
+              fillColor: Cesium.Color.WHITE.withAlpha(0.9),
               outlineColor: Cesium.Color.BLACK,
               outlineWidth: 2,
               style: Cesium.LabelStyle.FILL_AND_OUTLINE,
               verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-              pixelOffset: new Cesium.Cartesian2(0, -20),
-              scaleByDistance: new Cesium.NearFarScalar(1e6, 1, 1e8, 0.3),
+              pixelOffset: new Cesium.Cartesian2(0, -18),
+              scaleByDistance: new Cesium.NearFarScalar(1e6, 1, 1e8, 0.25),
               showBackground: true,
-              backgroundColor: Cesium.Color.BLACK.withAlpha(0.6),
+              backgroundColor: Cesium.Color.BLACK.withAlpha(0.5),
               backgroundPadding: new Cesium.Cartesian2(6, 4),
             },
             show: false,
@@ -482,34 +807,9 @@ export default function CesiumGlobe({
         })
         
         hotspotEntitiesRef.current = entityMap
-        console.log(`✅ Created glowing hotspots for ${loadedHotspots.length} cities`)
-        
-        // Pulsing animation for hotspots
-        let pulseTime = 0
-        const pulseListener = () => {
-          pulseTime += 0.03
-          const pulseFactor = 0.85 + Math.sin(pulseTime) * 0.15 // 0.7 - 1.0
-          
-          entityMap.forEach((entities, spotId) => {
-            // Only animate visible entities
-            if (!entities[0]?.show) return
-            
-            // Animate outer ring opacity
-            const ring1 = entities[0]
-            if (ring1?.ellipse?.material) {
-              const baseColor = getRiskColor(hotspots.find(h => h.id === spotId)?.risk || 0.5)
-              ring1.ellipse.material = baseColor.withAlpha(0.08 * pulseFactor) as unknown as Cesium.MaterialProperty
-            }
-          })
-          
-          viewer.scene.requestRender()
-        }
-        
-        viewer.scene.preRender.addEventListener(pulseListener)
-        
-        // Use request render mode for better performance (only render when needed)
-        viewer.scene.requestRenderMode = true
-        viewer.scene.maximumRenderTimeChange = Infinity
+        // Show all immediately (filter=null) so rings are visible before first useEffect filter
+        applyVisibility(viewer, entityMap, loadedHotspots, null)
+        console.log(`✅ Created glow hotspots for ${loadedHotspots.length} cities (static, no animation)`)
 
         // Initial camera position (overview of Earth)
         viewer.camera.setView({
@@ -677,40 +977,7 @@ export default function CesiumGlobe({
 
   // Handle activeRiskFilter - show/hide hotspots based on risk level
   useEffect(() => {
-    const viewer = viewerRef.current
-    if (!viewer || viewer.isDestroyed()) return
-    
-    const entityMap = hotspotEntitiesRef.current
-    if (entityMap.size === 0) return
-    
-    // Determine which hotspots should be visible
-    const shouldShow = (risk: number): boolean => {
-      if (!activeRiskFilter) return false // Hide all when no filter
-      
-      switch (activeRiskFilter) {
-        case 'critical': return risk > 0.8
-        case 'high': return risk > 0.6 && risk <= 0.8
-        case 'medium': return risk > 0.4 && risk <= 0.6
-        case 'low': return risk <= 0.4
-        default: return false
-      }
-    }
-    
-    // Update visibility for each hotspot
-    hotspots.forEach((spot) => {
-      const entities = entityMap.get(spot.id)
-      if (!entities) return
-      
-      const visible = shouldShow(spot.risk)
-      entities.forEach((entity) => {
-        entity.show = visible
-      })
-    })
-    
-    // Request render update
-    viewer.scene.requestRender()
-    
-    console.log(`Risk filter: ${activeRiskFilter || 'none'} - showing ${hotspots.filter(s => shouldShow(s.risk)).length} hotspots`)
+    applyVisibility(viewerRef.current, hotspotEntitiesRef.current, hotspots, activeRiskFilter)
   }, [activeRiskFilter, hotspots])
 
   // Handle selected zone - zoom to zone and show assets
@@ -881,13 +1148,13 @@ export default function CesiumGlobe({
       <div 
         ref={containerRef} 
         className="w-full h-full"
-        style={{ background: '#030810' }}
+        style={{ background: '#000000' }}
       />
       
       {/* Loading overlay */}
       {!isReady && !error && (
-        <div className="absolute inset-0 flex items-center justify-center bg-[#030810]">
-          <div className="text-cyan-400 text-sm animate-pulse">
+        <div className="absolute inset-0 flex items-center justify-center bg-black">
+          <div className="text-amber-400 text-sm animate-pulse">
             Initializing Globe...
           </div>
         </div>
@@ -895,7 +1162,7 @@ export default function CesiumGlobe({
       
       {/* Error overlay */}
       {error && (
-        <div className="absolute inset-0 flex items-center justify-center bg-[#030810]">
+        <div className="absolute inset-0 flex items-center justify-center bg-black">
           <div className="text-red-400 text-sm text-center p-4">
             <div className="mb-2">⚠️ Globe Error</div>
             <div className="text-xs text-gray-400">{error}</div>

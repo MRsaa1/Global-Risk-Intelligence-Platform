@@ -63,6 +63,9 @@ class Settings(BaseSettings):
     cmip6_data_path: str = "./data/climate/cmip6"
     fema_flood_api: str = "https://hazards.fema.gov/gis/nfhl/rest/services"
     
+    # NOAA API
+    noaa_api_token: str = "uUrbXwtEvXGZLOMupmiVucEARZieKgeS"  # Get from https://www.ncdc.noaa.gov/cdo-web/token
+    
     # NVIDIA Integration
     nvidia_api_key: str = ""
     nvidia_corrdiff_api_key: str = ""
@@ -96,6 +99,10 @@ class Settings(BaseSettings):
     
     # Logging
     log_level: str = "INFO"
+    
+    # SENTINEL Monitoring
+    auto_start_sentinel: bool = False  # Auto-start SENTINEL monitoring on startup
+    sentinel_check_interval_seconds: int = 300  # Check every 5 minutes
 
 
 @lru_cache

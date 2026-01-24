@@ -17,6 +17,7 @@ from src.core.database import get_db
 from src.models.historical_event import HistoricalEvent
 from src.models.stress_test import StressTestType
 from src.services.stress_test_seed import get_historical_events, get_stress_test_scenarios
+from src.services.historical_events_importer import historical_events_importer
 
 router = APIRouter(prefix="/historical-events", tags=["Historical Events"])
 
@@ -280,6 +281,117 @@ async def seed_historical_events(
     return {
         "message": f"Seeded {created} historical events",
         "total_available": len(events_data),
+    }
+
+
+@router.post("/import", status_code=201)
+async def import_historical_events(
+    latitude: float = Query(..., description="Center latitude"),
+    longitude: float = Query(..., description="Center longitude"),
+    radius_km: float = Query(500, ge=10, le=5000, description="Search radius in km"),
+    days: int = Query(365, ge=1, le=3650, description="Days to look back"),
+    min_magnitude: float = Query(5.0, ge=0, le=10, description="Minimum earthquake magnitude"),
+    country_code: Optional[str] = Query(None, description="Country code (for state-specific imports)"),
+    session: AsyncSession = Depends(get_db),
+):
+    """
+    Import real historical events from external sources.
+    
+    Sources:
+    - USGS: Earthquakes (global)
+    - NOAA: Storm events (US only, requires state code)
+    - FEMA: Disaster declarations (future)
+    
+    Returns:
+        Summary of imported events
+    """
+    # Import events from all sources
+    imported_events = await historical_events_importer.import_for_region(
+        lat=latitude,
+        lon=longitude,
+        radius_km=radius_km,
+        days=days,
+        country_code=country_code,
+    )
+    
+    if not imported_events:
+        return {
+            "message": "No events found to import",
+            "imported": 0,
+            "skipped": 0,
+        }
+    
+    # Check for duplicates and save new events
+    imported_count = 0
+    skipped_count = 0
+    
+    for event in imported_events:
+        # Check if event with same name and date already exists
+        result = await session.execute(
+            select(HistoricalEvent).where(
+                HistoricalEvent.name == event.name,
+                HistoricalEvent.start_date == event.start_date,
+            )
+        )
+        if result.scalar_one_or_none():
+            skipped_count += 1
+            continue
+        
+        session.add(event)
+        imported_count += 1
+    
+    await session.commit()
+    
+    return {
+        "message": f"Imported {imported_count} new historical events",
+        "imported": imported_count,
+        "skipped": skipped_count,
+        "total_found": len(imported_events),
+    }
+
+
+@router.post("/import/usgs", status_code=201)
+async def import_usgs_earthquakes(
+    latitude: float = Query(..., description="Center latitude"),
+    longitude: float = Query(..., description="Center longitude"),
+    radius_km: float = Query(500, ge=10, le=5000),
+    days: int = Query(365, ge=1, le=3650),
+    min_magnitude: float = Query(5.0, ge=0, le=10),
+    session: AsyncSession = Depends(get_db),
+):
+    """Import earthquakes from USGS Earthquake Catalog."""
+    earthquakes = await historical_events_importer.import_usgs_earthquakes(
+        lat=latitude,
+        lon=longitude,
+        radius_km=radius_km,
+        days=days,
+        min_magnitude=min_magnitude,
+    )
+    
+    imported_count = 0
+    skipped_count = 0
+    
+    for event in earthquakes:
+        result = await session.execute(
+            select(HistoricalEvent).where(
+                HistoricalEvent.name == event.name,
+                HistoricalEvent.start_date == event.start_date,
+            )
+        )
+        if result.scalar_one_or_none():
+            skipped_count += 1
+            continue
+        
+        session.add(event)
+        imported_count += 1
+    
+    await session.commit()
+    
+    return {
+        "message": f"Imported {imported_count} earthquakes from USGS",
+        "imported": imported_count,
+        "skipped": skipped_count,
+        "total_found": len(earthquakes),
     }
 
 

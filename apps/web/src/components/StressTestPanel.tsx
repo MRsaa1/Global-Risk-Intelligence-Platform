@@ -114,14 +114,15 @@ export default function StressTestPanel({ isOpen, onClose, totalExposure }: Stre
               <div className="text-white/50 text-[10px] uppercase tracking-wider mb-2">
                 Stress Scenario
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                {SCENARIOS.map((scenario) => (
+              <div className="max-h-[300px] overflow-y-auto custom-scrollbar pr-1">
+                <div className="grid grid-cols-2 gap-2">
+                  {SCENARIOS.map((scenario) => (
                   <button
                     key={scenario.id}
                     onClick={() => setSelectedScenario(scenario.id)}
                     className={`p-2 rounded-lg border text-left transition-all ${
                       selectedScenario === scenario.id
-                        ? 'bg-white/10 border-cyan-500/50'
+                        ? 'bg-white/10 border-amber-500/50'
                         : 'bg-white/5 border-white/10 hover:bg-white/10'
                     }`}
                   >
@@ -129,6 +130,7 @@ export default function StressTestPanel({ isOpen, onClose, totalExposure }: Stre
                     <div className="text-white/40 text-[10px]">{scenario.description}</div>
                   </button>
                 ))}
+                </div>
               </div>
             </div>
 
@@ -151,7 +153,7 @@ export default function StressTestPanel({ isOpen, onClose, totalExposure }: Stre
                 onChange={(e) => setSeverity(parseFloat(e.target.value))}
                 className="w-full h-2 bg-white/10 rounded-full appearance-none cursor-pointer
                   [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 
-                  [&::-webkit-slider-thumb]:bg-cyan-500 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:cursor-pointer"
+                  [&::-webkit-slider-thumb]:bg-amber-500 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:cursor-pointer"
               />
               <div className="flex justify-between text-[10px] text-white/30 mt-1">
                 <span>Mild</span>
@@ -164,8 +166,8 @@ export default function StressTestPanel({ isOpen, onClose, totalExposure }: Stre
             <button
               onClick={runStressTest}
               disabled={isRunning}
-              className="w-full py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-medium 
-                hover:from-cyan-400 hover:to-blue-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed
+className="w-full py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-xl font-medium
+                hover:from-amber-400 hover:to-amber-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed
                 flex items-center justify-center gap-2"
             >
               {isRunning ? (

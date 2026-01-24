@@ -77,18 +77,18 @@ function TransitionOverlay({ isTransitioning }: { isTransitioning: boolean }) {
             transition={{ delay: 0.3, duration: 0.5 }}
           >
             <motion.div
-              className="w-24 h-24 mx-auto mb-6 rounded-full border-2 border-cyan-500/30 flex items-center justify-center"
+              className="w-24 h-24 mx-auto mb-6 rounded-full border-2 border-amber-500/30 flex items-center justify-center"
               animate={{ 
                 scale: [1, 1.2, 1],
                 borderColor: ['rgba(34, 211, 238, 0.3)', 'rgba(34, 211, 238, 0.8)', 'rgba(34, 211, 238, 0.3)'],
               }}
               transition={{ duration: 1.5, repeat: Infinity }}
             >
-              <CubeTransparentIcon className="w-12 h-12 text-cyan-400" />
+              <CubeTransparentIcon className="w-12 h-12 text-amber-400" />
             </motion.div>
             
             <motion.div
-              className="text-cyan-400/80 text-sm uppercase tracking-[0.3em]"
+              className="text-amber-400/80 text-sm uppercase tracking-[0.3em]"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.6 }}
@@ -105,7 +105,7 @@ function TransitionOverlay({ isTransitioning }: { isTransitioning: boolean }) {
               {[0, 1, 2].map((i) => (
                 <motion.div
                   key={i}
-                  className="w-2 h-2 rounded-full bg-cyan-400"
+                  className="w-2 h-2 rounded-full bg-amber-400"
                   animate={{ opacity: [0.3, 1, 0.3] }}
                   transition={{ duration: 1, repeat: Infinity, delay: i * 0.2 }}
                 />
@@ -184,7 +184,7 @@ export default function Login() {
               transition={{ delay: 0.2 }}
             >
               <motion.div 
-                className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 mb-6 shadow-lg shadow-cyan-500/20"
+                className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-700 mb-6 shadow-lg shadow-amber-500/20"
                 whileHover={{ scale: 1.05, rotate: 5 }}
               >
                 <CubeTransparentIcon className="w-10 h-10 text-white" />
@@ -222,7 +222,7 @@ export default function Login() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-cyan-500/50 focus:bg-white/10 transition-all"
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-amber-500/50 focus:bg-white/10 transition-all"
                   placeholder="you@example.com"
                 />
               </div>
@@ -236,7 +236,7 @@ export default function Login() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-cyan-500/50 focus:bg-white/10 transition-all"
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-amber-500/50 focus:bg-white/10 transition-all"
                   placeholder="••••••••"
                 />
               </div>
@@ -244,7 +244,7 @@ export default function Login() {
               <motion.button
                 type="submit"
                 disabled={loading || isTransitioning}
-                className="w-full py-4 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-medium hover:from-cyan-400 hover:to-blue-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-cyan-500/20"
+                className="w-full py-4 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-xl font-medium hover:from-amber-400 hover:to-amber-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-amber-500/20"
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
               >

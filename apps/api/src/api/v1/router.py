@@ -2,6 +2,7 @@
 from fastapi import APIRouter
 
 from .endpoints import (
+    analytics,
     assets,
     digital_twins,
     health,
@@ -21,6 +22,16 @@ from .endpoints import (
     alerts,
     predictions,
     whatif,
+    exports,
+    bulk,
+    preferences,
+    bim,
+    websocket,
+    audit,
+    climate,
+    cip,
+    scss,
+    sro,
 )
 
 api_router = APIRouter()
@@ -153,4 +164,77 @@ api_router.include_router(
     whatif.router,
     prefix="/whatif",
     tags=["What-If Simulator"],
+)
+
+# Export Endpoints (CSV, Excel)
+api_router.include_router(
+    exports.router,
+    prefix="/exports",
+    tags=["Data Export"],
+)
+
+# Bulk Operations (CSV upload, batch processing)
+api_router.include_router(
+    bulk.router,
+    prefix="/bulk",
+    tags=["Bulk Operations"],
+)
+
+# User Preferences (saved filters, dashboard settings)
+api_router.include_router(
+    preferences.router,
+    prefix="/preferences",
+    tags=["User Preferences"],
+)
+
+# BIM Processing (IFC files, 3D models)
+api_router.include_router(
+    bim.router,
+    prefix="/bim",
+    tags=["BIM Processing"],
+)
+
+# WebSocket Real-time Updates
+api_router.include_router(
+    websocket.router,
+    prefix="/ws",
+    tags=["WebSocket"],
+)
+
+# Audit Logging
+api_router.include_router(
+    audit.router,
+    prefix="/audit",
+    tags=["Audit Logging"],
+)
+
+# Climate Data
+api_router.include_router(
+    climate.router,
+    prefix="/climate",
+    tags=["Climate Data"],
+)
+
+# Strategic Modules (stubs)
+api_router.include_router(
+    cip.router,
+    prefix="/cip",
+    tags=["Module: Critical Infrastructure Protection"],
+)
+api_router.include_router(
+    scss.router,
+    prefix="/scss",
+    tags=["Module: Supply Chain Sovereignty"],
+)
+api_router.include_router(
+    sro.router,
+    prefix="/sro",
+    tags=["Module: Systemic Risk Observatory"],
+)
+
+# Analytics (Dashboard data)
+api_router.include_router(
+    analytics.router,
+    prefix="/analytics",
+    tags=["Analytics"],
 )
