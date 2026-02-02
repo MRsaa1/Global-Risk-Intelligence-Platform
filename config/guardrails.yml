@@ -1,0 +1,65 @@
+# NVIDIA NeMo Guardrails Configuration
+# Safety, Compliance, and Control for AI Agents
+
+rails:
+  # Input validation
+  input:
+    - check_financial_data_accuracy
+    - validate_geographic_bounds
+    - filter_sensitive_information
+    - check_for_sql_injection
+    - validate_asset_ids
+  
+  # Output validation
+  output:
+    - check_recommendation_feasibility
+    - verify_regulatory_compliance
+    - ensure_no_hallucinations
+    - validate_citation_sources
+    - check_action_safety
+    - require_human_approval_for_critical
+  
+  # Dialog management
+  dialog:
+    - maintain_professional_tone
+    - cite_data_sources
+    - provide_uncertainty_estimates
+    - acknowledge_limitations
+  
+  # Safety (critical)
+  safety:
+    - prevent_autonomous_lethal_actions
+    - require_human_approval_for_mass_actions
+    - enforce_human_veto
+    - block_dangerous_recommendations
+  
+  # Compliance
+  compliance:
+    - verify_ecb_requirements
+    - verify_fed_requirements
+    - verify_tcfd_disclosure
+    - verify_csrd_reporting
+    - check_basel_framework
+  
+  # Agent-specific rules
+  agents:
+    SENTINEL:
+      - validate_alert_severity
+      - check_false_positive_rate
+      - verify_data_sources
+    
+    ANALYST:
+      - require_citations
+      - validate_analysis_depth
+      - check_correlation_validity
+    
+    ADVISOR:
+      - require_roi_analysis
+      - validate_cost_estimates
+      - check_action_feasibility
+      - require_human_approval_for_high_cost
+    
+    REPORTER:
+      - verify_factual_accuracy
+      - check_regulatory_format
+      - validate_data_timestamps

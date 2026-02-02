@@ -6,17 +6,13 @@ from typing import Optional
 from uuid import uuid4
 
 from sqlalchemy import (
-    JSON,
+    Integer,
     DateTime,
-    Enum,
     Float,
-    ForeignKey,
     String,
     Text,
-    func,
 )
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from src.core.database import Base
 
@@ -52,6 +48,27 @@ class AssetStatus(str, enum.Enum):
     RENOVATION = "renovation"
     INACTIVE = "inactive"
     DECOMMISSIONED = "decommissioned"
+
+
+class FinancialProductType(str, enum.Enum):
+    """Types of financial products associated with assets."""
+    MORTGAGE = "mortgage"
+    PROPERTY_INSURANCE = "property_insurance"
+    PROJECT_FINANCE = "project_finance"
+    INFRA_BOND = "infra_bond"
+    CREDIT_FACILITY = "credit_facility"
+    LEASE = "lease"
+    OTHER = "other"
+
+
+class InsuranceProductType(str, enum.Enum):
+    """Types of insurance products."""
+    PROPERTY = "property"
+    LIABILITY = "liability"
+    BUSINESS_INTERRUPTION = "business_interruption"
+    NATURAL_DISASTER = "natural_disaster"
+    COMPREHENSIVE = "comprehensive"
+    OTHER = "other"
 
 
 class Asset(Base):
@@ -99,10 +116,10 @@ class Asset(Base):
     # Physical Attributes
     gross_floor_area_m2: Mapped[Optional[float]] = mapped_column(Float)
     net_leasable_area_m2: Mapped[Optional[float]] = mapped_column(Float)
-    floors_above_ground: Mapped[Optional[int]]
-    floors_below_ground: Mapped[Optional[int]]
-    year_built: Mapped[Optional[int]]
-    year_renovated: Mapped[Optional[int]]
+    floors_above_ground: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    floors_below_ground: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    year_built: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    year_renovated: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     construction_type: Mapped[Optional[str]] = mapped_column(String(100))
     
     # BIM/3D Model Reference
@@ -127,6 +144,28 @@ class Asset(Base):
     network_risk_score: Mapped[Optional[float]] = mapped_column(
         Float,
         comment="Dependency/cascade risk 0-100",
+    )
+    
+    # Financial Product Fields (Phase 0.1)
+    financial_product: Mapped[Optional[str]] = mapped_column(
+        String(50),
+        comment="Type of financial product: mortgage, property_insurance, project_finance, etc.",
+    )
+    insurance_product_type: Mapped[Optional[str]] = mapped_column(
+        String(50),
+        comment="Type of insurance: property, liability, business_interruption, etc.",
+    )
+    credit_facility_id: Mapped[Optional[str]] = mapped_column(
+        String(100),
+        comment="External credit facility reference ID",
+    )
+    suggested_credit_limit: Mapped[Optional[float]] = mapped_column(
+        Float,
+        comment="AI-suggested credit limit based on risk analysis",
+    )
+    suggested_premium_annual: Mapped[Optional[float]] = mapped_column(
+        Float,
+        comment="AI-suggested annual insurance premium",
     )
     
     # Extra Data

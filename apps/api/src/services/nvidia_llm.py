@@ -21,11 +21,13 @@ logger = logging.getLogger(__name__)
 
 
 class LLMModel(str, Enum):
-    """Available LLM models on NVIDIA API."""
+    """Available LLM models on NVIDIA API (NIM + Triton / integrate.api.nvidia.com)."""
     # Llama models
     LLAMA_70B = "meta/llama-3.1-70b-instruct"
     LLAMA_8B = "meta/llama-3.1-8b-instruct"
-    # Mistral models
+    # Mistral / NeMo (fast scenario analysis)
+    MISTRAL_NEMO_12B = "nv-mistralai/mistral-nemo-12b-instruct"
+    # Mistral / Mixtral
     MISTRAL_LARGE = "mistralai/mistral-large-3-675b-instruct-2512"  # Most capable
     MIXTRAL_8X22B = "mistralai/mixtral-8x22b-instruct-v0.1"
     MIXTRAL_8X7B = "mistralai/mixtral-8x7b-instruct-v0.1"
@@ -44,25 +46,97 @@ class NVIDIALLMService:
     """
     Service for NVIDIA LLM inference.
     
-    Uses NVIDIA Cloud API for inference without GPU.
-    Can switch to local NIM when GPU is available.
+    Routing order when multiple are configured:
+    1. Dynamo (enable_dynamo) — low-latency distributed inference
+    2. Triton (enable_triton) — model serving with triton_llm_model
+    3. Cloud (nvidia_mode=cloud) — NVIDIA API
+    4. Local NIM (nvidia_mode=local) — Llama NIM
     """
     
     def __init__(self):
         self.api_key = settings.nvidia_api_key or ""
-        self.base_url = "https://integrate.api.nvidia.com/v1"
-        self.use_cloud = getattr(settings, 'nvidia_mode', 'cloud') == 'cloud'
-        self.nim_url = getattr(settings, 'llama_nim_url', 'http://localhost:8003')
-        
-        # Build headers
-        headers = {'Content-Type': 'application/json'}
+        self.use_cloud = getattr(settings, "nvidia_mode", "cloud") == "cloud"
+        self.nim_url = getattr(settings, "llama_nim_url", "http://localhost:8003")
+        self.enable_dynamo = getattr(settings, "enable_dynamo", False)
+        self.dynamo_url = (getattr(settings, "dynamo_url", "http://localhost:8004") or "").rstrip("/")
+        self.enable_triton = getattr(settings, "enable_triton", False)
+        self.triton_url = (getattr(settings, "triton_url", "http://localhost:8000") or "").rstrip("/")
+        self.triton_llm_model = getattr(settings, "triton_llm_model", "nemotron") or "nemotron"
+
+        cloud_base = getattr(settings, "nvidia_llm_api_url", "https://integrate.api.nvidia.com/v1") or "https://integrate.api.nvidia.com/v1"
+        local_base = self.nim_url.rstrip("/") + "/v1"  # NIM is typically OpenAI-compatible at /v1/*
+
+        self._cloud_base_url = cloud_base.rstrip("/")
+        self._local_base_url = local_base.rstrip("/")
+        self._dynamo_base_url = (self.dynamo_url + "/v1") if self.dynamo_url else ""
+        self._triton_base_url = (self.triton_url + "/v1") if self.triton_url else ""
+
+        # Back-compat: active base URL (first enabled in routing order)
+        self.base_url = self._resolve_base_url()
+
+        cloud_headers = {"Content-Type": "application/json"}
         if self.api_key:
-            headers['Authorization'] = f'Bearer {self.api_key}'
-        
-        self.http_client = httpx.AsyncClient(
-            timeout=120.0,
-            headers=headers,
-        )
+            cloud_headers["Authorization"] = f"Bearer {self.api_key}"
+
+        self._cloud_client = httpx.AsyncClient(timeout=120.0, headers=cloud_headers)
+        self._local_client = httpx.AsyncClient(timeout=120.0, headers={"Content-Type": "application/json"})
+        self._dynamo_client = httpx.AsyncClient(timeout=120.0, headers={"Content-Type": "application/json"})
+        self._triton_client = httpx.AsyncClient(timeout=120.0, headers={"Content-Type": "application/json"})
+
+    def _resolve_base_url(self) -> str:
+        """First enabled backend in order: Dynamo -> Triton -> Cloud -> Local NIM."""
+        if self.enable_dynamo and self._dynamo_base_url:
+            return self._dynamo_base_url
+        if self.enable_triton and self._triton_base_url:
+            return self._triton_base_url
+        return self._cloud_base_url if self.use_cloud else self._local_base_url
+
+    def _get_llm_backend(self) -> tuple[str, httpx.AsyncClient, str]:
+        """
+        Returns (base_url, client, model_override).
+        model_override: when set, use this instead of request model (e.g. Triton model name).
+        """
+        if self.enable_dynamo and self._dynamo_base_url:
+            return self._dynamo_base_url, self._dynamo_client, ""
+        if self.enable_triton and self._triton_base_url:
+            return self._triton_base_url, self._triton_client, self.triton_llm_model
+        if self.use_cloud:
+            return self._cloud_base_url, self._cloud_client, ""
+        return self._local_base_url, self._local_client, ""
+
+    @property
+    def mode(self) -> Literal["cloud", "local", "dynamo", "triton"]:
+        if self.enable_dynamo and self._dynamo_base_url:
+            return "dynamo"
+        if self.enable_triton and self._triton_base_url:
+            return "triton"
+        return "cloud" if self.use_cloud else "local"
+
+    def get_model_info(self) -> dict:
+        """Модели, используемые для агентов и отчётов (для логов и /health/nvidia)."""
+        return {
+            "default": LLMModel.LLAMA_70B.value,
+            "report_executive_summary": LLMModel.LLAMA_70B.value,
+            "analyst_advisor": LLMModel.LLAMA_70B.value,
+            "sentinel_alerts": LLMModel.LLAMA_8B.value,
+        }
+
+    @property
+    def is_available(self) -> bool:
+        """
+        Whether the configured LLM provider is usable.
+        - dynamo: requires enable_dynamo and dynamo_url
+        - triton: requires enable_triton and triton_url
+        - cloud: requires NVIDIA_API_KEY
+        - local: requires a non-empty Llama NIM URL
+        """
+        if self.enable_dynamo and self._dynamo_base_url:
+            return True
+        if self.enable_triton and self._triton_base_url:
+            return True
+        if self.use_cloud:
+            return bool((self.api_key or "").strip())
+        return bool((self.nim_url or "").strip())
     
     async def generate(
         self,
@@ -85,8 +159,9 @@ class NVIDIALLMService:
         Returns:
             LLM response with generated text
         """
-        if not self.api_key:
-            logger.warning("NVIDIA API key not set, using mock response")
+        use_cloud_only = self.use_cloud and not (self.enable_dynamo or self.enable_triton)
+        if use_cloud_only and not self.api_key:
+            logger.warning("NVIDIA API key not set (cloud mode), using mock response")
             return self._mock_response(prompt, model.value)
         
         messages = []
@@ -94,11 +169,14 @@ class NVIDIALLMService:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
         
+        base_url, client, model_override = self._get_llm_backend()
+        effective_model = model_override or model.value
+        
         try:
-            response = await self.http_client.post(
-                f"{self.base_url}/chat/completions",
+            response = await client.post(
+                f"{base_url}/chat/completions",
                 json={
-                    "model": model.value,
+                    "model": effective_model,
                     "messages": messages,
                     "max_tokens": max_tokens,
                     "temperature": temperature,
@@ -107,7 +185,32 @@ class NVIDIALLMService:
             )
             
             if response.status_code != 200:
-                logger.error(f"LLM API error: {response.status_code} - {response.text}")
+                logger.error("LLM API error (%s): %s", response.status_code, response.text[:500])
+                # If dynamo/triton/local failed but cloud is configured, fallback to cloud.
+                if (self.enable_dynamo or self.enable_triton or not self.use_cloud) and self.api_key:
+                    try:
+                        fallback = await self._cloud_client.post(
+                            f"{self._cloud_base_url}/chat/completions",
+                            json={
+                                "model": model.value,
+                                "messages": messages,
+                                "max_tokens": max_tokens,
+                                "temperature": temperature,
+                                "top_p": 0.9,
+                            },
+                        )
+                        if fallback.status_code == 200:
+                            data = fallback.json()
+                            choice = data.get("choices", [{}])[0]
+                            usage = data.get("usage", {})
+                            return LLMResponse(
+                                content=choice.get("message", {}).get("content", ""),
+                                model=model.value,
+                                tokens_used=usage.get("total_tokens", 0),
+                                finish_reason=choice.get("finish_reason", "stop"),
+                            )
+                    except Exception as e:
+                        logger.debug("LLM cloud fallback failed: %s", e)
                 return self._mock_response(prompt, model.value)
             
             data = response.json()
@@ -116,7 +219,7 @@ class NVIDIALLMService:
             
             return LLMResponse(
                 content=choice.get("message", {}).get("content", ""),
-                model=model.value,
+                model=effective_model,
                 tokens_used=usage.get("total_tokens", 0),
                 finish_reason=choice.get("finish_reason", "stop"),
             )
@@ -136,7 +239,8 @@ class NVIDIALLMService:
         """
         Stream text generation for real-time responses.
         """
-        if not self.api_key:
+        use_cloud_only = self.use_cloud and not (self.enable_dynamo or self.enable_triton)
+        if use_cloud_only and not self.api_key:
             yield "Mock streaming response: " + prompt[:100]
             return
         
@@ -145,12 +249,15 @@ class NVIDIALLMService:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
         
+        base_url, client, model_override = self._get_llm_backend()
+        effective_model = model_override or model.value
+        
         try:
-            async with self.http_client.stream(
+            async with client.stream(
                 "POST",
-                f"{self.base_url}/chat/completions",
+                f"{base_url}/chat/completions",
                 json={
-                    "model": model.value,
+                    "model": effective_model,
                     "messages": messages,
                     "max_tokens": max_tokens,
                     "temperature": temperature,
@@ -299,10 +406,23 @@ Provide:
         """
         REPORTER: Generate report section or summary.
         Uses Llama 70B for professional writing.
+        When entity_name/entity_type are in data, adapts tone and focus to the entity type
+        (e.g. HEALTHCARE: medical supply, ICU, patient safety; FINANCIAL: liquidity, counterparties;
+        CITY/REGION: infrastructure and population).
         """
-        prompt = f"""Generate a {report_type} for {audience} audience:
-
-## Data:
+        entity_instruction = ""
+        if data.get("entity_name") and data.get("entity_type"):
+            entity_instruction = (
+                f"\nEntity context: {data['entity_name']} (Type: {data['entity_type']}). "
+                "Adapt the analysis and recommendations to this entity type "
+                "(e.g. for HEALTHCARE focus on medical supply, ICU capacity, patient safety; "
+                "for FINANCIAL on liquidity, counterparties; for CITY/REGION on infrastructure and population)."
+            )
+            if "airport" in (data.get("entity_name") or "").lower():
+                entity_instruction += " For airports mention operator (e.g. Fraport AG for Frankfurt Airport) and airline operations (e.g. Deutsche Lufthansa) where relevant."
+            entity_instruction += "\n\n"
+        prompt = f"""Generate a {report_type} for {audience} audience.
+{entity_instruction}## Data:
 {self._format_dict(data)}
 
 Requirements:
@@ -317,7 +437,7 @@ Requirements:
             model=LLMModel.LLAMA_70B,
             max_tokens=3000,
             temperature=0.4,
-            system_prompt="You are a professional report writer specializing in ESG, climate risk, and financial reporting for institutional investors.",
+            system_prompt="You are a professional report writer specializing in ESG, climate risk, and financial reporting for institutional investors. When an entity type is provided, tailor the summary to that entity (healthcare, financial, city/region, etc.).",
         )
         return response.content
     
@@ -334,8 +454,11 @@ Requirements:
         return "\n".join(lines)
     
     async def close(self):
-        """Close HTTP client."""
-        await self.http_client.aclose()
+        """Close HTTP clients."""
+        await self._cloud_client.aclose()
+        await self._local_client.aclose()
+        await self._dynamo_client.aclose()
+        await self._triton_client.aclose()
 
 
 # Global service instance

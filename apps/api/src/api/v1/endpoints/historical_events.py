@@ -145,6 +145,38 @@ async def list_historical_events(
     return [_event_to_response(e) for e in events]
 
 
+@router.get("/comparable")
+async def get_comparable_historical_events(
+    event_id: str = Query(..., description="Stress test event_id e.g. Flood_Extreme_100y"),
+    city_name: str = Query(..., description="City name e.g. Melbourne"),
+    limit: int = Query(5, ge=1, le=20),
+    session: AsyncSession = Depends(get_db),
+):
+    """
+    Get historically comparable events ONLY: same event type and geographic relevance.
+    E.g. flood in Melbourne -> floods in Melbourne, Victoria, Brisbane, Australia.
+    Merges DB events with seed events so region-specific seed data (e.g. Tokyo floods) is always considered.
+    """
+    from src.services.comparable_historical_events import filter_comparable
+
+    query = select(HistoricalEvent).order_by(HistoricalEvent.start_date.desc()).limit(100)
+    result = await session.execute(query)
+    events_db = result.scalars().all()
+
+    # Always include seed events (e.g. Tokyo typhoons) so comparable works even when DB was seeded without them
+    events_seed = [e for e in get_historical_events() if isinstance(e, dict)]
+    db_names = {getattr(e, "name", None) for e in events_db}
+    combined = list(events_db) + [d for d in events_seed if d.get("name") not in db_names]
+
+    comparable = filter_comparable(
+        combined,
+        event_id=event_id,
+        city_name=city_name,
+        limit=limit,
+    )
+    return {"comparable_events": comparable}
+
+
 @router.post("", response_model=HistoricalEventResponse, status_code=201)
 async def create_historical_event(
     data: HistoricalEventCreate,

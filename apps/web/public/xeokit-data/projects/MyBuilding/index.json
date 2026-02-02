@@ -1,0 +1,6 @@
+{
+  "id": "MyBuilding",
+  "name": "MyBuilding",
+  "models": [{ "id": "design", "name": "Design" }],
+  "viewerContent": { "modelsLoaded": ["design"] }
+}

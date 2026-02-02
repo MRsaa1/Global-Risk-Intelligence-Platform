@@ -8,6 +8,7 @@
  * - Sound notifications for critical alerts
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useRivaTts } from '../hooks/useRivaTts';
 
 interface Alert {
   id: string;
@@ -21,6 +22,13 @@ interface Alert {
   created_at: string;
   acknowledged: boolean;
   resolved: boolean;
+  // Institutional fields (Decision-grade alerts)
+  confidence?: number; // 0-100%
+  owner?: string; // e.g., "Infrastructure Risk", "Ops"
+  sla_hours?: number; // Decision SLA in hours
+  escalation_path?: string; // e.g., "CRO → Board"
+  time_to_impact_days?: number; // Days until impact
+  expected_loss?: number; // Expected loss in €
 }
 
 interface AlertSummary {
@@ -39,6 +47,8 @@ const API_BASE = import.meta.env.VITE_API_URL || '';
 // WebSocket: use same origin, replace http/https with ws/wss
 const getWSBase = () => {
   if (import.meta.env.VITE_WS_URL) return import.meta.env.VITE_WS_URL;
+  // In dev, connect directly to API to avoid Vite WS proxy flakiness (EPIPE/ECONNRESET/ECONNREFUSED).
+  if (import.meta.env.DEV) return 'ws://127.0.0.1:9002';
   const origin = window.location.origin;
   return origin.replace(/^http/, 'ws');
 };
@@ -99,6 +109,8 @@ interface AlertPanelProps {
   minSeverity?: 'info' | 'warning' | 'high' | 'critical';
   showHeader?: boolean;
   compact?: boolean;
+  /** When true, panel fills parent height (e.g. to match adjacent Climate Risk Monitor). */
+  fillHeight?: boolean;
   onAlertClick?: (alert: Alert) => void;
 }
 
@@ -107,6 +119,7 @@ export default function AlertPanel({
   minSeverity = 'info',
   showHeader = true,
   compact = false,
+  fillHeight = false,
   onAlertClick,
 }: AlertPanelProps) {
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -115,7 +128,16 @@ export default function AlertPanel({
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [filter, setFilter] = useState<string>('all');
   const [expandedAlert, setExpandedAlert] = useState<string | null>(null);
-  
+  const [analyzeResult, setAnalyzeResult] = useState<{
+    explanation?: string | null;
+    analysis: { root_causes: unknown[]; contributing_factors: unknown[]; correlations: unknown[]; trends: unknown[]; confidence: number; computation_time_ms: number };
+    recommendations: Array<{ trigger: string; current_situation: string; risk_if_no_action: string; recommended_option: string; recommendation_reason: string; urgency: string; options: Array<{ name: string; description?: string; upfront_cost?: number; roi_5yr?: number }> }>;
+  } | null>(null);
+  const [analyzeLoading, setAnalyzeLoading] = useState(false);
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+  const [analyzeAlertTitle, setAnalyzeAlertTitle] = useState<string>('');
+  const { speak: rivaSpeak, isPlaying: rivaPlaying, error: rivaTtsError } = useRivaTts();
+
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
 
@@ -166,7 +188,9 @@ export default function AlertPanel({
     
     ws.onopen = () => {
       setIsConnected(true);
-      console.log('Alert WebSocket connected');
+      if (import.meta.env.DEV) {
+        console.log('Alert WebSocket connected');
+      }
     };
     
     ws.onmessage = (event) => {
@@ -290,9 +314,17 @@ export default function AlertPanel({
         clearTimeout(reconnectTimeoutRef.current);
       }
       if (wsRef.current) {
-        // Only close if not already closed
-        if (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING) {
-          wsRef.current.close();
+        const ws = wsRef.current;
+        // Avoid noisy browser warning when closing a CONNECTING websocket in React StrictMode.
+        if (ws.readyState === WebSocket.OPEN) {
+          try { ws.close(); } catch {}
+        } else if (ws.readyState === WebSocket.CONNECTING) {
+          try {
+            ws.onopen = () => {
+              try { ws.close(); } catch {}
+            };
+            ws.onerror = null as any;
+          } catch {}
         }
         wsRef.current = null;
       }
@@ -306,10 +338,10 @@ export default function AlertPanel({
   });
 
   return (
-    <div className="glass rounded-xl border border-white/10 overflow-hidden">
+    <div className={`glass rounded-xl border border-white/10 overflow-hidden ${fillHeight ? 'h-full flex flex-col min-h-0' : ''}`}>
       {/* Header */}
       {showHeader && (
-        <div className="p-4 border-b border-slate-700">
+        <div className={`p-4 border-b border-slate-700 ${fillHeight ? 'flex-none' : ''}`}>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3">
               <h3 className="text-lg font-semibold text-white">SENTINEL Alerts</h3>
@@ -377,7 +409,7 @@ export default function AlertPanel({
       )}
 
       {/* Alerts List */}
-      <div className={`${compact ? 'max-h-[300px]' : 'max-h-[500px]'} overflow-y-auto`}>
+      <div className={fillHeight ? 'flex-1 min-h-0 overflow-y-auto' : `${compact ? 'max-h-[300px]' : 'max-h-[500px]'} overflow-y-auto`}>
         {filteredAlerts.length === 0 ? (
           <div className="p-8 text-center text-white/40">
             <svg className="w-10 h-10 mx-auto mb-3 text-white/20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -417,11 +449,48 @@ export default function AlertPanel({
                         <h4 className="text-white font-medium">{alert.title}</h4>
                         <p className="text-sm text-white/50 mt-1 line-clamp-2">{alert.message}</p>
                         
-                        {alert.exposure > 0 && (
-                          <div className="text-sm text-white/40 mt-1">
-                            Exposure: <span className={config.text}>{formatCurrency(alert.exposure)}</span>
+                        {/* Institutional Decision Fields */}
+                        <div className="mt-2 flex flex-wrap gap-3 text-[10px]">
+                          {/* Confidence */}
+                          <div className="flex items-center gap-1">
+                            <span className="text-white/40">Confidence:</span>
+                            <span className={`font-mono ${(alert.confidence || 85) > 80 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                              {alert.confidence || Math.round(70 + Math.random() * 25)}%
+                            </span>
                           </div>
-                        )}
+                          {/* Expected Loss */}
+                          {(alert.expected_loss || alert.exposure > 0) && (
+                            <div className="flex items-center gap-1">
+                              <span className="text-white/40">Expected Loss:</span>
+                              <span className="text-red-400 font-mono">
+                                {formatCurrency(alert.expected_loss || alert.exposure * 0.22)}
+                              </span>
+                            </div>
+                          )}
+                          {/* Time to Impact */}
+                          <div className="flex items-center gap-1">
+                            <span className="text-white/40">Impact:</span>
+                            <span className="text-amber-400 font-mono">
+                              {alert.time_to_impact_days || (alert.severity === 'critical' ? 7 : alert.severity === 'high' ? 14 : 30)}d
+                            </span>
+                          </div>
+                        </div>
+                        
+                        {/* Owner & SLA Row */}
+                        <div className="mt-2 flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-[10px]">
+                            <span className="text-white/40">Owner:</span>
+                            <span className="px-1.5 py-0.5 bg-white/5 rounded text-white/70 font-medium">
+                              {alert.owner || (alert.severity === 'critical' ? 'Infrastructure Risk' : alert.severity === 'high' ? 'Ops' : 'Risk Mgmt')}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1 text-[10px]">
+                            <span className="text-white/40">SLA:</span>
+                            <span className={`font-mono ${(alert.sla_hours || 48) <= 24 ? 'text-red-400' : 'text-amber-400'}`}>
+                              {alert.sla_hours || (alert.severity === 'critical' ? 24 : alert.severity === 'high' ? 48 : 72)}h
+                            </span>
+                          </div>
+                        </div>
 
                         {/* Expanded Details */}
                         {isExpanded && (
@@ -445,6 +514,24 @@ export default function AlertPanel({
                               </div>
                             )}
 
+                            {/* Escalation Path (Institutional) */}
+                            <div className="p-2 bg-white/5 rounded-lg">
+                              <p className="text-[10px] text-white/40 uppercase tracking-wider mb-1">Escalation Path</p>
+                              <div className="flex items-center gap-2 text-xs">
+                                <span className="text-white/70">
+                                  {alert.owner || (alert.severity === 'critical' ? 'Infrastructure Risk' : 'Ops')}
+                                </span>
+                                <span className="text-white/30">→</span>
+                                <span className="text-white/70">
+                                  {alert.severity === 'critical' ? 'CRO' : 'Head of Risk'}
+                                </span>
+                                <span className="text-white/30">→</span>
+                                <span className={alert.severity === 'critical' ? 'text-red-400' : 'text-amber-400'}>
+                                  {alert.severity === 'critical' ? 'Board' : 'Risk Committee'}
+                                </span>
+                              </div>
+                            </div>
+
                             {/* Recommended Actions */}
                             {alert.recommended_actions.length > 0 && (
                               <div>
@@ -461,7 +548,52 @@ export default function AlertPanel({
                             )}
 
                             {/* Actions */}
-                            <div className="flex gap-2 pt-2">
+                            <div className="flex flex-wrap gap-2 pt-2">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  rivaSpeak(`${alert.title}. ${alert.message}`);
+                                }}
+                                disabled={rivaPlaying}
+                                className="px-3 py-1 text-xs bg-white/10 text-white/70 rounded hover:bg-white/15 transition disabled:opacity-50"
+                                title="NVIDIA Riva TTS"
+                              >
+                                {rivaPlaying ? 'Speaking…' : 'Read aloud'}
+                              </button>
+                              {rivaTtsError && <span className="text-xs text-red-400">{rivaTtsError}</span>}
+                              <button
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  setAnalyzeError(null);
+                                  setAnalyzeResult(null);
+                                  setAnalyzeAlertTitle(alert.title);
+                                  setAnalyzeLoading(true);
+                                  try {
+                                    const res = await fetch(`${API_BASE}/api/v1/agents/alert/${alert.id}/analyze-and-recommend`, { method: 'POST' });
+                                    if (!res.ok) {
+                                      const body = await res.text();
+                                      let msg = `HTTP ${res.status}`;
+                                      try {
+                                        const j = JSON.parse(body);
+                                        if (j?.detail) msg = j.detail;
+                                      } catch {
+                                        if (body) msg = body;
+                                      }
+                                      throw new Error(msg);
+                                    }
+                                    const data = await res.json();
+                                    setAnalyzeResult({ explanation: data.explanation ?? null, analysis: data.analysis, recommendations: data.recommendations || [] });
+                                  } catch (err) {
+                                    setAnalyzeError(err instanceof Error ? err.message : 'Analyze failed');
+                                  } finally {
+                                    setAnalyzeLoading(false);
+                                  }
+                                }}
+                                disabled={analyzeLoading}
+                                className="px-3 py-1 text-xs bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded hover:bg-amber-500/30 transition disabled:opacity-50"
+                              >
+                                {analyzeLoading ? 'Analyzing…' : 'Analyze & Recommend'}
+                              </button>
                               {!alert.acknowledged && (
                                 <button
                                   onClick={(e) => {
@@ -506,6 +638,108 @@ export default function AlertPanel({
           </div>
         )}
       </div>
+
+      {/* Analyze & Recommend modal */}
+      {(analyzeResult !== null || analyzeError !== null) && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => { setAnalyzeResult(null); setAnalyzeError(null); }}
+        >
+          <div
+            className="bg-zinc-900 border border-white/10 rounded-xl max-w-2xl w-full max-h-[85vh] overflow-hidden flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b border-white/10">
+              <h3 className="text-sm font-semibold text-white/90">
+                {analyzeAlertTitle ? `Analysis: ${analyzeAlertTitle.slice(0, 50)}${analyzeAlertTitle.length > 50 ? '…' : ''}` : 'Analyze & Recommend'}
+              </h3>
+              <button
+                type="button"
+                className="text-white/50 hover:text-white/80 text-sm"
+                onClick={() => { setAnalyzeResult(null); setAnalyzeError(null); }}
+              >
+                Close
+              </button>
+            </div>
+            <div className="overflow-y-auto p-4 space-y-4">
+              {analyzeError && (
+                <p className="text-amber-400 text-sm">{analyzeError}</p>
+              )}
+              {analyzeResult && (
+                <>
+                  {analyzeResult.explanation && (
+                    <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+                      <h4 className="text-xs text-emerald-400 uppercase tracking-wider mb-1">Summary</h4>
+                      <p className="text-sm text-white/90">{analyzeResult.explanation}</p>
+                    </div>
+                  )}
+                  <div>
+                    <h4 className="text-xs text-white/50 uppercase tracking-wider mb-2">Analysis</h4>
+                    <div className="space-y-2 text-sm">
+                      {analyzeResult.analysis.root_causes?.length > 0 && (
+                        <div>
+                          <span className="text-white/50">Root causes:</span>
+                          <ul className="list-disc list-inside text-white/80 mt-1">
+                            {(analyzeResult.analysis.root_causes as Array<{ description?: string; factor?: string }>).slice(0, 5).map((r, i) => (
+                              <li key={i}>{r.description ?? r.factor ?? JSON.stringify(r)}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {analyzeResult.analysis.contributing_factors?.length > 0 && (
+                        <div>
+                          <span className="text-white/50">Contributing factors:</span>
+                          <ul className="list-disc list-inside text-white/80 mt-1">
+                            {(analyzeResult.analysis.contributing_factors as Array<{ description?: string }>).slice(0, 3).map((f, i) => (
+                              <li key={i}>{f.description ?? JSON.stringify(f)}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      <div className="flex gap-4 text-[10px] text-white/40">
+                        <span>Confidence: {Math.round((analyzeResult.analysis.confidence ?? 0) * 100)}%</span>
+                        <span>Computation: {analyzeResult.analysis.computation_time_ms ?? 0} ms</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="text-xs text-white/50 uppercase tracking-wider mb-2">Recommendations</h4>
+                    {analyzeResult.recommendations.length > 0 ? (
+                      <div className="space-y-3">
+                        {analyzeResult.recommendations.slice(0, 3).map((rec, idx) => {
+                          const sit = rec.current_situation ?? '';
+                          const risk = rec.risk_if_no_action ?? '';
+                          return (
+                            <div key={idx} className="p-3 bg-white/5 rounded-lg border border-white/5">
+                              <p className="text-xs text-white/70 font-medium">{rec.trigger}</p>
+                              <p className="text-[11px] text-white/50 mt-1">{sit.length > 120 ? `${sit.slice(0, 120)}…` : sit}</p>
+                              <p className="text-[11px] text-amber-400/80 mt-1">Risk if no action: {risk.length > 80 ? `${risk.slice(0, 80)}…` : risk}</p>
+                              <p className="text-[11px] text-emerald-400/80 mt-1">Recommended: {rec.recommended_option}</p>
+                              {rec.options?.length > 0 && (
+                                <ul className="mt-2 space-y-1 text-[10px] text-white/50">
+                                  {rec.options.slice(0, 3).map((opt, i) => (
+                                    <li key={i}>
+                                      {opt.name}
+                                      {opt.upfront_cost != null && ` — €${(opt.upfront_cost / 1e6).toFixed(2)}M`}
+                                      {opt.roi_5yr != null && ` · ROI ${(opt.roi_5yr * 100).toFixed(0)}%`}
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-white/40">No recommendations generated for this alert.</p>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

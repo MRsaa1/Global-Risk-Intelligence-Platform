@@ -132,7 +132,7 @@ export default function RadarChart({
     plot_bgcolor: 'transparent',
     font: {
       color: chartColors.text.secondary,
-      family: 'Inter, system-ui, sans-serif',
+      family: '"Space Grotesk", system-ui, sans-serif',
     },
     showlegend: showLegend,
     legend: {

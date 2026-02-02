@@ -1,7 +1,7 @@
 /**
  * SRO Module - Systemic Risk Observatory
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -12,15 +12,24 @@ import {
   ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline'
 import { getModuleById } from '../../lib/modules'
+import { sroApi } from '../../lib/api'
 import AccessGate from '../../components/modules/AccessGate'
 
 export default function SROModule() {
   const navigate = useNavigate()
   const module = getModuleById('sro')
+  const [status, setStatus] = useState<{ module?: string; statistics?: Record<string, unknown> } | null>(null)
+  const [statusError, setStatusError] = useState<string | null>(null)
+
+  useEffect(() => {
+    sroApi.getStatus().then(setStatus).catch((e) => setStatusError(e?.message || 'Failed to load'))
+  }, [])
 
   if (!module) {
     return <div>Module not found</div>
   }
+
+  const stats = status?.statistics as Record<string, number> | undefined
 
   return (
     <AccessGate accessLevel={module.accessLevel}>
@@ -74,6 +83,44 @@ export default function SROModule() {
               ))}
             </div>
           </motion.div>
+
+          {/* Statistics */}
+          {(stats || statusError) && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15 }}
+              className="mb-8 p-6 bg-white/5 rounded-2xl border border-white/10"
+            >
+              <h2 className="text-white/90 font-semibold mb-4">Module Statistics</h2>
+              {statusError ? (
+                <p className="text-amber-400 text-sm">{statusError}</p>
+              ) : stats ? (
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  <div className="p-3 bg-white/5 rounded-lg">
+                    <p className="text-white/50 text-xs">Institutions</p>
+                    <p className="text-white font-semibold">{stats.total_institutions ?? 0}</p>
+                  </div>
+                  <div className="p-3 bg-white/5 rounded-lg">
+                    <p className="text-white/50 text-xs">Correlations</p>
+                    <p className="text-white font-semibold">{stats.total_correlations ?? 0}</p>
+                  </div>
+                  <div className="p-3 bg-white/5 rounded-lg">
+                    <p className="text-white/50 text-xs">Indicators</p>
+                    <p className="text-white font-semibold">{stats.total_indicators ?? 0}</p>
+                  </div>
+                  <div className="p-3 bg-white/5 rounded-lg">
+                    <p className="text-white/50 text-xs">Breached</p>
+                    <p className="text-amber-400 font-semibold">{stats.breached_indicators ?? 0}</p>
+                  </div>
+                  <div className="p-3 bg-white/5 rounded-lg">
+                    <p className="text-white/50 text-xs">Under Stress</p>
+                    <p className="text-amber-400 font-semibold">{stats.institutions_under_stress ?? 0}</p>
+                  </div>
+                </div>
+              ) : null}
+            </motion.div>
+          )}
 
           {/* Features Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
@@ -169,19 +216,43 @@ export default function SROModule() {
             <div className="space-y-3 font-mono text-sm">
               <div className="flex items-center gap-3">
                 <span className="px-2 py-1 bg-white/5 text-white/60 rounded text-xs">GET</span>
-                <span className="text-white/80">{module.apiPrefix}/systemic-indicators</span>
+                <span className="text-white/80">{module.apiPrefix}</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="px-2 py-1 bg-green-500/20 text-green-400 rounded text-xs">POST</span>
+                <span className="text-white/80">{module.apiPrefix}/institutions</span>
               </div>
               <div className="flex items-center gap-3">
                 <span className="px-2 py-1 bg-white/5 text-white/60 rounded text-xs">GET</span>
-                <span className="text-white/80">{module.apiPrefix}/early-warnings</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="px-2 py-1 bg-white/5 text-white/60 rounded text-xs">POST</span>
-                <span className="text-white/80">{module.apiPrefix}/scenarios/contagion</span>
+                <span className="text-white/80">{module.apiPrefix}/institutions</span>
               </div>
               <div className="flex items-center gap-3">
                 <span className="px-2 py-1 bg-white/5 text-white/60 rounded text-xs">GET</span>
+                <span className="text-white/80">{module.apiPrefix}/institutions/&#123;id&#125;/systemic-risk</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="px-2 py-1 bg-white/5 text-white/60 rounded text-xs">GET</span>
+                <span className="text-white/80">{module.apiPrefix}/institutions/&#123;id&#125;/contagion</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="px-2 py-1 bg-green-500/20 text-green-400 rounded text-xs">POST</span>
                 <span className="text-white/80">{module.apiPrefix}/correlations</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="px-2 py-1 bg-white/5 text-white/60 rounded text-xs">GET</span>
+                <span className="text-white/80">{module.apiPrefix}/indicators</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="px-2 py-1 bg-white/5 text-white/60 rounded text-xs">GET</span>
+                <span className="text-white/80">{module.apiPrefix}/indicators/breached</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="px-2 py-1 bg-white/5 text-white/60 rounded text-xs">GET</span>
+                <span className="text-white/80">{module.apiPrefix}/types</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="px-2 py-1 bg-white/5 text-white/60 rounded text-xs">GET</span>
+                <span className="text-white/80">{module.apiPrefix}/indicator-types</span>
               </div>
             </div>
           </motion.div>

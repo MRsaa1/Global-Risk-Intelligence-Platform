@@ -75,6 +75,67 @@ services:
       retries: 3
       start_period: 180s  # FLUX takes longer to warm up
 
+  # ==================== GTC: Riva, Dynamo, Triton ====================
+  # Voice alerts (SENTINEL), TTS for reports. Enable in API: ENABLE_RIVA=true, RIVA_URL=http://localhost:50051
+  # First-time: run NGC Riva quick start (riva_init.sh, riva_start.sh) or use NIM Riva container.
+  riva:
+    image: nvcr.io/nvidia/riva/riva-speech:2.24.0
+    container_name: pfrp-riva
+    runtime: nvidia
+    ports:
+      - "50051:50051"
+    environment:
+      - NGC_API_KEY=${NGC_API_KEY}
+    shm_size: "2g"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    # Riva server may require pre-downloaded models (riva_init.sh). See docs/GTC_NVIDIA_SETUP.md
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 5 bash -c '</dev/tcp/localhost/50051' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    profiles:
+      - gtc
+
+  # Dynamo: deploy per https://docs.nvidia.com/dynamo/ (e.g. dynamo build --containerize). Then set ENABLE_DYNAMO=true, DYNAMO_URL=http://<host>:8004
+
+  # Triton Inference Server — LLM/embeddings. Enable in API: ENABLE_TRITON=true, TRITON_URL=http://localhost:8000
+  # For TensorRT-LLM backend use Triton + TRT-LLM model repo; OpenAI-compatible frontend on 9000 in some setups.
+  triton:
+    image: nvcr.io/nvidia/tritonserver:24.01-py3
+    container_name: pfrp-triton
+    runtime: nvidia
+    ports:
+      - "8000:8000"
+      - "8001:8001"
+      - "8002:8002"
+    environment:
+      - NGC_API_KEY=${NGC_API_KEY}
+    shm_size: "4g"
+    # Mount model repository for LLM: -v /path/to/model_repo:/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/v2/health/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    profiles:
+      - gtc
+
   # PyG - PyTorch Geometric for Graph Neural Networks
   # Used for: Cascade prediction, Risk propagation, Network analysis
   pyg:

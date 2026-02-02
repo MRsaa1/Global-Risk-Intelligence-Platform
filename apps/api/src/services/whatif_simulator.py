@@ -299,6 +299,7 @@ class WhatIfSimulator:
         scenario_id: str,
         base_exposure: float = 100_000_000,
         num_simulations: int = 10000,
+        parameters_override: Optional[Dict[str, float]] = None,
     ) -> ScenarioResult:
         """
         Run a scenario simulation.
@@ -307,6 +308,7 @@ class WhatIfSimulator:
             scenario_id: ID of scenario to run
             base_exposure: Base portfolio exposure value
             num_simulations: Number of Monte Carlo simulations
+            parameters_override: Optional user overrides for event_severity, event_probability, portfolio_exposure, etc.
             
         Returns:
             ScenarioResult with risk metrics
@@ -315,7 +317,7 @@ class WhatIfSimulator:
             raise ValueError(f"Scenario {scenario_id} not found")
         
         scenario = self.scenarios[scenario_id]
-        params = scenario.parameters
+        params = {**scenario.parameters, **(parameters_override or {})}
         
         # Extract parameters
         severity = params.get("event_severity", 0.5)
@@ -396,7 +398,8 @@ class WhatIfSimulator:
             },
         )
         
-        self.results_cache[scenario_id] = result
+        if parameters_override is None:
+            self.results_cache[scenario_id] = result
         return result
     
     async def run_sensitivity_analysis(
@@ -475,6 +478,7 @@ class WhatIfSimulator:
         self,
         scenario_ids: List[str],
         base_exposure: float = 100_000_000,
+        parameters: Optional[Dict[str, float]] = None,
     ) -> ComparisonResult:
         """
         Compare multiple scenarios.
@@ -482,6 +486,7 @@ class WhatIfSimulator:
         Args:
             scenario_ids: List of scenario IDs to compare
             base_exposure: Base portfolio exposure
+            parameters: Optional overrides (event_severity, event_probability, portfolio_exposure, etc.)
             
         Returns:
             ComparisonResult with comparison metrics
@@ -489,10 +494,12 @@ class WhatIfSimulator:
         results = []
         
         for scenario_id in scenario_ids:
-            if scenario_id in self.results_cache:
+            if scenario_id in self.results_cache and not parameters:
                 results.append(self.results_cache[scenario_id])
             else:
-                result = await self.run_scenario(scenario_id, base_exposure)
+                result = await self.run_scenario(
+                    scenario_id, base_exposure, parameters_override=parameters
+                )
                 results.append(result)
         
         # Find best/worst

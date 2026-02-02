@@ -31,31 +31,23 @@ async def _check_redis() -> dict:
 
 
 async def _check_database() -> dict:
-    """Check PostgreSQL connection."""
+    """Check database connection (PostgreSQL or SQLite)."""
     try:
-        from src.core.database import engine, get_db
-        from sqlalchemy import text, select, func
-        from src.models.asset import Asset
-        
+        from src.core.database import engine
+        from sqlalchemy import text
+
         async with engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
-        
-        # Get database stats (try to count assets)
+
+        # Optional: get asset count (separate connection to avoid session lifecycle issues with aiosqlite)
         try:
-            from src.core.database import get_db
-            async for db in get_db():
-                try:
-                    # Count assets
-                    result = await db.execute(select(func.count(Asset.id)).where(Asset.status == "active"))
-                    asset_count = result.scalar() or 0
-                    
-                    return {
-                        "status": "connected",
-                        "asset_count": asset_count,
-                    }
-                except Exception:
-                    return {"status": "connected"}
-                break
+            from src.core.database import AsyncSessionLocal
+            from sqlalchemy import select, func
+            from src.models.asset import Asset
+            async with AsyncSessionLocal() as session:
+                result = await session.execute(select(func.count(Asset.id)).where(Asset.status == "active"))
+                asset_count = result.scalar() or 0
+            return {"status": "connected", "asset_count": asset_count}
         except Exception:
             return {"status": "connected"}
     except Exception as e:
@@ -66,6 +58,9 @@ async def _check_database() -> dict:
 async def _check_neo4j() -> dict:
     """Check Neo4j connection."""
     try:
+        from src.core.config import settings
+        if not getattr(settings, "enable_neo4j", False):
+            return {"status": "disabled", "message": "Neo4j disabled"}
         from src.services.knowledge_graph import get_knowledge_graph_service
         kg_service = get_knowledge_graph_service()
         if kg_service.is_available:
@@ -119,6 +114,16 @@ async def _check_external_apis() -> dict:
     return status
 
 
+async def _check_nvidia_services() -> dict:
+    """Полный чеклист продуктов NVIDIA (конфиг + готовность NIM)."""
+    try:
+        from src.services.nvidia_services_status import get_nvidia_services_status
+        return await get_nvidia_services_status()
+    except Exception as e:
+        logger.warning(f"NVIDIA services check failed: {e}")
+        return {"error": str(e)}
+
+
 async def _get_system_metrics() -> dict:
     """Get system resource usage."""
     if not HAS_PSUTIL:
@@ -158,6 +163,21 @@ async def health():
     }
 
 
+@router.get("/nvidia")
+async def health_nvidia():
+    """
+    Полный чеклист продуктов NVIDIA: конфигурация и готовность NIM.
+    Удобно для проверки в браузере или мониторинга.
+    """
+    try:
+        from src.services.nvidia_services_status import get_nvidia_services_status
+        status = await get_nvidia_services_status()
+        return {"nvidia_services": status}
+    except Exception as e:
+        logger.warning(f"NVIDIA health failed: {e}")
+        return {"nvidia_services": {"error": str(e)}}
+
+
 @router.get("/detailed")
 async def health_detailed():
     """
@@ -171,13 +191,14 @@ async def health_detailed():
     - System metrics (memory, CPU)
     - Active connections
     """
-    # Check all services in parallel
-    redis_status, db_status, neo4j_status, external_apis, system_metrics = await asyncio.gather(
+    # Check all services in parallel (including NVIDIA services checklist)
+    redis_status, db_status, neo4j_status, external_apis, system_metrics, nvidia_services = await asyncio.gather(
         _check_redis(),
         _check_database(),
         _check_neo4j(),
         _check_external_apis(),
         _get_system_metrics(),
+        _check_nvidia_services(),
     )
     
     # Check SENTINEL status
@@ -211,6 +232,7 @@ async def health_detailed():
             "sentinel": sentinel_status,
         },
         "external_apis": external_apis,
+        "nvidia_services": nvidia_services,
         "system": system_metrics,
     }
 

@@ -190,7 +190,7 @@ function generateFlowFromStressTest(
   const eventType = stressTestName.toLowerCase().includes('climate') ? 'climate'
     : stressTestName.toLowerCase().includes('earthquake') || stressTestName.toLowerCase().includes('seismic') ? 'earthquake'
     : stressTestName.toLowerCase().includes('pandemic') ? 'pandemic'
-    : stressTestName.toLowerCase().includes('financial') || stressTestName.toLowerCase().includes('basel') ? 'financial'
+    : stressTestName.toLowerCase().includes('financial') || stressTestName.toLowerCase().includes('basel') || stressTestName.toLowerCase().includes('debt') ? 'financial'
     : stressTestName.toLowerCase().includes('cyber') ? 'cyber'
     : stressTestName.toLowerCase().includes('conflict') || stressTestName.toLowerCase().includes('war') ? 'conflict'
     : 'financial'
@@ -386,7 +386,7 @@ export default function RiskFlowDiagram({
 
   const layout = useMemo(() => ({
     font: {
-      family: 'Inter, system-ui, sans-serif',
+      family: '"Space Grotesk", system-ui, sans-serif',
       size: 12,
       color: chartColors.text.secondary,
     },
@@ -588,20 +588,24 @@ export default function RiskFlowDiagram({
 export function RiskFlowMini({ 
   riskZones,
   stressTestResults,
+  stressTestName,
   height = 400 
 }: { 
   riskZones?: Array<{ name: string; risk: number; exposure: number }>
   stressTestResults?: {
     zones: Array<{ name: string; loss: number; riskLevel: string }>
   }
+  /** Label for the left node (e.g. scenario name). When not set, "Stress Test" or "Risk Event". */
+  stressTestName?: string
   height?: number 
 }) {
+  const eventLabel = stressTestName || 'Stress Test'
   const flowData = useMemo(() => {
     // Handle stressTestResults format (from DigitalTwinPanel)
     if (stressTestResults && stressTestResults.zones && stressTestResults.zones.length > 0) {
       const topZones = stressTestResults.zones.slice(0, 4)
       const nodes = [
-        { id: 'event', label: 'Stress Test', color: '#ef4444' },
+        { id: 'event', label: eventLabel, color: '#ef4444' },
         ...topZones.map((z, i) => ({
           id: `z${i}`,
           label: z.name,
@@ -632,7 +636,7 @@ export function RiskFlowMini({
       // Simple default
       return {
         nodes: [
-          { id: 'event', label: 'Risk Event', color: '#ef4444' },
+          { id: 'event', label: eventLabel, color: '#ef4444' },
           { id: 'sector1', label: 'Banking', color: '#3b82f6' },
           { id: 'sector2', label: 'Insurance', color: '#6366f1' },
           { id: 'critical', label: 'Critical', color: '#dc2626' },
@@ -651,7 +655,7 @@ export function RiskFlowMini({
     // Generate from zones
     const topZones = riskZones.slice(0, 4)
     const nodes = [
-      { id: 'event', label: 'Stress Test', color: '#ef4444' },
+      { id: 'event', label: eventLabel, color: '#ef4444' },
       ...topZones.map((z, i) => ({
         id: `z${i}`,
         label: z.name,
@@ -676,7 +680,7 @@ export function RiskFlowMini({
     ]
     
     return { nodes, links }
-  }, [riskZones, stressTestResults])
+  }, [riskZones, stressTestResults, eventLabel])
 
   const nodeMap = new Map(flowData.nodes.map((n, i) => [n.id, i]))
 
@@ -700,7 +704,7 @@ export function RiskFlowMini({
         },
       }]}
       layout={{
-        font: { family: 'Inter', size: 10, color: 'rgba(255,255,255,0.7)' },
+        font: { family: '"Space Grotesk"', size: 10, color: 'rgba(255,255,255,0.7)' },
         paper_bgcolor: 'transparent',
         plot_bgcolor: 'transparent',
         margin: { l: 5, r: 5, t: 5, b: 5 },

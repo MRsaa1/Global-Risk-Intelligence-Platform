@@ -1,0 +1,25 @@
+# FourCastNet NIM only — for single-GPU (e.g. Brev L40S)
+# Requires: NGC_API_KEY, Docker with NVIDIA runtime
+
+services:
+  fourcastnet:
+    image: nvcr.io/nim/nvidia/fourcastnet:latest
+    runtime: nvidia
+    ports:
+      - "8001:8000"
+    environment:
+      - NGC_API_KEY=${NGC_API_KEY}
+    shm_size: "4g"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/v1/health/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s

@@ -34,7 +34,10 @@ export function usePlatformWebSocket(channels: string[] = ['command_center', 'da
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const host = window.location.host
     const channelsParam = channels.join(',')
-    const wsUrl = `${protocol}//${host}${WS_URL}?channels=${channelsParam}`
+    // In dev, connect directly to API to avoid Vite WS proxy flakiness (EPIPE/ECONNRESET/ECONNREFUSED).
+    // In prod, keep same-origin (nginx or same host).
+    const wsHost = isDev ? '127.0.0.1:9002' : host
+    const wsUrl = `${protocol}//${wsHost}${WS_URL}?channels=${channelsParam}`
     
     const connect = () => {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -270,17 +273,19 @@ export function usePlatformWebSocket(channels: string[] = ['command_center', 'da
         clearTimeout(reconnectTimeoutRef.current)
       }
       if (wsRef.current) {
-        try {
-          // Only close if not already closed
-          if (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING) {
-            try {
-              wsRef.current.close()
-            } catch (e) {
-              // Ignore errors when closing during connection
+        const ws = wsRef.current
+        // Avoid noisy browser warning in React StrictMode:
+        // "WebSocket is closed before the connection is established."
+        // If we're still CONNECTING, don't call close() immediately; instead close right after open.
+        if (ws.readyState === WebSocket.OPEN) {
+          try { ws.close() } catch { /* ignore */ }
+        } else if (ws.readyState === WebSocket.CONNECTING) {
+          try {
+            ws.onopen = () => {
+              try { ws.close() } catch { /* ignore */ }
             }
-          }
-        } catch (e) {
-          // Ignore errors during cleanup
+            ws.onerror = null
+          } catch { /* ignore */ }
         }
         wsRef.current = null
       }

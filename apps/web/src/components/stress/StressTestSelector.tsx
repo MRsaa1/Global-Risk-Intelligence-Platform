@@ -7,6 +7,7 @@
  */
 import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { hasZoneEntities } from '../../lib/stressTestConstants'
 
 // Fallback when API is unavailable (mirrors stress_scenario_registry.py, unified schema)
 const STRESS_SCENARIO_LIBRARY_FALLBACK = [
@@ -86,14 +87,28 @@ interface StressTestSelectorProps {
   } | null) => void
   selectedScenario: string | null
   isCollapsed?: boolean
+  /**
+   * If provided, the selector becomes "controlled" and only shows that tab.
+   * Useful for embedding into a larger unified selector.
+   */
+  forcedTab?: 'regulatory' | 'extended'
+  /**
+   * Whether to render internal Regulatory/Extended tabs.
+   * Default true; set false when embedding.
+   */
+  showTabs?: boolean
 }
 
 export default function StressTestSelector({
   onScenarioSelect,
   selectedScenario,
   isCollapsed = false,
+  forcedTab,
+  showTabs = true,
 }: StressTestSelectorProps) {
-  const [activeTab, setActiveTab] = useState<'regulatory' | 'extended'>('regulatory')
+  const [activeTabState, setActiveTabState] = useState<'regulatory' | 'extended'>(forcedTab ?? 'regulatory')
+  const activeTab = forcedTab ?? activeTabState
+  const setActiveTab = forcedTab ? (() => {}) : setActiveTabState
   const [regulatoryLibrary, setRegulatoryLibrary] = useState<RegulatoryItem[]>(STRESS_SCENARIO_LIBRARY_FALLBACK)
   const [regulatoryLoading, setRegulatoryLoading] = useState(true)
   const [extendedCategories, setExtendedCategories] = useState<Array<{ id: string; label: string; scenarios: Array<{ id: string; name: string; severity?: number; severity_numeric?: number; probability?: number }> }> | null>(null)
@@ -208,20 +223,22 @@ export default function StressTestSelector({
   return (
     <div className="space-y-1">
       {/* Tabs */}
-      <div className="flex gap-1 p-0.5 rounded-lg bg-white/5 border border-white/10 mb-3">
-        <button
-          onClick={() => setActiveTab('regulatory')}
-          className={`flex-1 text-[10px] uppercase tracking-wider py-1.5 px-2 rounded ${activeTab === 'regulatory' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' : 'text-white/50 hover:text-white/70'}`}
-        >
-          Regulatory Library
-        </button>
-        <button
-          onClick={() => setActiveTab('extended')}
-          className={`flex-1 text-[10px] uppercase tracking-wider py-1.5 px-2 rounded ${activeTab === 'extended' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' : 'text-white/50 hover:text-white/70'}`}
-        >
-          Extended
-        </button>
-      </div>
+      {showTabs && (
+        <div className="flex gap-1 p-0.5 rounded-lg bg-white/5 border border-white/10 mb-3">
+          <button
+            onClick={() => setActiveTab('regulatory')}
+            className={`flex-1 text-[10px] uppercase tracking-wider py-1.5 px-2 rounded ${activeTab === 'regulatory' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' : 'text-white/50 hover:text-white/70'}`}
+          >
+            Regulatory Library
+          </button>
+          <button
+            onClick={() => setActiveTab('extended')}
+            className={`flex-1 text-[10px] uppercase tracking-wider py-1.5 px-2 rounded ${activeTab === 'extended' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' : 'text-white/50 hover:text-white/70'}`}
+          >
+            Extended
+          </button>
+        </div>
+      )}
 
       {/* Regulatory Library */}
       <AnimatePresence mode="wait">
@@ -252,7 +269,17 @@ export default function StressTestSelector({
                           {(getSeverityNum(s as RegulatoryItem) * 100).toFixed(0)}%
                         </span>
                       </div>
-                      <div className="mt-1 flex flex-wrap gap-1 text-[10px] text-white/50">
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-white/50">
+                        <span
+                          className={`shrink-0 px-1.5 py-0.5 rounded text-[9px] ${
+                            hasZoneEntities(s.type)
+                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                              : 'bg-white/10 text-white/50 border border-white/10'
+                          }`}
+                          title={hasZoneEntities(s.type) ? 'Shows zones and institutions on map' : 'Metrics only'}
+                        >
+                          {hasZoneEntities(s.type) ? 'Zone & entities' : 'Metrics only'}
+                        </span>
                         {[s.source, (s as { regulator?: string }).regulator, getHorizonLabel(s as RegulatoryItem)].filter(Boolean).join(' · ')}
                       </div>
                       <div className="mt-1 flex flex-wrap gap-1">
@@ -306,9 +333,19 @@ export default function StressTestSelector({
                                 disabled={isLoading}
                                 className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-left group border transition-all ${isActive ? `bg-white/10 ${colors.border}` : 'border-transparent hover:bg-white/5'}`}
                               >
-                                <div className={`w-1.5 h-1.5 rounded-full ${isActive ? `${colors.bg} animate-pulse` : 'bg-white/20'}`} />
+                                <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isActive ? `${colors.bg} animate-pulse` : 'bg-white/20'}`} />
                                 <span className={`text-xs flex-1 truncate ${isActive ? 'text-white' : 'text-white/50 group-hover:text-white/70'}`}>{sc.name}</span>
-                                <span className={`text-[10px] font-mono px-1 py-0.5 rounded ${getSeverityNum(sc) > 0.8 ? 'bg-red-500/20 text-red-400' : getSeverityNum(sc) > 0.6 ? 'bg-orange-500/20 text-orange-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
+                                <span
+                                  className={`shrink-0 px-1.5 py-0.5 rounded text-[9px] ${
+                                    hasZoneEntities(type.id)
+                                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                      : 'bg-white/10 text-white/50 border border-white/10'
+                                  }`}
+                                  title={hasZoneEntities(type.id) ? 'Shows zones and institutions on map' : 'Metrics only'}
+                                >
+                                  {hasZoneEntities(type.id) ? 'Zone & entities' : 'Metrics only'}
+                                </span>
+                                <span className={`text-[10px] font-mono shrink-0 px-1 py-0.5 rounded ${getSeverityNum(sc) > 0.8 ? 'bg-red-500/20 text-red-400' : getSeverityNum(sc) > 0.6 ? 'bg-orange-500/20 text-orange-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
                                   {(getSeverityNum(sc) * 100).toFixed(0)}%
                                 </span>
                               </button>

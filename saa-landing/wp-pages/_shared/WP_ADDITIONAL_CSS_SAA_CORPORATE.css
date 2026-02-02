@@ -1,0 +1,267 @@
+/*
+  SAA Corporate Theme (for WordPress Pages content)
+  Paste into: Appearance → Customize → Additional CSS
+
+  IMPORTANT:
+  - Do NOT paste <style> tags into page content (your WP strips them).
+  - Pages should contain a wrapper: <div class="saa-corp-bleed"><div class="saa-corp-page">...</div></div>
+  - Use classes: saa-corp-card, saa-corp-btn, saa-corp-btn--primary, etc.
+*/
+
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+.saa-corp-bleed{
+  position:relative;
+  left:50%;
+  margin-left:-50vw;
+  width:100vw;
+  max-width:100vw;
+  background:#000;
+  overflow:hidden;
+}
+
+.saa-corp-page{
+  /* Same variables as landing */
+  --bg-void:#000000;
+  --bg-deep:#0a0908;
+  --bg-surface:#0f0e0a;
+  --bg-elevated:#141310;
+  --bg-card:#1a1815;
+
+  --text-primary:#e4e4e7;
+  --text-secondary:#9a9a9a;
+  --text-muted:#6b6b6b;
+
+  --accent-primary:#C9A962;
+  --accent-primary-hover:#D4AF37;
+  --accent-primary-glow:rgba(201,169,98,0.3);
+
+  --border-subtle:rgba(255,255,255,0.06);
+  --border-light:rgba(255,255,255,0.1);
+
+  --font-sans:'Space Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --font-mono:'JetBrains Mono','SF Mono','Consolas',monospace;
+
+  --text-xs:11px;
+  --text-sm:12px;
+  --text-base:14px;
+  --text-lg:16px;
+  --text-xl:18px;
+  --text-2xl:24px;
+  --text-3xl:32px;
+
+  color:var(--text-primary);
+  font-family:var(--font-sans);
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  position:relative;
+}
+
+.saa-corp-page *{box-sizing:border-box}
+.saa-corp-page a{color:var(--accent-primary);text-decoration:none}
+.saa-corp-page a:hover{color:var(--accent-primary-hover);text-decoration:underline}
+.saa-corp-mono{font-family:var(--font-mono)}
+
+/* Background like landing */
+.saa-corp-bg{
+  position:absolute;
+  inset:-50%;
+  background:
+    radial-gradient(ellipse at 30% 20%, rgba(201, 169, 98, 0.05) 0%, transparent 50%),
+    radial-gradient(ellipse at 70% 80%, rgba(201, 169, 98, 0.03) 0%, transparent 50%);
+  animation:saaCorpGradientMove 20s ease-in-out infinite;
+  pointer-events:none;
+  z-index:0;
+}
+@keyframes saaCorpGradientMove{
+  0%,100%{transform:translate(0,0) scale(1)}
+  33%{transform:translate(2%,2%) scale(1.05)}
+  66%{transform:translate(-2%,-2%) scale(0.95)}
+}
+
+.saa-corp-container{
+  position:relative;
+  z-index:1;
+  max-width:1200px;
+  margin:0 auto;
+  padding:48px 24px 72px;
+}
+
+/* Optional internal topbar */
+.saa-corp-topbar{
+  position:sticky;
+  top:0;
+  z-index:2;
+  background:rgba(10,9,8,0.85);
+  backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--border-subtle);
+}
+.saa-corp-topbar__inner{
+  max-width:1200px;
+  margin:0 auto;
+  padding:16px 24px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+}
+.saa-corp-brand{display:flex;align-items:center;gap:12px}
+.saa-corp-brand__mark{
+  width:36px;height:36px;border:1px solid var(--accent-primary);border-radius:8px;
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--font-mono);font-size:12px;font-weight:600;color:var(--accent-primary);
+}
+.saa-corp-brand__text{color:var(--text-primary);font-size:13px;font-weight:500}
+.saa-corp-nav{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+.saa-corp-nav a{
+  font-size:13px;color:var(--text-secondary);
+  padding:8px 10px;border-radius:8px;border:1px solid transparent;
+}
+.saa-corp-nav a:hover{color:var(--text-primary);border-color:var(--border-light);text-decoration:none}
+
+/* Typography */
+.saa-corp-eyebrow{
+  font-size:var(--text-xs);
+  letter-spacing:0.12em;
+  text-transform:uppercase;
+  color:var(--text-muted);
+  font-family:var(--font-mono);
+}
+.saa-corp-h1{
+  margin:12px 0 10px;
+  font-size:var(--text-3xl);
+  font-weight:700;
+  letter-spacing:-0.02em;
+  line-height:1.15;
+  color:var(--text-primary);
+  background:linear-gradient(135deg, var(--text-primary) 0%, var(--accent-primary) 50%, var(--text-primary) 100%);
+  background-size:200% auto;
+  -webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;
+  background-clip:text;
+  animation:saaCorpTitleShift 8s ease infinite;
+}
+@keyframes saaCorpTitleShift{0%,100%{background-position:0% center}50%{background-position:200% center}}
+.saa-corp-h2{margin:28px 0 12px;font-size:var(--text-xl);font-weight:600;letter-spacing:-0.01em;color:var(--text-primary)}
+.saa-corp-h3{margin:0 0 6px;font-size:var(--text-base);font-weight:600;color:var(--text-primary)}
+.saa-corp-p{margin:10px 0;color:var(--text-secondary);font-size:var(--text-base)}
+.saa-corp-lead{font-size:var(--text-lg);color:var(--text-secondary);max-width:78ch}
+
+/* Layout / cards */
+.saa-corp-grid{display:grid;gap:16px}
+@media (min-width: 900px){ .saa-corp-grid--2{grid-template-columns:1fr 1fr} }
+@media (min-width: 980px){ .saa-corp-grid--3{grid-template-columns:1fr 1fr 1fr} }
+.saa-corp-card{
+  background:var(--bg-elevated);
+  border:1px solid var(--border-subtle);
+  border-radius:12px;
+  padding:16px;
+  transition:all .25s ease;
+}
+.saa-corp-card:hover{
+  border-color:rgba(201,169,98,.28);
+  box-shadow:0 12px 30px rgba(0,0,0,.35);
+  transform:translateY(-2px);
+}
+.saa-corp-muted{color:var(--text-muted)}
+
+/* Buttons */
+.saa-corp-btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+.saa-corp-btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:10px;
+  padding:10px 14px;border-radius:10px;
+  border:1px solid var(--border-light);
+  background:transparent;
+  color:var(--text-primary) !important;
+  font-size:13px;font-weight:500;
+  cursor:pointer;
+  transition:all .2s ease;
+  text-decoration:none !important;
+}
+.saa-corp-btn:hover{border-color:var(--accent-primary);color:var(--accent-primary) !important}
+.saa-corp-btn--primary{
+  background:var(--accent-primary);
+  border-color:var(--accent-primary);
+  color:#000 !important;
+}
+.saa-corp-btn--primary:hover{
+  background:var(--accent-primary-hover);
+  border-color:var(--accent-primary-hover);
+  color:#000 !important;
+}
+
+/* Steps */
+.saa-corp-step{display:flex;gap:12px;align-items:flex-start}
+.saa-corp-step__num{
+  width:28px;height:28px;border-radius:10px;
+  background:rgba(201,169,98,0.12);
+  border:1px solid rgba(201,169,98,0.22);
+  color:var(--accent-primary);
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--font-mono);
+  font-size:12px;
+  font-weight:600;
+  flex:0 0 auto;
+}
+
+/* Media */
+.saa-corp-media{background:var(--bg-surface);border:1px solid var(--border-subtle);border-radius:12px;overflow:hidden}
+.saa-corp-media__ph{
+  width:100%;
+  aspect-ratio:16/9;
+  background:linear-gradient(90deg, rgba(255,255,255,.02), rgba(255,255,255,.06), rgba(255,255,255,.02));
+  background-size:200% 100%;
+  animation:saaCorpShimmer 1.5s infinite;
+}
+@keyframes saaCorpShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.saa-corp-media__cap{
+  padding:10px 12px;
+  color:var(--text-muted);
+  font-size:12px;
+  font-family:var(--font-mono);
+  letter-spacing:.06em;
+  text-transform:uppercase;
+}
+
+/* ============================================
+   УБРАТЬ шапку и подвал темы (скрыть, не закрасить)
+   Лучше: в Elementor для страниц SAA — Page Layout = Full Width / Canvas
+   ============================================ */
+#masthead,
+.site-header,
+.ast-site-header-wrap,
+.ast-header-wrap,
+header.site-header,
+.elementor-location-header,
+[data-elementor-type="header"] {
+  display: none !important;
+  visibility: hidden !important;
+  height: 0 !important;
+  overflow: hidden !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+}
+
+#colophon,
+.site-footer,
+.ast-footer-overlay,
+footer.site-footer,
+.elementor-location-footer,
+[data-elementor-type="footer"] {
+  display: none !important;
+  visibility: hidden !important;
+  height: 0 !important;
+  overflow: hidden !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+}
+
+body,
+.elementor-page,
+.site {
+  background: #000 !important;
+}
+

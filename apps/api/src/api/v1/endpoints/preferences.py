@@ -17,6 +17,8 @@ from sqlalchemy import select, and_, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
+from src.core.security import get_current_user
+from src.models.user import User
 from src.models.user_preferences import (
     UserPreference, 
     SavedFilter, 
@@ -129,26 +131,20 @@ class UserSettingsResponse(BaseModel):
     default_map_view: Optional[Dict] = None
 
 
-# ==================== MOCK USER (replace with auth) ====================
-
-def get_current_user_id() -> str:
-    """Get current user ID (mock for now)."""
-    return "user-001"
-
-
 # ==================== SAVED FILTERS ====================
 
 @router.get("/filters", response_model=List[SavedFilterResponse])
 async def list_saved_filters(
     entity_type: Optional[str] = Query(None, description="Filter by entity type"),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     List all saved filters for the current user.
     
     Optionally filter by entity_type (assets, stress_tests, alerts, etc.)
     """
-    user_id = get_current_user_id()
+    user_id = str(current_user.id)
     
     query = select(SavedFilter).where(SavedFilter.user_id == user_id)
     
@@ -167,6 +163,7 @@ async def list_saved_filters(
 async def create_saved_filter(
     data: SavedFilterCreate,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Create a new saved filter.
@@ -174,7 +171,7 @@ async def create_saved_filter(
     If is_default=true, other default filters for the same entity_type
     will be unset.
     """
-    user_id = get_current_user_id()
+    user_id = str(current_user.id)
     
     # If setting as default, unset other defaults
     if data.is_default:
@@ -212,9 +209,10 @@ async def create_saved_filter(
 async def get_saved_filter(
     filter_id: str,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Get a specific saved filter."""
-    user_id = get_current_user_id()
+    user_id = str(current_user.id)
     
     result = await db.execute(
         select(SavedFilter).where(and_(
@@ -235,9 +233,10 @@ async def update_saved_filter(
     filter_id: str,
     data: SavedFilterCreate,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Update a saved filter."""
-    user_id = get_current_user_id()
+    user_id = str(current_user.id)
     
     result = await db.execute(
         select(SavedFilter).where(and_(
@@ -270,9 +269,10 @@ async def update_saved_filter(
 async def delete_saved_filter(
     filter_id: str,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Delete a saved filter."""
-    user_id = get_current_user_id()
+    user_id = str(current_user.id)
     
     result = await db.execute(
         select(SavedFilter).where(and_(
@@ -293,13 +293,14 @@ async def delete_saved_filter(
 async def mark_filter_used(
     filter_id: str,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Mark a filter as used (updates use_count and last_used_at).
     
     Call this when applying a saved filter.
     """
-    user_id = get_current_user_id()
+    user_id = str(current_user.id)
     
     result = await db.execute(
         select(SavedFilter).where(and_(
@@ -326,9 +327,10 @@ async def mark_filter_used(
 async def get_dashboard_layout(
     dashboard_id: str = "main",
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Get the full dashboard layout for a user."""
-    user_id = get_current_user_id()
+    user_id = str(current_user.id)
     
     result = await db.execute(
         select(DashboardWidget)
@@ -350,9 +352,10 @@ async def get_dashboard_layout(
 async def add_dashboard_widget(
     data: DashboardWidgetCreate,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Add a widget to the dashboard."""
-    user_id = get_current_user_id()
+    user_id = str(current_user.id)
     
     widget = DashboardWidget(
         id=str(uuid4()),
@@ -379,9 +382,10 @@ async def update_dashboard_widget(
     widget_id: str,
     data: DashboardWidgetCreate,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Update a dashboard widget (position, size, config)."""
-    user_id = get_current_user_id()
+    user_id = str(current_user.id)
     
     result = await db.execute(
         select(DashboardWidget).where(and_(
@@ -412,9 +416,10 @@ async def update_dashboard_widget(
 async def remove_dashboard_widget(
     widget_id: str,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Remove a widget from the dashboard."""
-    user_id = get_current_user_id()
+    user_id = str(current_user.id)
     
     result = await db.execute(
         select(DashboardWidget).where(and_(
@@ -435,13 +440,14 @@ async def remove_dashboard_widget(
 async def reset_dashboard_layout(
     dashboard_id: str = "main",
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Reset dashboard to default layout.
     
     Removes all custom widgets and creates default ones.
     """
-    user_id = get_current_user_id()
+    user_id = str(current_user.id)
     
     # Delete existing widgets
     await db.execute(
@@ -479,9 +485,10 @@ async def reset_dashboard_layout(
 @router.get("/settings", response_model=UserSettingsResponse)
 async def get_user_settings(
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Get user display and notification settings."""
-    user_id = get_current_user_id()
+    user_id = str(current_user.id)
     
     # Get settings from UserPreference
     result = await db.execute(
@@ -503,9 +510,10 @@ async def get_user_settings(
 async def update_user_settings(
     data: UserSettingsUpdate,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Update user display and notification settings."""
-    user_id = get_current_user_id()
+    user_id = str(current_user.id)
     
     # Get existing settings
     result = await db.execute(

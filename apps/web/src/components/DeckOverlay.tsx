@@ -93,6 +93,13 @@ function generateCirclePolygon(
   return coordinates
 }
 
+// Flood forecast from Open-Meteo (no GPU)
+export interface FloodForecastData {
+  polygon: [number, number][]  // [lng, lat] per vertex
+  max_flood_depth_m: number
+  max_risk_level: string
+}
+
 interface DeckOverlayProps {
   viewState: {
     longitude: number
@@ -105,6 +112,11 @@ interface DeckOverlayProps {
   showArcs?: boolean
   showPoints?: boolean
   showZones?: boolean
+  showFloodLayer?: boolean
+  floodCenter?: { lat: number; lng: number }
+  floodDepthOverride?: number  // Optional water level in meters for slider
+  showWindLayer?: boolean
+  windCenter?: { lat: number; lng: number }
   selectedScenario?: string
   riskZones?: RiskZone[]
   onHotspotClick?: (hotspot: Hotspot | null) => void
@@ -117,6 +129,11 @@ export default function DeckOverlay({
   showArcs = true,
   showPoints = true,
   showZones = false,
+  showFloodLayer = false,
+  floodCenter,
+  floodDepthOverride,
+  showWindLayer = false,
+  windCenter,
   selectedScenario,
   riskZones = [],
   onHotspotClick,
@@ -126,6 +143,8 @@ export default function DeckOverlay({
   const [connections, setConnections] = useState<Connection[]>([])
   const [heatmapData, setHeatmapData] = useState<HeatmapPoint[]>([])
   const [hoveredZoneId, setHoveredZoneId] = useState<string | null>(null)
+  const [floodForecast, setFloodForecast] = useState<FloodForecastData | null>(null)
+  const [windForecast, setWindForecast] = useState<{ polygon: [number, number][]; max_category: number } | null>(null)
 
   // Load data from API
   useEffect(() => {
@@ -197,6 +216,55 @@ export default function DeckOverlay({
     loadData()
   }, [selectedScenario])
 
+  // Flood forecast from Open-Meteo (no GPU) for 3D flood layer
+  useEffect(() => {
+    if (!showFloodLayer) {
+      setFloodForecast(null)
+      return
+    }
+    const lat = floodCenter?.lat ?? viewState.latitude
+    const lng = floodCenter?.lng ?? viewState.longitude
+    const url = `${API_BASE}/climate/flood-forecast?latitude=${lat}&longitude=${lng}&days=7&include_polygon=true`
+    fetch(url)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { polygon?: number[][]; max_flood_depth_m?: number; max_risk_level?: string } | null) => {
+        if (data?.polygon && data.polygon.length >= 3) {
+          setFloodForecast({
+            polygon: data.polygon as [number, number][],
+            max_flood_depth_m: data.max_flood_depth_m ?? 0,
+            max_risk_level: data.max_risk_level ?? 'normal',
+          })
+        } else {
+          setFloodForecast(null)
+        }
+      })
+      .catch(() => setFloodForecast(null))
+  }, [showFloodLayer, floodCenter?.lat, floodCenter?.lng, viewState.latitude, viewState.longitude])
+
+  // Wind forecast from Open-Meteo (no GPU) for wind damage zone layer
+  useEffect(() => {
+    if (!showWindLayer) {
+      setWindForecast(null)
+      return
+    }
+    const lat = windCenter?.lat ?? viewState.latitude
+    const lng = windCenter?.lng ?? viewState.longitude
+    const url = `${API_BASE}/climate/wind-forecast?latitude=${lat}&longitude=${lng}&days=7&include_polygon=true`
+    fetch(url)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { polygon?: number[][]; max_category?: number } | null) => {
+        if (data?.polygon && data.polygon.length >= 3) {
+          setWindForecast({
+            polygon: data.polygon as [number, number][],
+            max_category: data.max_category ?? 0,
+          })
+        } else {
+          setWindForecast(null)
+        }
+      })
+      .catch(() => setWindForecast(null))
+  }, [showWindLayer, windCenter?.lat, windCenter?.lng, viewState.latitude, viewState.longitude])
+
   // Build connections after hotspots are loaded
   useEffect(() => {
     if (hotspots.length === 0) return
@@ -239,6 +307,67 @@ export default function DeckOverlay({
   // Create layers
   const layers = useMemo(() => {
     const result = []
+
+    // Flood layer - Open-Meteo forecast (no GPU), color by risk (green→yellow→orange→red)
+    if (showFloodLayer && floodForecast?.polygon?.length >= 3) {
+      const depthM = floodDepthOverride ?? floodForecast.max_flood_depth_m ?? 0
+      const risk = floodForecast.max_risk_level ?? 'normal'
+      const riskRgba: Record<string, [number, number, number, number]> = {
+        normal: [34, 197, 94, 115],
+        elevated: [234, 179, 8, 128],
+        high: [249, 115, 22, 140],
+        critical: [239, 68, 68, 153],
+      }
+      const [r, g, b, a] = riskRgba[risk] ?? riskRgba.normal
+      result.push(
+        new PolygonLayer({
+          id: 'flood-forecast-layer',
+          data: [{ polygon: floodForecast.polygon, depth: depthM }],
+          getPolygon: (d: { polygon: [number, number][] }) => d.polygon,
+          getFillColor: [r, g, b, a],
+          getLineColor: [r, g, b, 230],
+          getLineWidth: 2,
+          lineWidthMinPixels: 1,
+          stroked: true,
+          filled: true,
+          extruded: true,
+          getElevation: (d: { depth: number }) => (d.depth ?? 0) * 1000,
+          elevationScale: 1,
+          pickable: false,
+        })
+      )
+    }
+
+    // Wind damage zone - Cat 1-5 color-coded
+    if (showWindLayer && windForecast?.polygon?.length >= 3) {
+      const cat = windForecast.max_category ?? 0
+      const colors: Record<number, [number, number, number, number]> = {
+        0: [34, 197, 94, 90],
+        1: [34, 197, 94, 100],
+        2: [234, 179, 8, 115],
+        3: [249, 115, 22, 128],
+        4: [239, 68, 68, 140],
+        5: [127, 29, 29, 153],
+      }
+      const [r, g, b, a] = colors[cat] ?? colors[0]
+      result.push(
+        new PolygonLayer({
+          id: 'wind-forecast-layer',
+          data: [{ polygon: windForecast.polygon, category: cat }],
+          getPolygon: (d: { polygon: [number, number][] }) => d.polygon,
+          getFillColor: [r, g, b, a],
+          getLineColor: cat >= 4 ? [220, 38, 38, 230] : [250, 204, 21, 200],
+          getLineWidth: 2,
+          lineWidthMinPixels: 1,
+          stroked: true,
+          filled: true,
+          extruded: true,
+          getElevation: (d: { category: number }) => (d.category ?? 0) * 15000,
+          elevationScale: 1,
+          pickable: false,
+        })
+      )
+    }
 
     // Risk Zones Layer - Stress Test polygons (render first, behind everything)
     if (showZones && zonePolygons.length > 0) {
@@ -363,7 +492,7 @@ export default function DeckOverlay({
     }
 
     return result
-  }, [hotspots, connections, heatmapData, zonePolygons, showHeatmap, showArcs, showPoints, showZones, hoveredZoneId, onHotspotClick, onZoneClick])
+  }, [hotspots, connections, heatmapData, zonePolygons, showHeatmap, showArcs, showPoints, showZones, showFloodLayer, floodForecast, floodDepthOverride, showWindLayer, windForecast, hoveredZoneId, onHotspotClick, onZoneClick])
 
   return (
     <DeckGL

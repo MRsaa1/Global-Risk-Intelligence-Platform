@@ -6,9 +6,10 @@
  * - PyG/NetworkX for graph analysis
  * - Monte Carlo simulation
  */
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { useQuery } from '@tanstack/react-query'
+import { useSearchParams } from 'react-router-dom'
 import {
   ChartBarIcon,
   BeakerIcon,
@@ -71,9 +72,20 @@ const tabs: { id: TabType; name: string; icon: React.ElementType; description: s
 ]
 
 export default function Analytics() {
+  const [searchParams] = useSearchParams()
   const [activeTab, setActiveTab] = useState<TabType>('predictive')
   const [cascadeCityId, setCascadeCityId] = useState('')
   const [cascadeScenarioId, setCascadeScenarioId] = useState('')
+
+  // Initialize from URL when opening from Stress Test / Digital Twin "Open in Cascade"
+  useEffect(() => {
+    const tab = searchParams.get('tab')
+    const city = searchParams.get('city')
+    const scenario = searchParams.get('scenario')
+    if (tab === 'cascade') setActiveTab('cascade')
+    if (city) setCascadeCityId(city)
+    if (scenario) setCascadeScenarioId(scenario)
+  }, [searchParams])
 
   const { data: citiesData } = useQuery({
     queryKey: ['geodata-cities'],

@@ -15,9 +15,9 @@ from uuid import uuid4
 from fastapi import APIRouter, File, UploadFile, HTTPException, Depends, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 import io
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -96,15 +96,8 @@ async def _create_assets_from_validated(
             except ValueError:
                 asset_type = AssetType.COMMERCIAL_OFFICE
             
-            # Create location point if coordinates provided
-            location = None
-            lat = asset_data.get('latitude')
-            lng = asset_data.get('longitude')
-            if lat is not None and lng is not None:
-                location = func.ST_SetSRID(
-                    func.ST_MakePoint(lng, lat),
-                    4326,
-                )
+            tags_raw = asset_data.get('tags') or []
+            tags_json = json.dumps(tags_raw) if isinstance(tags_raw, list) else (tags_raw if isinstance(tags_raw, str) else '[]')
             
             asset = Asset(
                 id=asset_id,
@@ -113,7 +106,8 @@ async def _create_assets_from_validated(
                 description=asset_data.get('description'),
                 asset_type=asset_type,
                 status=AssetStatus.DRAFT,
-                location=location,
+                latitude=asset_data.get('latitude'),
+                longitude=asset_data.get('longitude'),
                 address=asset_data.get('address'),
                 country_code=asset_data.get('country_code', 'DE'),
                 region=asset_data.get('region'),
@@ -124,7 +118,7 @@ async def _create_assets_from_validated(
                 floors_above_ground=asset_data.get('floors_above_ground'),
                 current_valuation=asset_data.get('current_valuation'),
                 valuation_currency=asset_data.get('valuation_currency', 'EUR'),
-                tags=asset_data.get('tags', []),
+                tags=tags_json,
             )
             
             db.add(asset)

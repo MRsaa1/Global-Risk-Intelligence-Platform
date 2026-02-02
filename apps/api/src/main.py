@@ -3,6 +3,7 @@ Physical-Financial Risk Platform API
 
 The Operating System for the Physical Economy.
 """
+import asyncio
 import time
 from contextlib import asynccontextmanager
 from typing import Callable
@@ -39,9 +40,12 @@ async def lifespan(app: FastAPI):
         # Initialize Knowledge Graph schema
         try:
             from src.services.knowledge_graph import get_knowledge_graph_service
-            kg_service = get_knowledge_graph_service()
-            await kg_service.initialize_schema()
-            logger.info("Knowledge Graph schema initialized")
+            if getattr(settings, "enable_neo4j", False):
+                kg_service = get_knowledge_graph_service()
+                await kg_service.initialize_schema()
+                logger.info("Knowledge Graph schema initialized")
+            else:
+                logger.info("Knowledge Graph disabled (enable_neo4j=false)")
         except Exception as e:
             logger.warning(f"Knowledge Graph initialization failed: {e}")
         
@@ -55,16 +59,59 @@ async def lifespan(app: FastAPI):
                 logger.info("SENTINEL monitoring service ready (start via API)")
         except Exception as e:
             logger.warning(f"SENTINEL initialization failed: {e}")
-        
+
+        # Start OVERSEER background loop (system-wide monitoring AI)
+        oversee_task = None
+        try:
+            from src.services.oversee import get_oversee_service
+            interval = getattr(settings, "oversee_interval_sec", 300)
+
+            async def _oversee_loop():
+                svc = get_oversee_service()
+                while True:
+                    try:
+                        await svc.run_cycle(use_llm=getattr(settings, "oversee_use_llm", True), include_events=True)
+                    except asyncio.CancelledError:
+                        break
+                    except Exception as e:
+                        logger.warning("OVERSEER cycle error: %s", e)
+                    await asyncio.sleep(interval)
+
+            oversee_task = asyncio.create_task(_oversee_loop())
+            app.state.oversee_task = oversee_task
+            logger.info("OVERSEER monitoring started (interval=%ss)", interval)
+        except Exception as e:
+            logger.warning("OVERSEER start failed: %s", e)
+
+        # Полный чеклист продуктов NVIDIA в консоль/логи
+        try:
+            from src.services.nvidia_services_status import log_nvidia_services_checklist
+            log_nvidia_services_checklist(logger)
+        except Exception as e:
+            logger.warning("NVIDIA services checklist failed: %s", e)
+
     except Exception as e:
         logger.error("Failed to initialize databases", error=str(e))
         # Continue anyway for development
-    
+
     yield
-    
+
     # Shutdown
     logger.info("Shutting down...")
-    
+
+    # Stop OVERSEER
+    try:
+        t = getattr(app.state, "oversee_task", None)
+        if t and not t.done():
+            t.cancel()
+            try:
+                await t
+            except asyncio.CancelledError:
+                pass
+        logger.info("OVERSEER stopped")
+    except Exception as e:
+        logger.warning("OVERSEER shutdown error: %s", e)
+
     # Stop SENTINEL monitoring
     try:
         from src.api.v1.endpoints.alerts import stop_monitoring
@@ -113,6 +160,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ==================== SYSTEM OVERSEER MIDDLEWARE ====================
+
+from src.core.middleware.oversee_middleware import oversee_middleware
+
+@app.middleware("http")
+async def oversee_request_middleware(request: Request, call_next):
+    """System Overseer middleware - tracks every API request."""
+    return await oversee_middleware(request, call_next)
 
 
 # ==================== MONITORING MIDDLEWARE ====================

@@ -96,7 +96,7 @@
 
 /* Map container */
 .maplibregl-map {
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Space Grotesk', system-ui, sans-serif;
 }
 
 /* Three.js canvas */

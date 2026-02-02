@@ -6,6 +6,9 @@ Provides example data for testing and demonstration.
 import json
 from datetime import date
 from typing import List, Dict, Any
+from uuid import uuid4
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.stress_test import StressTestType
 
@@ -77,7 +80,258 @@ HISTORICAL_EVENTS: List[Dict[str, Any]] = [
         "is_verified": True,
         "tags": json.dumps(["flood", "climate", "germany", "2021", "catastrophe"]),
     },
-    
+    # Melbourne / Victoria / Australia floods
+    {
+        "name": "Melbourne Flash Floods 2010",
+        "description": "Major flash flooding across Melbourne CBD, Southbank, Kensington, North Melbourne. Maribyrnong and Yarra rivers overflowed. Over 1,400 properties damaged. Record rainfall in 24h.",
+        "event_type": StressTestType.CLIMATE.value,
+        "start_date": date(2010, 3, 6),
+        "end_date": date(2010, 3, 8),
+        "duration_days": 2,
+        "region_name": "Melbourne, Victoria",
+        "country_codes": "AU",
+        "center_latitude": -37.81,
+        "center_longitude": 144.96,
+        "affected_area_km2": 120,
+        "severity_actual": 0.75,
+        "financial_loss_eur": 450_000_000,
+        "affected_population": 45_000,
+        "affected_assets_count": 1_400,
+        "damaged_assets_count": 850,
+        "recovery_time_months": 12,
+        "lessons_learned": "Melbourne flood history highlights riverine and flash flood risks. CBD and low-lying areas most vulnerable. VICSES coordination, flood barriers and drainage critical.",
+        "is_verified": True,
+        "tags": json.dumps(["flood", "climate", "melbourne", "victoria", "australia", "2010"]),
+    },
+    {
+        "name": "Melbourne Storms 2005",
+        "description": "Severe storms caused flooding in Melbourne CBD and eastern suburbs. Damage to infrastructure and properties. Comparable to riverine flood scenarios.",
+        "event_type": StressTestType.CLIMATE.value,
+        "start_date": date(2005, 2, 3),
+        "end_date": date(2005, 2, 5),
+        "duration_days": 2,
+        "region_name": "Melbourne, Victoria",
+        "country_codes": "AU",
+        "center_latitude": -37.81,
+        "center_longitude": 144.96,
+        "severity_actual": 0.55,
+        "financial_loss_eur": 180_000_000,
+        "affected_population": 15_000,
+        "lessons_learned": "Stormwater drainage capacity limits. Low-lying areas (Southbank, Kensington) at risk. Emergency response and flood barriers reduce impact.",
+        "is_verified": True,
+        "tags": json.dumps(["flood", "storm", "melbourne", "victoria", "australia", "2005"]),
+    },
+    {
+        "name": "Queensland Floods 2011",
+        "description": "Catastrophic flooding across Queensland including Brisbane. 78% of state declared disaster zone. $2.4B+ damages. Comparable severity for Australian capital city flood.",
+        "event_type": StressTestType.CLIMATE.value,
+        "start_date": date(2010, 12, 1),
+        "end_date": date(2011, 1, 30),
+        "duration_days": 60,
+        "region_name": "Brisbane, Queensland",
+        "country_codes": "AU",
+        "center_latitude": -27.47,
+        "center_longitude": 153.03,
+        "affected_area_km2": 1_000_000,
+        "severity_actual": 0.95,
+        "financial_loss_eur": 2_400_000_000,
+        "affected_population": 200_000,
+        "casualties": 35,
+        "affected_assets_count": 28_000,
+        "recovery_time_months": 24,
+        "lessons_learned": "Wivenhoe Dam management, early warning, evacuation protocols. Urban floodplain development restrictions. Insurance gaps for flood coverage.",
+        "is_verified": True,
+        "tags": json.dumps(["flood", "climate", "brisbane", "queensland", "australia", "2011"]),
+    },
+    {
+        "name": "Victoria Floods 2011",
+        "description": "Major flooding across Victoria including regional centres. Comparable riverine flood dynamics to Melbourne scenario.",
+        "event_type": StressTestType.CLIMATE.value,
+        "start_date": date(2011, 1, 13),
+        "end_date": date(2011, 1, 20),
+        "duration_days": 7,
+        "region_name": "Victoria",
+        "country_codes": "AU",
+        "center_latitude": -37.5,
+        "center_longitude": 144.5,
+        "severity_actual": 0.70,
+        "financial_loss_eur": 750_000_000,
+        "affected_population": 65_000,
+        "lessons_learned": "State-wide coordination (VICSES). Regional and urban flood risk. Infrastructure resilience for transport and utilities.",
+        "is_verified": True,
+        "tags": json.dumps(["flood", "climate", "victoria", "australia", "2011"]),
+    },
+
+    # Tokyo / Japan floods (comparable for Tokyo flood stress tests)
+    {
+        "name": "Typhoon Hagibis 2019",
+        "description": "Devastating typhoon hit Japan; record rainfall, flooding in Tokyo and surrounding prefectures. Over 100 casualties, ¥1.8+ trillion (€12B+) in damages. Rivers overflowed, levees breached.",
+        "event_type": StressTestType.CLIMATE.value,
+        "start_date": date(2019, 10, 12),
+        "end_date": date(2019, 10, 13),
+        "duration_days": 2,
+        "region_name": "Tokyo, Kanto",
+        "country_codes": "JP",
+        "center_latitude": 35.68,
+        "center_longitude": 139.69,
+        "affected_area_km2": 5000,
+        "severity_actual": 0.95,
+        "financial_loss_eur": 12_000_000_000,
+        "affected_population": 1_000_000,
+        "casualties": 98,
+        "affected_assets_count": 15_000,
+        "damaged_assets_count": 10_000,
+        "recovery_time_months": 24,
+        "lessons_learned": "Early evacuation, river levee reinforcement, and flood barriers critical for Tokyo low-lying areas. Comparable to Tokyo flood stress scenarios.",
+        "is_verified": True,
+        "tags": json.dumps(["flood", "typhoon", "tokyo", "japan", "2019", "climate"]),
+    },
+    {
+        "name": "Typhoon Faxai 2019",
+        "description": "Strong typhoon made landfall near Tokyo. Widespread power outages, flooding, and damage in Chiba and Kanto. Billions in damages.",
+        "event_type": StressTestType.CLIMATE.value,
+        "start_date": date(2019, 9, 9),
+        "end_date": date(2019, 9, 10),
+        "duration_days": 2,
+        "region_name": "Tokyo, Chiba, Kanto",
+        "country_codes": "JP",
+        "center_latitude": 35.6,
+        "center_longitude": 140.1,
+        "severity_actual": 0.85,
+        "financial_loss_eur": 5_000_000_000,
+        "affected_population": 900_000,
+        "affected_assets_count": 8_000,
+        "recovery_time_months": 12,
+        "lessons_learned": "Infrastructure resilience and rapid restoration critical. Comparable to Tokyo coastal and riverine flood scenarios.",
+        "is_verified": True,
+        "tags": json.dumps(["flood", "typhoon", "tokyo", "japan", "2019", "chiba"]),
+    },
+    {
+        "name": "Tama River Flood 2019",
+        "description": "Heavy rainfall caused Tama River to rise; flooding risk in western Tokyo. Evacuation orders, levee monitoring. Comparable to Tokyo riverine flood stress test.",
+        "event_type": StressTestType.CLIMATE.value,
+        "start_date": date(2019, 10, 25),
+        "end_date": date(2019, 10, 26),
+        "duration_days": 1,
+        "region_name": "Tokyo, Tama River",
+        "country_codes": "JP",
+        "center_latitude": 35.65,
+        "center_longitude": 139.5,
+        "severity_actual": 0.65,
+        "financial_loss_eur": 500_000_000,
+        "affected_population": 200_000,
+        "lessons_learned": "River level monitoring and evacuation protocols for Tama River basin. Relevant for Tokyo flood scenarios.",
+        "is_verified": True,
+        "tags": json.dumps(["flood", "river", "tokyo", "japan", "2019", "tama"]),
+    },
+
+    # Helsinki / Finland / Nordic floods (comparable for Helsinki flood stress tests)
+    {
+        "name": "Helsinki Flood 2005",
+        "description": "Severe flooding in Helsinki and southern Finland after heavy rainfall. River Vantaa overflowed, basement flooding, transport disruption. Comparable to Helsinki flood scenarios.",
+        "event_type": StressTestType.CLIMATE.value,
+        "start_date": date(2005, 8, 8),
+        "end_date": date(2005, 8, 10),
+        "duration_days": 2,
+        "region_name": "Helsinki, Southern Finland",
+        "country_codes": "FI",
+        "center_latitude": 60.17,
+        "center_longitude": 24.94,
+        "severity_actual": 0.70,
+        "financial_loss_eur": 80_000_000,
+        "affected_population": 50_000,
+        "affected_assets_count": 1_200,
+        "recovery_time_months": 6,
+        "lessons_learned": "Stormwater drainage and river level monitoring critical for Helsinki. Comparable to Nordic flood stress tests.",
+        "is_verified": True,
+        "tags": json.dumps(["flood", "storm", "helsinki", "finland", "2005", "climate"]),
+    },
+    {
+        "name": "Finland Storms and Floods 2017",
+        "description": "Widespread storms and flooding across Finland including Helsinki region. Wind damage, coastal flooding, power outages.",
+        "event_type": StressTestType.CLIMATE.value,
+        "start_date": date(2017, 8, 22),
+        "end_date": date(2017, 8, 24),
+        "duration_days": 2,
+        "region_name": "Finland, Helsinki region",
+        "country_codes": "FI",
+        "center_latitude": 60.2,
+        "center_longitude": 24.9,
+        "severity_actual": 0.65,
+        "financial_loss_eur": 120_000_000,
+        "affected_population": 100_000,
+        "recovery_time_months": 8,
+        "lessons_learned": "Coastal and stormwater resilience important for Helsinki. Relevant for Nordic flood scenarios.",
+        "is_verified": True,
+        "tags": json.dumps(["flood", "storm", "helsinki", "finland", "2017", "climate"]),
+    },
+    {
+        "name": "Nordic Flood 2010",
+        "description": "Heavy rainfall and flooding in Nordic region including southern Finland and Helsinki. River and urban flooding.",
+        "event_type": StressTestType.CLIMATE.value,
+        "start_date": date(2010, 7, 28),
+        "end_date": date(2010, 7, 30),
+        "duration_days": 2,
+        "region_name": "Southern Finland, Nordic",
+        "country_codes": "FI",
+        "center_latitude": 60.5,
+        "center_longitude": 25.0,
+        "severity_actual": 0.60,
+        "financial_loss_eur": 45_000_000,
+        "affected_population": 30_000,
+        "lessons_learned": "Nordic flood patterns comparable to Helsinki stress test. Drainage and river management key.",
+        "is_verified": True,
+        "tags": json.dumps(["flood", "nordic", "finland", "helsinki", "2010", "climate"]),
+    },
+
+    # US / Miami & South Florida floods (comparable for Miami flood stress tests)
+    {
+        "name": "South Florida Flood / Hurricane Andrew 1992",
+        "description": "Catastrophic hurricane and flooding in South Florida including Miami-Dade. Widespread destruction, storm surge, riverine flooding. Over $25B in damages (1992 USD). Comparable to Miami flood and coastal storm scenarios.",
+        "event_type": StressTestType.CLIMATE.value,
+        "start_date": date(1992, 8, 24),
+        "end_date": date(1992, 8, 26),
+        "duration_days": 2,
+        "region_name": "Miami, South Florida",
+        "country_codes": "US",
+        "center_latitude": 25.76,
+        "center_longitude": -80.19,
+        "affected_area_km2": 5000,
+        "severity_actual": 0.95,
+        "financial_loss_eur": 28_000_000_000,
+        "affected_population": 1_500_000,
+        "casualties": 65,
+        "affected_assets_count": 125_000,
+        "destroyed_assets_count": 25_000,
+        "damaged_assets_count": 80_000,
+        "recovery_time_months": 36,
+        "lessons_learned": "Coastal evacuation, building codes, flood barriers critical for Miami. Storm surge and riverine flood risk. Insurance and federal disaster response.",
+        "is_verified": True,
+        "tags": json.dumps(["flood", "hurricane", "storm", "miami", "florida", "usa", "1992", "climate"]),
+    },
+    {
+        "name": "Houston Floods (Hurricane Harvey) 2017",
+        "description": "Catastrophic flooding in Houston and Southeast Texas from Hurricane Harvey. Record rainfall, widespread inundation. $125B+ in damages. Comparable US flood scenario for stress tests.",
+        "event_type": StressTestType.CLIMATE.value,
+        "start_date": date(2017, 8, 25),
+        "end_date": date(2017, 9, 3),
+        "duration_days": 9,
+        "region_name": "Houston, Texas",
+        "country_codes": "US",
+        "center_latitude": 29.76,
+        "center_longitude": -95.37,
+        "affected_area_km2": 15000,
+        "severity_actual": 0.95,
+        "financial_loss_eur": 125_000_000_000,
+        "affected_population": 13_000_000,
+        "casualties": 68,
+        "affected_assets_count": 200_000,
+        "recovery_time_months": 24,
+        "lessons_learned": "Urban drainage and reservoir management. Floodplain development limits. Emergency response and evacuation for major US metro flood.",
+        "is_verified": True,
+        "tags": json.dumps(["flood", "hurricane", "storm", "houston", "texas", "usa", "2017", "climate"]),
+    },
+
     # Pandemic
     {
         "name": "COVID-19 Pandemic 2020",
@@ -389,6 +643,20 @@ STRESS_TEST_SCENARIOS: List[Dict[str, Any]] = [
 ]
 
 
+# Extra demo scenarios for dropdown (names seen in local/dev)
+EXTRA_DEMO_SCENARIOS: List[Dict[str, Any]] = [
+    {"name": "General Scenario", "test_type": StressTestType.CLIMATE.value, "region_name": "Global"},
+    {"name": "Debt Crisis", "test_type": StressTestType.FINANCIAL.value, "region_name": "Eurozone"},
+    {"name": "Climate Tipping", "test_type": StressTestType.CLIMATE.value, "region_name": "Global"},
+    {"name": "Climate 5Yr", "test_type": StressTestType.CLIMATE.value, "region_name": "EU"},
+    {"name": "Regional Conflict Spillover", "test_type": StressTestType.MILITARY.value, "region_name": "Eastern Europe"},
+    {"name": "Ngfs Ssp5 2050", "test_type": StressTestType.CLIMATE.value, "region_name": "Global"},
+    {"name": "Synthetic Bio", "test_type": StressTestType.PANDEMIC.value, "region_name": "Global"},
+    {"name": "Food Supply", "test_type": StressTestType.CLIMATE.value, "region_name": "Global"},
+    {"name": "Stress Test Scenario", "test_type": StressTestType.FINANCIAL.value, "region_name": "EU"},
+]
+
+
 def get_historical_events() -> List[Dict[str, Any]]:
     """Get list of historical events for seeding."""
     return HISTORICAL_EVENTS
@@ -397,3 +665,45 @@ def get_historical_events() -> List[Dict[str, Any]]:
 def get_stress_test_scenarios() -> List[Dict[str, Any]]:
     """Get list of stress test scenarios for seeding."""
     return STRESS_TEST_SCENARIOS
+
+
+async def seed_stress_tests_db(session: AsyncSession) -> int:
+    """
+    Insert demo stress test records into DB so the Visualizations/Command Center
+    dropdown shows a full list. Idempotent: no-op if 10+ tests already exist.
+    Returns number of records inserted.
+    """
+    from sqlalchemy import select, func
+    from src.models.stress_test import StressTest, StressTestStatus
+
+    r = await session.execute(select(func.count()).select_from(StressTest))
+    if (r.scalar() or 0) >= 10:
+        return 0
+
+    merged = list(STRESS_TEST_SCENARIOS) + EXTRA_DEMO_SCENARIOS
+    created = 0
+    for s in merged:
+        st = StressTest(
+            id=str(uuid4()),
+            name=s["name"],
+            description=s.get("description"),
+            test_type=s.get("test_type", StressTestType.CLIMATE.value),
+            status=StressTestStatus.COMPLETED.value,
+            center_latitude=s.get("center_latitude"),
+            center_longitude=s.get("center_longitude"),
+            radius_km=s.get("radius_km", 100.0),
+            region_name=s.get("region_name"),
+            country_codes=s.get("country_codes"),
+            severity=float(s.get("severity", 0.5)),
+            probability=float(s.get("probability", 0.1)),
+            time_horizon_months=int(s.get("time_horizon_months", 12)),
+            pd_multiplier=float(s.get("pd_multiplier", 1.0)),
+            lgd_multiplier=float(s.get("lgd_multiplier", 1.0)),
+            valuation_impact_pct=float(s.get("valuation_impact_pct", 0.0)),
+            recovery_time_months=s.get("recovery_time_months"),
+            parameters=s.get("parameters"),
+        )
+        session.add(st)
+        created += 1
+    await session.commit()
+    return created

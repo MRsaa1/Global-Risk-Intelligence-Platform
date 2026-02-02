@@ -1,0 +1,39 @@
+# Riva Speech AI — TTS (озвучка алертов и отчётов)
+# ВНИМАНИЕ: Riva TTS NIM (nvcr.io/nim/nvidia/riva-tts) требует платную подписку (Payment Required).
+# Riva Speech Skills (nvcr.io/nvidia/riva/riva-speech) — теги 2.24.0/2.14.0 в каталоге не найдены.
+# На Mac нет NVIDIA GPU — контейнер Riva всё равно не запустится.
+# Рекомендация: озвучка в приложении уже работает через Web Speech API в браузере (кнопка "Read aloud")
+# без любого сервера. Riva имеет смысл поднимать на Linux + GPU при наличии доступа к образу.
+#
+# Запуск (если есть доступ к образу): docker compose -f docker-compose.riva.yml up -d
+
+services:
+  riva-tts:
+    image: nvcr.io/nim/nvidia/riva-tts:latest
+    container_name: pfrp-riva-tts
+    runtime: nvidia
+    ports:
+      - "50051:50051"
+    environment:
+      - NGC_API_KEY=${NGC_API_KEY:-}
+      - NIM_CACHE_PATH=/opt/nim/.cache
+    shm_size: "4g"
+    volumes:
+      - riva-nim-cache:/opt/nim/.cache
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 5 bash -c '</dev/tcp/localhost/50051' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    restart: unless-stopped
+
+volumes:
+  riva-nim-cache:

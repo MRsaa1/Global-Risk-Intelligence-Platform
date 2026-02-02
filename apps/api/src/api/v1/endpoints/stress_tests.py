@@ -6,7 +6,8 @@ Integrates with NVIDIA LLM for intelligent report generation.
 """
 import json
 import logging
-from typing import List, Optional
+import re
+from typing import Any, List, Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Query, Depends
@@ -15,7 +16,14 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
+from src.core.config import settings
 from src.services.nvidia_llm import llm_service, LLMModel
+from src.services.nvidia_orchestration import nvidia_consensus_engine
+from src.services.knowledge_graph import get_knowledge_graph_service
+from src.services.cascade_gnn import cascade_gnn_service
+from src.services.entity_resolution import resolve_entity
+from src.services.regulatory_engine import get_applicable_regulations
+from src.services.news_enrichment import enrich_stress_test_context
 from src.services.risk_zone_calculator import risk_zone_calculator, EventCategory
 from src.services.nvidia_stress_pipeline import nvidia_stress_pipeline, NVIDIAEnhancedResult
 from src.models.stress_test import (
@@ -34,6 +42,135 @@ from src.services.event_emitter import event_emitter
 from src.models.events import EventTypes
 
 router = APIRouter(prefix="/stress-tests", tags=["Stress Tests"])
+
+# Currency by city/region (San Francisco = USD, Tokyo = JPY, Frankfurt/London = EUR/GBP)
+REGION_CURRENCY = {
+    "San Francisco": "USD",
+    "Oakland": "USD",
+    "New York": "USD",
+    "Chicago": "USD",
+    "Los Angeles": "USD",
+    "London": "GBP",
+    "Frankfurt": "EUR",
+    "Berlin": "EUR",
+    "Munich": "EUR",
+    "Paris": "EUR",
+    "Amsterdam": "EUR",
+    "Tokyo": "JPY",
+    "Singapore": "SGD",
+    "Sydney": "AUD",
+    "Melbourne": "AUD",
+}
+
+# Jurisdiction by city/region for regulatory relevance (Japan, EU, USA)
+REGION_JURISDICTION = {
+    "Tokyo": "Japan",
+    "Japan": "Japan",
+    "Osaka": "Japan",
+    "San Francisco": "USA",
+    "New York": "USA",
+    "Chicago": "USA",
+    "Los Angeles": "USA",
+    "Oakland": "USA",
+    "London": "UK",
+    "Frankfurt": "EU",
+    "Berlin": "EU",
+    "Munich": "EU",
+    "Paris": "EU",
+    "Amsterdam": "EU",
+    "Melbourne": "Australia",
+    "Sydney": "Australia",
+}
+
+
+def _get_currency_for_city(city_name: str) -> str:
+    """Return currency code for city (USD, EUR, GBP, JPY, etc.). Default EUR."""
+    if not city_name:
+        return "EUR"
+    for key, currency in REGION_CURRENCY.items():
+        if key.lower() in city_name.lower():
+            return currency
+    # US-style names often contain state or "USA"
+    if "USA" in (city_name or "").upper() or "United States" in (city_name or ""):
+        return "USD"
+    if "Japan" in (city_name or "") or "Tokyo" in (city_name or ""):
+        return "JPY"
+    return "EUR"
+
+
+def _get_jurisdiction_for_city(city_name: str) -> str:
+    """Return jurisdiction for regulatory relevance (Japan, EU, USA, UK, Australia). Default EU."""
+    if not city_name:
+        return "EU"
+    c = (city_name or "").strip()
+    for key, jurisdiction in REGION_JURISDICTION.items():
+        if key.lower() in c.lower():
+            return jurisdiction
+    if "USA" in c.upper() or "United States" in c:
+        return "USA"
+    if "Japan" in c or "Tokyo" in c:
+        return "Japan"
+    return "EU"
+
+
+def _is_llm_fallback(text: Optional[str]) -> bool:
+    """True if text is a placeholder/mock from missing or unavailable LLM."""
+    if not text or not text.strip():
+        return True
+    t = text.strip().lower()
+    return (
+        "llm not configured" in t
+        or "configure nvidia_api_key" in t
+        or "nvidia_llm_api_key" in t
+        or "simulated response" in t
+        or "mock " in t
+        or "this is a simulated" in t
+    )
+
+
+def _build_template_executive_summary(result: Any, request: Any, zones_text: str) -> str:
+    """Build a deterministic executive summary from result and request when LLM is unavailable."""
+    event_name = getattr(result, "event_name", "Stress test")
+    event_type = getattr(result, "event_type", None)
+    event_type_val = getattr(event_type, "value", str(event_type)) if event_type else "climate"
+    city_name = getattr(result, "city_name", request.city_name if request else "")
+    severity = getattr(request, "severity", 0.5)
+    total_loss = getattr(result, "total_loss", 0) or 0
+    total_buildings = getattr(result, "total_buildings_affected", 0) or 0
+    total_pop = getattr(result, "total_population_affected", 0) or 0
+    zones = getattr(result, "zones", []) or []
+    top_zones = zones[:5]
+    p1 = (
+        f"This stress test models a {event_type_val} scenario ({event_name}) for {city_name} at {severity:.0%} severity. "
+        "The results indicate material exposure and operational risk that warrant immediate attention from management and stakeholders."
+    )
+    p2 = (
+        f"Key metrics: total estimated loss €{total_loss:,.0f}M, {total_buildings:,} buildings affected, "
+        f"{total_pop:,} population impacted. Top risk zones: {zones_text.strip() or 'see zone table.'}"
+    )
+    p3 = (
+        "Immediate priorities: validate exposure in highest-risk zones, confirm mitigation and continuity plans, "
+        "and ensure regulatory and disclosure requirements are met."
+    )
+    return f"{p1}\n\n{p2}\n\n{p3}"
+
+
+def _build_template_concluding_summary(result: Any, request: Any, zones_text: str) -> str:
+    """Build a short deterministic concluding summary when LLM is unavailable."""
+    event_name = getattr(result, "event_name", "Stress test")
+    city_name = getattr(result, "city_name", request.city_name if request else "")
+    total_loss = getattr(result, "total_loss", 0) or 0
+    total_buildings = getattr(result, "total_buildings_affected", 0) or 0
+    zones = getattr(result, "zones", []) or []
+    bullets = [
+        f"Scenario: {event_name} for {city_name}; total estimated loss €{total_loss:,.0f}M.",
+        f"Buildings affected: {total_buildings:,}; review zone-level exposure.",
+        "Validate business continuity and mitigation plans for highest-risk areas.",
+        "Ensure compliance with disclosure and regulatory requirements.",
+    ]
+    if zones:
+        bullets.append(f"Focus on top zones: {', '.join(z.label for z in zones[:3])}.")
+    return "\n".join(bullets)
 
 
 # =============================================================================
@@ -238,8 +375,38 @@ async def list_stress_tests(
 async def create_stress_test(
     data: StressTestCreate,
     session: AsyncSession = Depends(get_db),
+    use_synthetic: bool = Query(False, description="Use synthetic scenario generation"),
 ):
-    """Create a new stress test."""
+    """
+    Create a new stress test.
+    
+    If use_synthetic=True, generates synthetic scenario parameters using NeMo Data Designer.
+    """
+    # Generate synthetic scenario if requested
+    if use_synthetic:
+        try:
+            from src.services.nemo_data_designer import get_nemo_data_designer_service
+            designer = get_nemo_data_designer_service()
+            
+            if designer.enabled:
+                result = await designer.generate_stress_test_scenarios(
+                    scenario_type=data.test_type.value,
+                    region=data.region_name or "Unknown",
+                    count=1,
+                    severity_range=(data.severity, data.severity + 0.1),
+                )
+                
+                if result.scenarios:
+                    synthetic = result.scenarios[0]
+                    # Enhance data with synthetic parameters
+                    if data.parameters is None:
+                        data.parameters = {}
+                    data.parameters.update(synthetic.parameters)
+                    data.severity = synthetic.severity
+                    logger.info(f"Using synthetic scenario: {synthetic.name}")
+        except Exception as e:
+            logger.warning(f"Synthetic scenario generation failed, using provided data: {e}")
+    
     test = StressTest(
         id=str(uuid4()),
         name=data.name,
@@ -295,15 +462,38 @@ async def create_stress_test(
 @router.get("/scenarios/library")
 async def get_stress_scenario_library():
     """Regulatory stress scenario library (EBA, Fed, NGFS, IMF). Full schema: type, severity_numeric, horizon."""
-    from src.services.stress_scenario_registry import get_stress_scenario_library as _get_library
-    return _get_library()
+    try:
+        from src.services.stress_scenario_registry import get_stress_scenario_library as _get_library
+        return _get_library()
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.warning("Stress scenario library failed, returning fallback: %s", e)
+        return []
 
 
 @router.get("/scenarios/extended")
 async def get_extended_scenarios():
     """Extended stress scenario tree (by category)."""
-    from src.services.stress_scenario_registry import get_extended_scenarios_tree
-    return get_extended_scenarios_tree()
+    try:
+        from src.services.stress_scenario_registry import get_extended_scenarios_tree
+        return get_extended_scenarios_tree()
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.warning("Extended scenarios failed, returning fallback: %s", e)
+        return {"categories": []}
+
+
+@router.post("/admin/seed")
+async def seed_stress_tests(session: AsyncSession = Depends(get_db)):
+    """
+    One-time seed of demo stress test scenarios into DB.
+    Idempotent: no-op if 10+ tests exist. Use to populate the scenario
+    dropdown on Visualizations/Command Center on a fresh server.
+    Path /admin/seed avoids conflict with /{test_id} (which would match /seed).
+    """
+    from src.services.stress_test_seed import seed_stress_tests_db
+    n = await seed_stress_tests_db(session)
+    return {"status": "success", "message": "Stress tests seeded", "inserted": n}
 
 
 @router.get("/{test_id}", response_model=StressTestResponse)
@@ -540,6 +730,22 @@ class QuickStressTestRequest(BaseModel):
     severity: float = Field(0.5, ge=0.0, le=1.0, description="Severity multiplier")
     use_llm: bool = Field(True, description="Generate LLM-powered executive summary")
     use_nvidia_pipeline: bool = Field(False, description="Use full NVIDIA pipeline (Earth-2 + PhysicsNeMo)")
+    entity_name: Optional[str] = Field(
+        None,
+        description="Name of the entity or location (e.g. Uniklinik Köln or Frankfurt); used to detect entity type for zone labels and LLM context",
+    )
+    use_kg: bool = Field(
+        True,
+        description="Enrich with Knowledge Graph related entities when Neo4j is enabled",
+    )
+    use_cascade_gnn: bool = Field(
+        True,
+        description="Run cascade simulation (GNN/NetworkX) and include in response",
+    )
+    use_nvidia_orchestration: bool = Field(
+        False,
+        description="Use NVIDIA AI Orchestration (multi-model consensus: fast + deep analysis, weighted summary). Requires use_llm=True.",
+    )
 
 
 class QuickZoneResponse(BaseModel):
@@ -552,6 +758,7 @@ class QuickZoneResponse(BaseModel):
     estimated_loss: float
     population_affected: int
     recommendations: List[str]
+    polygon: Optional[List[List[float]]] = None  # [[lng, lat], ...] for flood extent
 
 
 class NVIDIAPipelineInfo(BaseModel):
@@ -581,6 +788,10 @@ class NVIDIAEnhancedRequest(BaseModel):
     severity: float = Field(0.5, ge=0.0, le=1.0)
     run_physics: bool = Field(True, description="Run physics simulations")
     run_llm: bool = Field(True, description="Generate LLM analysis")
+    entity_name: Optional[str] = Field(
+        None,
+        description="Name of the entity or location; used to detect entity type for zone labels and LLM context",
+    )
 
 
 class NVIDIAEnhancedResponse(BaseModel):
@@ -602,6 +813,20 @@ class NVIDIAEnhancedResponse(BaseModel):
     nvidia_pipeline: NVIDIAPipelineInfo
     weather_context: Optional[dict] = None
     physics_context: Optional[dict] = None
+    region_action_plan: Optional["RegionActionPlanResponse"] = None
+    report_v2: Optional[dict] = None
+
+
+class RegionActionPlanResponse(BaseModel):
+    """Regional action plan embedded in stress test response."""
+    region: str
+    country: str
+    event_type: str
+    summary: str
+    key_actions: List[str]
+    contacts: List[dict]
+    sources: List[dict]
+    urls: List[str]
 
 
 class QuickStressTestResponse(BaseModel):
@@ -617,9 +842,18 @@ class QuickStressTestResponse(BaseModel):
     total_population_affected: int
     zones: List[QuickZoneResponse]
     executive_summary: Optional[str] = None
+    concluding_summary: Optional[str] = None
     mitigation_actions: List[MitigationActionResponse]
     data_sources: List[str]
     llm_generated: bool = False
+    region_action_plan: Optional[RegionActionPlanResponse] = None
+    report_v2: Optional[dict] = None
+    related_entities: Optional[List[dict]] = None
+    graph_context: Optional[str] = None
+    cascade_simulation: Optional[dict] = None
+    resolved_entity_type: Optional[str] = None  # from OpenCorporates/Wikidata when available
+    nvidia_orchestration: Optional[dict] = None  # when use_nvidia_orchestration: confidence, model_agreement, flag_for_human_review
+    currency: str = "EUR"  # USD for US cities, EUR/GBP for EU/UK
 
 
 # =============================================================================
@@ -645,20 +879,96 @@ async def execute_quick_stress_test(
     import re
     logger = logging.getLogger(__name__)
     
-    # Calculate risk zones using the smart algorithm
+    # Knowledge Graph: optional entity type from node + related entities (when Neo4j enabled, before calculate)
+    entity_name_for_calc = request.entity_name or request.city_name
+    entity_type_override = None
+    related_entities = None
+    graph_context = None
+    if request.use_kg and getattr(settings, "enable_neo4j", False):
+        try:
+            kg = get_knowledge_graph_service()
+            if kg.is_available:
+                kg_entity = await kg.get_entity_by_name_or_id(entity_name_for_calc)
+                if kg_entity:
+                    # Map KG node labels/asset_type/infra_type to our EntityType
+                    at = (kg_entity.get("asset_type") or "").lower()
+                    it = (kg_entity.get("infra_type") or "").lower()
+                    labels = [str(l).upper() for l in (kg_entity.get("labels") or [])]
+                    if "hospital" in at or "health" in at or "HEALTHCARE" in labels:
+                        entity_type_override = "HEALTHCARE"
+                    elif "bank" in at or "insurance" in at or "financial" in at or "Asset" in labels and "INFRASTRUCTURE" not in labels:
+                        entity_type_override = "FINANCIAL"
+                    elif "INFRASTRUCTURE" in labels or it or "power" in it or "airport" in it:
+                        entity_type_override = "INFRASTRUCTURE" if "airport" not in (entity_name_for_calc or "").lower() else "AIRPORT"
+                related_entities = await kg.get_related_entities(entity_name_for_calc, limit=15)
+                if related_entities:
+                    graph_context = "Related entities from knowledge graph: " + ", ".join(
+                        [f"{e.get('name', e.get('id'))} ({e.get('relationship_type', 'RELATED')})" for e in related_entities]
+                    )
+        except Exception as e:
+            logger.debug("Knowledge Graph failed: %s", e)
+
+    # Calculate risk zones (entity_type_override from KG when available)
     result = risk_zone_calculator.calculate(
         center_lat=request.center_latitude,
         center_lng=request.center_longitude,
         event_id=request.event_id,
         severity=request.severity,
         city_name=request.city_name,
+        entity_name=entity_name_for_calc,
+        entity_type_override=entity_type_override,
     )
+
+    # Entity resolution: optional enrichment via Wikidata/OpenCorporates
+    resolved_entity_type = None
+    try:
+        resolution = await resolve_entity(entity_name_for_calc)
+        if resolution and resolution.suggested_entity_type:
+            resolved_entity_type = resolution.suggested_entity_type
+            if graph_context is None:
+                graph_context = ""
+            graph_context = (graph_context or "") + f" External data ({resolution.source}) suggests entity type: {resolved_entity_type}."
+    except Exception as e:
+        logger.debug("Entity resolution failed: %s", e)
+
+    # Cascade GNN: run cascade simulation when requested
+    cascade_simulation = None
+    if request.use_cascade_gnn:
+        try:
+            cascade_gnn_service.build_graph_for_city_scenario(request.city_name, request.event_id)
+            if cascade_gnn_service.nodes:
+                trigger_id = next(iter(cascade_gnn_service.nodes))
+                cascade_result = await cascade_gnn_service.simulate_cascade(
+                    trigger_node_id=trigger_id,
+                    trigger_severity=request.severity,
+                    max_steps=10,
+                )
+                # GNN returns total_loss in raw currency units; normalize to millions for display (same as result.total_loss)
+                raw_loss = cascade_result.total_loss
+                total_loss_m = (raw_loss / 1e6) if raw_loss >= 1e6 else (raw_loss if raw_loss > 0 else result.total_loss)
+                # Sanity cap: cascade loss should not exceed ~20x base loss (avoid trillion display from wrong GNN scale)
+                base_m = result.total_loss or 100
+                if total_loss_m > 20 * base_m:
+                    total_loss_m = min(total_loss_m, 5 * base_m)
+                cascade_simulation = {
+                    "trigger_node": cascade_result.trigger_node,
+                    "affected_nodes": cascade_result.affected_nodes,
+                    "total_loss": total_loss_m,
+                    "simulation_steps": cascade_result.simulation_steps,
+                    "propagation_paths": cascade_result.propagation_paths[:10],
+                    "critical_nodes": cascade_result.critical_nodes,
+                    "containment_points": cascade_result.containment_points,
+                }
+        except Exception as e:
+            logger.debug("Cascade GNN simulation failed: %s", e)
     
     executive_summary = None
+    concluding_summary = None
     llm_generated = False
     mitigation_actions = result.mitigation_actions
-    
+
     # Generate LLM-powered executive summary if requested
+    nvidia_orchestration_result = None
     if request.use_llm:
         try:
             zones_text = "\n".join([
@@ -666,51 +976,127 @@ async def execute_quick_stress_test(
                 f"(Buildings: {z.affected_buildings}, Loss: €{z.estimated_loss}M)"
                 for z in result.zones[:5]
             ])
-            
-            summary_prompt = f"""Analyze this stress test scenario and provide a professional executive summary (2-3 paragraphs).
+            entity_ctx = ""
+            if result.entity_name and result.entity_type:
+                entity_ctx = f"Entity: {result.entity_name} (Type: {result.entity_type}). Adapt the analysis and recommendations to this entity type (e.g. for HEALTHCARE focus on medical supply, ICU capacity, patient safety; for FINANCIAL on liquidity, counterparties; for CITY/REGION on infrastructure and population)."
+                if "airport" in (result.entity_name or "").lower():
+                    entity_ctx += " For airports mention operator (e.g. Fraport AG for Frankfurt Airport) and airline operations (e.g. Deutsche Lufthansa) where relevant."
+                entity_ctx += "\n\n"
+            if graph_context:
+                entity_ctx += graph_context + "\n\n"
 
-Stress Test: {result.event_name}
-Type: {result.event_type.value}
-Location: {result.city_name}
-Severity: {result.severity:.0%}
-
-Impact Assessment:
-- Total Expected Loss: €{result.total_loss:,.0f}M
-- Buildings Affected: {result.total_buildings_affected:,}
-- Population Impacted: {result.total_population_affected:,}
-
-Identified Risk Zones:
-{zones_text}
-
-Provide:
-1. Executive summary of the risk scenario and its implications
-2. Key findings with quantitative metrics
-3. Immediate priorities for stakeholders
-
-IMPORTANT: Write in plain text only. Do NOT use any markdown formatting such as asterisks, bold, headers, or bullet points with dashes.
-Use professional risk management language. Be concise but comprehensive. Write in English."""
-
-            summary_response = await llm_service.generate(
-                prompt=summary_prompt,
-                model=LLMModel.LLAMA_70B,
-                max_tokens=600,
-                temperature=0.3,
-            )
-            
-            if summary_response.finish_reason != "mock" and summary_response.content:
-                # Remove markdown formatting
-                executive_summary = summary_response.content
-                executive_summary = re.sub(r'\*\*([^*]+)\*\*', r'\1', executive_summary)
-                executive_summary = re.sub(r'\*([^*]+)\*', r'\1', executive_summary)
-                executive_summary = re.sub(r'^#{1,6}\s*', '', executive_summary, flags=re.MULTILINE)
-                executive_summary = re.sub(r'\n{3,}', '\n\n', executive_summary).strip()
+            # NVIDIA AI Orchestration: multi-model consensus (fast + deep analysis, weighted summary)
+            if request.use_nvidia_orchestration and nvidia_consensus_engine.is_available:
+                scenario = {
+                    "entity_name": entity_name_for_calc,
+                    "entity_type": getattr(result, "entity_type", "") or "",
+                    "event_name": result.event_name,
+                    "event_type": result.event_type.value,
+                    "severity": request.severity,
+                    "zones_text": zones_text,
+                    "total_loss": result.total_loss,
+                }
+                if cascade_simulation and cascade_simulation.get("affected_nodes"):
+                    scenario["cascade_affected"] = len(cascade_simulation.get("affected_nodes", []))
+                    scenario["cascade_critical"] = [n.get("id") for n in (cascade_simulation.get("critical_nodes") or [])[:3]]
+                orch_result = await nvidia_consensus_engine.analyze_with_consensus(
+                    entity_name_for_calc, scenario, request.severity
+                )
+                executive_summary = orch_result.summary or orch_result.analysis
+                if executive_summary:
+                    executive_summary = re.sub(r'\*\*([^*]+)\*\*', r'\1', executive_summary)
+                    executive_summary = re.sub(r'\*([^*]+)\*', r'\1', executive_summary)
+                    executive_summary = re.sub(r'^#{1,6}\s*', '', executive_summary, flags=re.MULTILINE)
+                    executive_summary = re.sub(r'\n{3,}', '\n\n', executive_summary).strip()
+                concluding_summary = (orch_result.analysis or "").strip()[:1500]
+                if concluding_summary:
+                    concluding_summary = re.sub(r'\*\*([^*]+)\*\*', r'\1', concluding_summary)
+                    concluding_summary = re.sub(r'\n{3,}', '\n\n', concluding_summary).strip()
                 llm_generated = True
-                logger.info(f"LLM generated summary for {request.city_name}")
-            
-            # Generate LLM mitigation actions
-            actions_prompt = f"""Generate 5 specific mitigation actions for this {result.event_type.value} risk scenario in {request.city_name}.
+                nvidia_orchestration_result = {
+                    "entity_type": orch_result.entity_type,
+                    "confidence": orch_result.confidence,
+                    "model_agreement": orch_result.model_agreement,
+                    "flag_for_human_review": orch_result.flag_for_human_review,
+                    "used_model_fast": orch_result.used_model_fast,
+                    "used_model_deep": orch_result.used_model_deep,
+                }
+                logger.info(
+                    "NVIDIA orchestration used for %s (agreement=%.2f, review=%s)",
+                    request.city_name,
+                    orch_result.model_agreement,
+                    orch_result.flag_for_human_review,
+                )
 
-Event: {result.event_name}
+            # Multi-prompt pipeline (analyst -> cascade comment -> summary) when not using orchestration
+            elif not nvidia_orchestration_result:
+                # Prompt 1: Entity/scenario analyst (short structured analysis)
+                analyst_prompt = f"""You are a risk analyst. In 3-5 short bullet points, analyze this stress test scenario. Focus on: entity type relevance, key risk zones, and immediate exposure. Plain text, English only, no markdown.
+
+{entity_ctx}Stress Test: {result.event_name} | Type: {result.event_type.value} | Location: {result.city_name} | Severity: {result.severity:.0%}
+Total Loss: €{result.total_loss:,.0f}M | Buildings: {result.total_buildings_affected:,} | Population: {result.total_population_affected:,}
+Risk Zones:
+{zones_text}"""
+                analyst_response = await llm_service.generate(
+                    prompt=analyst_prompt,
+                    model=LLMModel.LLAMA_8B,
+                    max_tokens=300,
+                    temperature=0.3,
+                )
+                analyst_text = (analyst_response.content or "").strip() if analyst_response.finish_reason != "mock" else ""
+
+                # Prompt 2: Cascade commentator (if cascade simulation was run)
+                cascade_comment_text = ""
+                if cascade_simulation and cascade_simulation.get("affected_nodes"):
+                    cascade_prompt = f"""In 2-3 sentences, comment on cascade risk: trigger node {cascade_simulation.get('trigger_node')}, affected nodes ({len(cascade_simulation.get('affected_nodes', []))}), critical nodes {cascade_simulation.get('critical_nodes', [])[:3]}, and containment points {cascade_simulation.get('containment_points', [])[:2]}. Plain text, English, no markdown."""
+                    cascade_response = await llm_service.generate(
+                        prompt=cascade_prompt,
+                        model=LLMModel.LLAMA_8B,
+                        max_tokens=200,
+                        temperature=0.3,
+                    )
+                    if cascade_response.finish_reason != "mock" and cascade_response.content:
+                        cascade_comment_text = cascade_response.content.strip()
+
+                # Prompt 3: Executive summary (synthesize analyst + cascade into 2-3 paragraphs)
+                prior_analysis = f"Prior analysis:\n{analyst_text}\n\n" if analyst_text else ""
+                if cascade_comment_text:
+                    prior_analysis += f"Cascade comment:\n{cascade_comment_text}\n\n"
+                summary_prompt = f"""Synthesize the following into a professional executive summary (2-3 paragraphs).
+{prior_analysis}Write one coherent summary that covers: (1) risk scenario and implications, (2) key findings with metrics, (3) immediate priorities for stakeholders. Use the prior analysis and cascade comment if provided. Plain text only, no markdown. English."""
+
+                summary_response = await llm_service.generate(
+                    prompt=summary_prompt,
+                    model=LLMModel.LLAMA_70B,
+                    max_tokens=600,
+                    temperature=0.3,
+                )
+                
+                if summary_response.finish_reason != "mock" and summary_response.content:
+                    # Remove markdown formatting
+                    executive_summary = summary_response.content
+                    executive_summary = re.sub(r'\*\*([^*]+)\*\*', r'\1', executive_summary)
+                    executive_summary = re.sub(r'\*([^*]+)\*', r'\1', executive_summary)
+                    executive_summary = re.sub(r'^#{1,6}\s*', '', executive_summary, flags=re.MULTILINE)
+                    executive_summary = re.sub(r'\n{3,}', '\n\n', executive_summary).strip()
+                    llm_generated = True
+                    logger.info(f"LLM generated summary for {request.city_name}")
+                
+                # Generate LLM mitigation actions (entity-aware)
+                entity_actions_ctx = ""
+                if result.entity_name and result.entity_type:
+                    entity_actions_ctx = f"Entity: {result.entity_name} (Type: {result.entity_type}). Adapt actions to this entity type (e.g. HEALTHCARE: medical supply, ICU, patient safety; FINANCIAL: liquidity, counterparties; CITY/REGION: infrastructure, population)."
+                    if "airport" in (result.entity_name or "").lower():
+                        entity_actions_ctx += " For airports mention operator (e.g. Fraport AG) and airline operations (e.g. Deutsche Lufthansa) where relevant."
+                    entity_actions_ctx += "\n\n"
+                event_cat = (result.event_type.value or "").lower()
+                scenario_rule = ""
+                if "supply" in event_cat or "supply_chain" in event_cat:
+                    scenario_rule = "SCENARIO RULE: This is a SUPPLY CHAIN scenario. Do NOT suggest evacuation or emergency response. Suggest ONLY supply-chain actions: alternative suppliers, inventory buffer, distribution channels, expedited shipping, local sourcing.\n\n"
+                elif "financial" in event_cat or "credit" in event_cat or "liquidity" in event_cat:
+                    scenario_rule = "SCENARIO RULE: This is a FINANCIAL scenario. Suggest liquidity, hedging, counterparty contact, credit limits, regulatory filings. Do NOT suggest evacuation.\n\n"
+                actions_prompt = f"""Generate 5 specific mitigation actions for this {result.event_type.value} risk scenario in {request.city_name}.
+{scenario_rule}{entity_actions_ctx}Event: {result.event_name}
 Severity: {request.severity:.0%}
 Expected Loss: €{result.total_loss:,.0f}M
 
@@ -718,37 +1104,82 @@ Provide exactly 5 concise action items, each on a new line. Start each with a ve
 Write in plain text only. Do NOT use markdown formatting, asterisks, or special symbols.
 Write in English only."""
 
-            actions_response = await llm_service.generate(
-                prompt=actions_prompt,
-                model=LLMModel.LLAMA_8B,
-                max_tokens=250,
-                temperature=0.4,
-            )
-            
-            if actions_response.finish_reason != "mock" and actions_response.content:
-                lines = []
-                for line in actions_response.content.split('\n'):
-                    line = line.strip().lstrip('•-1234567890. ')
-                    line = re.sub(r'\*\*([^*]+)\*\*', r'\1', line)
-                    line = re.sub(r'\*([^*]+)\*', r'\1', line)
-                    if line and len(line) > 10:
-                        lines.append(line)
+                actions_response = await llm_service.generate(
+                    prompt=actions_prompt,
+                    model=LLMModel.LLAMA_8B,
+                    max_tokens=250,
+                    temperature=0.4,
+                )
                 
-                if len(lines) >= 3:
-                    mitigation_actions = [
-                        {
-                            "action": action,
-                            "priority": "urgent" if i < 2 else "high" if i < 4 else "medium",
-                            "cost": round((10 - i * 1.5), 1),
-                            "risk_reduction": round(35 - i * 5),
-                        }
-                        for i, action in enumerate(lines[:5])
-                    ]
-                    logger.info(f"LLM generated {len(mitigation_actions)} actions")
+                if actions_response.finish_reason != "mock" and actions_response.content:
+                    lines = []
+                    for line in actions_response.content.split('\n'):
+                        line = line.strip().lstrip('•-1234567890. ')
+                        line = re.sub(r'\*\*([^*]+)\*\*', r'\1', line)
+                        line = re.sub(r'\*([^*]+)\*', r'\1', line)
+                        if line and len(line) > 10:
+                            lines.append(line)
                     
+                    if len(lines) >= 3:
+                        mitigation_actions = [
+                            {
+                                "action": action,
+                                "priority": "urgent" if i < 2 else "high" if i < 4 else "medium",
+                                "cost": round((10 - i * 1.5), 1),
+                                "risk_reduction": round(35 - i * 5),
+                            }
+                            for i, action in enumerate(lines[:5])
+                        ]
+                        logger.info(f"LLM generated {len(mitigation_actions)} actions")
+
+                # Generate concluding summary (entity-aware)
+                concluding_entity_ctx = ""
+                if result.entity_name and result.entity_type:
+                    concluding_entity_ctx = f"Entity: {result.entity_name} (Type: {result.entity_type}). Tailor the conclusion to this entity type."
+                    if "airport" in (result.entity_name or "").lower():
+                        concluding_entity_ctx += " For airports mention operator (e.g. Fraport AG) and airline operations (e.g. Lufthansa) where relevant."
+                    concluding_entity_ctx += "\n\n"
+                concluding_prompt = f"""Based on this stress test, write a CONCLUDING SUMMARY (closing section) that leaves NO questions unanswered.
+{concluding_entity_ctx}Stress Test: {result.event_name}
+Type: {result.event_type.value}
+Location: {result.city_name}
+Total Expected Loss: €{result.total_loss:,.0f}M | Buildings: {result.total_buildings_affected:,} | Population: {result.total_population_affected:,}
+
+The reader must understand:
+1. WHAT TO DO - Clear, ordered action steps (immediate, short-term, medium-term)
+2. HOW IT WILL AFFECT - Impact on assets, operations, stakeholders, timeline
+3. BOTTOM LINE - One sentence takeaway: what is the key decision or outcome
+
+Write 3-4 short paragraphs. Be explicit. Use plain text only, no markdown. English."""
+                try:
+                    concluding_response = await llm_service.generate(
+                        prompt=concluding_prompt,
+                        model=LLMModel.LLAMA_70B,
+                        max_tokens=500,
+                        temperature=0.3,
+                    )
+                    if concluding_response.finish_reason != "mock" and concluding_response.content:
+                        concluding_summary = concluding_response.content
+                        concluding_summary = re.sub(r'\*\*([^*]+)\*\*', r'\1', concluding_summary)
+                        concluding_summary = re.sub(r'\*([^*]+)\*', r'\1', concluding_summary)
+                        concluding_summary = re.sub(r'^#{1,6}\s*', '', concluding_summary, flags=re.MULTILINE)
+                        concluding_summary = re.sub(r'\n{3,}', '\n\n', concluding_summary).strip()
+                        logger.info("LLM generated concluding summary")
+                except Exception as ec:
+                    logger.error(f"LLM concluding summary error: {ec}")
         except Exception as e:
             logger.error(f"LLM error: {e}")
-    
+
+    # Template executive/concluding summary when LLM unavailable or returned fallback
+    zones_text = "\n".join([
+        f"- {z.label}: {z.risk_level.value.upper()} (Buildings: {z.affected_buildings}, Loss: €{z.estimated_loss}M)"
+        for z in result.zones[:5]
+    ])
+    if executive_summary is None or _is_llm_fallback(executive_summary):
+        executive_summary = _build_template_executive_summary(result, request, zones_text)
+    if concluding_summary is None or _is_llm_fallback(concluding_summary):
+        concluding_summary = _build_template_concluding_summary(result, request, zones_text)
+
     # Save to database
     test_id = str(uuid4())
     
@@ -798,7 +1229,80 @@ Write in English only."""
         )
         session.add(risk_zone)
     
-    # Create report
+    # Report V2 metrics (probabilistic, temporal, contagion, etc.)
+    from src.services.stress_report_metrics import compute_report_v2
+    # Sector for Report V2: city_region when entity is city/region so sector metrics show city_region not enterprise
+    entity_type_sector = getattr(result, "entity_type", None)
+    sector_override = "city_region" if entity_type_sector == "CITY_REGION" else None
+    report_v2 = compute_report_v2(
+        total_loss=result.total_loss,
+        zones_count=len(result.zones),
+        city_name=result.city_name,
+        event_type=result.event_type.value,
+        severity=result.severity,
+        total_buildings_affected=result.total_buildings_affected,
+        total_population_affected=result.total_population_affected,
+        sector=sector_override or "enterprise",
+    )
+    if cascade_simulation:
+        report_v2["cascade_simulation"] = cascade_simulation
+    elif request.use_cascade_gnn and result.zones:
+        # Fallback when GNN had no nodes or failed: minimal cascade from zones
+        first_zone = result.zones[0]
+        report_v2["cascade_simulation"] = {
+            "trigger_node": first_zone.label,
+            "affected_nodes": [{"id": z.label, "name": z.label} for z in result.zones[:5]],
+            "total_loss": result.total_loss,
+            "simulation_steps": 1,
+            "critical_nodes": [{"id": first_zone.label}] if result.zones else [],
+            "containment_points": [result.zones[-1].label] if len(result.zones) > 1 else [],
+        }
+    if nvidia_orchestration_result:
+        report_v2["nvidia_orchestration"] = nvidia_orchestration_result
+    # Regulatory relevance (Phase 3) — jurisdiction by city (Japan, EU, USA)
+    entity_type_for_reg = getattr(result, "entity_type", None) or "CITY_REGION"
+    jurisdiction = _get_jurisdiction_for_city(result.city_name)
+    reg_ctx = get_applicable_regulations(entity_type_for_reg, jurisdiction, result.severity)
+    report_v2["regulatory_relevance"] = {
+        "entity_type": reg_ctx.entity_type,
+        "jurisdiction": reg_ctx.jurisdiction,
+        "regulations": reg_ctx.regulations,
+        "regulation_labels": reg_ctx.labels,
+        "disclosure_required": reg_ctx.disclosure_required,
+        "required_metrics": reg_ctx.required_metrics[:5],
+    }
+    # News/event enrichment (Phase 3) when API key set
+    try:
+        news_ctx = await enrich_stress_test_context(
+            region=result.city_name,
+            event_type=result.event_type.value,
+            limit=5,
+        )
+        if news_ctx.get("events"):
+            report_v2["news_enrichment"] = news_ctx
+    except Exception:
+        pass
+
+    # GPU / NIM: when USE_LOCAL_NIM and FourCastNet healthy, mark report as using GPU (visible vs local/Contabo)
+    data_sources_response = list(result.data_sources)
+    nim_used = False
+    try:
+        if getattr(settings, "use_local_nim", False):
+            from src.services.nvidia_nim import nim_service
+            if await nim_service.check_health("fourcastnet"):
+                report_v2["gpu_services_used"] = ["FourCastNet NIM"]
+                if "FourCastNet NIM (GPU)" not in data_sources_response:
+                    data_sources_response.append("FourCastNet NIM (GPU)")
+                nim_used = True
+    except Exception:
+        pass
+    # When NIM/Earth-2 not used, mark Open-Meteo (no-GPU simulations)
+    if not nim_used and "Open-Meteo (API)" not in data_sources_response:
+        data_sources_response.append("Open-Meteo (API)")
+
+    currency = _get_currency_for_city(result.city_name)
+
+    # Create report (include entity_name/entity_type for PDF/reporter)
     report = StressTestReport(
         id=str(uuid4()),
         stress_test_id=test_id,
@@ -814,13 +1318,23 @@ Write in English only."""
                 for z in result.zones
             ],
             "mitigation_actions": mitigation_actions,
-            "data_sources": result.data_sources,
+            "data_sources": data_sources_response,
+            "report_v2": report_v2,
+            "entity_name": getattr(result, "entity_name", None),
+            "entity_type": getattr(result, "entity_type", None),
+            "currency": currency,
         }),
     )
     session.add(report)
-    
+
     await session.commit()
-    
+
+    # Attach region action plan if available (e.g. Australia/Melbourne flood)
+    from src.services.region_action_plans import get_plan, plan_to_dict
+
+    region_plan = get_plan(result.city_name, request.event_id)
+    region_plan_data = RegionActionPlanResponse(**plan_to_dict(region_plan)) if region_plan else None
+
     # Emit stress test completed event
     await event_emitter.emit_stress_test_completed(
         test_id=test_id,
@@ -853,15 +1367,25 @@ Write in English only."""
                 estimated_loss=z.estimated_loss,
                 population_affected=z.population_affected,
                 recommendations=z.recommendations,
+                polygon=getattr(z, 'polygon', None),
             )
             for z in result.zones
         ],
         executive_summary=executive_summary,
+        concluding_summary=concluding_summary,
         mitigation_actions=[
             MitigationActionResponse(**action) for action in mitigation_actions
         ],
-        data_sources=result.data_sources,
+        data_sources=data_sources_response,
         llm_generated=llm_generated,
+        region_action_plan=region_plan_data,
+        report_v2=report_v2,
+        related_entities=related_entities,
+        graph_context=graph_context,
+        cascade_simulation=cascade_simulation,
+        resolved_entity_type=resolved_entity_type,
+        nvidia_orchestration=nvidia_orchestration_result,
+        currency=currency,
     )
 
 
@@ -882,6 +1406,9 @@ async def execute_nvidia_enhanced_stress_test(
     The response includes detailed pipeline execution info.
     """
     from src.services.risk_zone_calculator import get_event_category
+    from src.services.region_action_plans import get_plan, plan_to_dict
+    from src.services.stress_report_metrics import compute_report_v2
+
     logger = logging.getLogger(__name__)
     
     # Determine event category
@@ -901,21 +1428,33 @@ async def execute_nvidia_enhanced_stress_test(
     # Use adjusted severity from pipeline
     adjusted_severity = pipeline_result.weather_adjusted_severity
     
-    # Calculate risk zones with adjusted severity
+    # Calculate risk zones with adjusted severity (entity_name for context-dependent zone labels)
+    entity_name_nvidia = request.entity_name or request.city_name
     zones_result = risk_zone_calculator.calculate(
         center_lat=request.center_latitude,
         center_lng=request.center_longitude,
         event_id=request.event_type,
         severity=adjusted_severity,
         city_name=request.city_name,
+        entity_name=entity_name_nvidia,
     )
     
     # Merge pipeline data sources with zone data sources
     all_data_sources = list(set(zones_result.data_sources + pipeline_result.data_sources))
-    
+    # When NIM/GPU not used, mark Open-Meteo (no-GPU simulations)
+    if "FourCastNet NIM (GPU)" not in all_data_sources and "Open-Meteo (API)" not in all_data_sources:
+        all_data_sources.append("Open-Meteo (API)")
+
     # Use LLM summary if available, otherwise use default
     executive_summary = pipeline_result.executive_summary
-    
+    # Template fallback when pipeline returns no summary or mock/LLM-unavailable message
+    nvidia_zones_text = "\n".join([
+        f"- {z.label}: {z.risk_level.value.upper()} (Buildings: {z.affected_buildings}, Loss: €{z.estimated_loss}M)"
+        for z in zones_result.zones[:5]
+    ])
+    if executive_summary is None or _is_llm_fallback(executive_summary):
+        executive_summary = _build_template_executive_summary(zones_result, request, nvidia_zones_text)
+
     # Use LLM recommendations if available
     if pipeline_result.mitigation_recommendations:
         mitigation_actions = [
@@ -1047,6 +1586,7 @@ async def execute_nvidia_enhanced_stress_test(
                 estimated_loss=z.estimated_loss,
                 population_affected=z.population_affected,
                 recommendations=z.recommendations,
+                polygon=getattr(z, 'polygon', None),
             )
             for z in zones_result.zones
         ],
@@ -1055,6 +1595,20 @@ async def execute_nvidia_enhanced_stress_test(
             MitigationActionResponse(**action) for action in mitigation_actions
         ],
         data_sources=all_data_sources,
+        region_action_plan=(
+            RegionActionPlanResponse(**plan_to_dict(region_plan))
+            if (region_plan := get_plan(request.city_name, request.event_type))
+            else None
+        ),
+        report_v2=compute_report_v2(
+            total_loss=zones_result.total_loss,
+            zones_count=len(zones_result.zones),
+            city_name=request.city_name,
+            event_type=event_type.value,
+            severity=adjusted_severity,
+            total_buildings_affected=zones_result.total_buildings_affected,
+            total_population_affected=zones_result.total_population_affected,
+        ),
         nvidia_pipeline=NVIDIAPipelineInfo(
             stages_completed=pipeline_result.pipeline_stages,
             services_used=pipeline_result.nvidia_services_used,

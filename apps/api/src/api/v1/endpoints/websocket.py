@@ -26,12 +26,13 @@ router = APIRouter()
 class ConnectionManager:
     """
     Manages WebSocket connections with channel-based subscriptions.
-    
+
     Channels:
     - dashboard: General dashboard updates
     - assets: Asset changes (CRUD)
     - alerts: Real-time alerts
     - stress_tests: Stress test progress
+    - system_oversee: OVERSEER system monitoring snapshots (status, system_alerts, executive_summary)
     - user:{user_id}: User-specific notifications
     """
     
@@ -179,6 +180,11 @@ class ConnectionManager:
             },
         }
 
+    def get_connection_id(self, websocket: WebSocket) -> Optional[str]:
+        """Get a short connection id for a websocket."""
+        info = self._connection_info.get(websocket)
+        return info.get("id") if info else None
+
 
 # Global connection manager
 manager = ConnectionManager()
@@ -289,12 +295,15 @@ async def websocket_endpoint(
       - assets: Asset CRUD events
       - alerts: Real-time alerts
       - stress_tests: Stress test progress
+      - viewer: Real-time viewer telemetry (position/focus)
+      - annotations: Collaboration events for annotations
     - user_id: Optional user ID for personal notifications
     
     **Incoming Messages:**
     - {"action": "subscribe", "channel": "..."} - Subscribe to channel
     - {"action": "unsubscribe", "channel": "..."} - Unsubscribe from channel
     - {"action": "ping"} - Ping/pong for keepalive
+    - {"action": "event", "event": "viewer.position"|"viewer.focus_asset"|"annotation.add", "payload": {...}} - Collaboration event
     
     **Outgoing Messages:**
     - {"type": "message", "channel": "...", "data": {...}} - Channel message
@@ -308,6 +317,7 @@ async def websocket_endpoint(
     # Send welcome message
     await websocket.send_json({
         "type": "connected",
+        "connection_id": manager.get_connection_id(websocket),
         "channels": channel_list,
         "timestamp": datetime.utcnow().isoformat(),
     })
@@ -336,6 +346,38 @@ async def websocket_endpoint(
                     "type": "stats",
                     "data": stats,
                 })
+
+            # Collaboration / viewer events (Phase 6.3-6.4)
+            else:
+                # Support both:
+                # - { action: "event", event: "...", payload: {...} }
+                # - { event: "...", payload: {...} }  (legacy/simple)
+                evt = data.get("event") or data.get("type")
+                if action == "event" or evt in {"viewer.position", "viewer.focus_asset", "annotation.add"}:
+                    event_name = evt
+                    payload = data.get("payload") or data.get("data") or {}
+
+                    if event_name == "viewer.position" or event_name == "viewer.focus_asset":
+                        channel = "viewer"
+                    elif event_name == "annotation.add":
+                        channel = "annotations"
+                    else:
+                        channel = "command_center"
+
+                    await manager.broadcast_to_channel(
+                        channel,
+                        {
+                            "event": event_name,
+                            "payload": payload,
+                            "from_connection_id": manager.get_connection_id(websocket),
+                        },
+                        exclude=websocket,
+                    )
+                    await websocket.send_json({
+                        "type": "ack",
+                        "event": event_name,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    })
     
     except WebSocketDisconnect:
         await manager.disconnect(websocket)

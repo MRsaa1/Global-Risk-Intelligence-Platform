@@ -19,7 +19,7 @@ USGS_API_URL = "https://earthquake.usgs.gov/fdsnws/event/1/query"
 class USGSClient:
     """Client for USGS Earthquake Catalog API."""
     
-    def __init__(self, timeout: float = 30.0):
+    def __init__(self, timeout: float = 5.0):
         self.timeout = timeout
         self._cache: Dict[str, tuple] = {}  # (data, timestamp)
         self._cache_ttl = timedelta(hours=6)

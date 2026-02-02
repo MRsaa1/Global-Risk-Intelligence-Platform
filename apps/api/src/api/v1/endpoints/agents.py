@@ -5,11 +5,16 @@ Provides APIs for:
 - SENTINEL: Alerts and monitoring
 - ANALYST: Deep analysis
 - ADVISOR: Recommendations
+- REPORTER: PDF report generation (with optional LLM executive summary)
 """
-from typing import Optional
+import logging
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
+logger = logging.getLogger(__name__)
+
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +24,9 @@ from src.models.asset import Asset
 from src.layers.agents.sentinel import sentinel_agent, AlertSeverity
 from src.layers.agents.analyst import analyst_agent
 from src.layers.agents.advisor import advisor_agent
+from src.layers.agents.reporter import reporter_agent
+from src.services.generative_ai import alert_explanation as gen_alert_explanation
+from src.services.pdf_report import HAS_PDF
 
 router = APIRouter()
 
@@ -247,7 +255,7 @@ async def get_recommendations(
     """
     # Get asset
     result = await db.execute(
-        select(Asset).where(Asset.id == asset_id)
+        select(Asset).where(Asset.id == str(asset_id))
     )
     asset = result.scalar_one_or_none()
     
@@ -306,6 +314,140 @@ async def get_recommendations(
     ]
 
 
+@router.post("/alert/{alert_id}/analyze-and-recommend")
+async def alert_analyze_and_recommend(
+    alert_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Workflow: Run ANALYST on alert, then ADVISOR with analysis context.
+    Returns analysis (root causes, factors, correlations) and recommendations in one response.
+    """
+    # Resolve alert from SENTINEL
+    alerts_list = sentinel_agent.get_active_alerts()
+    alert = next((a for a in alerts_list if str(a.id) == alert_id), None)
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found or already resolved")
+
+    try:
+        alert_data = {
+            "type": alert.alert_type.value,
+            "title": alert.title,
+            "message": alert.message,
+            "asset_ids": alert.asset_ids,
+            "asset_id": alert.asset_ids[0] if alert.asset_ids else None,
+            "exposure": alert.exposure,
+            "severity": alert.severity.value,
+        }
+
+        # ANALYST: deep analysis
+        analysis = await analyst_agent.analyze_alert(
+            alert_id=alert.id,
+            alert_data=alert_data,
+        )
+        analysis_dict = {
+            "root_causes": analysis.root_causes,
+            "contributing_factors": analysis.contributing_factors,
+            "correlations": analysis.correlations,
+            "trends": analysis.trends,
+            "confidence": analysis.confidence,
+            "computation_time_ms": analysis.computation_time_ms,
+        }
+
+        # Resolve asset for ADVISOR (first linked asset or placeholder)
+        asset_id_ctx = alert.asset_ids[0] if alert.asset_ids else "alert-context"
+        asset_data = {
+            "id": asset_id_ctx,
+            "name": f"Alert: {(alert.title or '')[:50]}",
+            "climate_risk_score": 50,
+            "physical_risk_score": 40,
+            "network_risk_score": 40,
+            "valuation": float(alert.exposure or 0),
+        }
+        if alert.asset_ids:
+            result = await db.execute(select(Asset).where(Asset.id == alert.asset_ids[0]))
+            row = result.scalar_one_or_none()
+            if row:
+                asset_data = {
+                    "id": str(row.id),
+                    "name": row.name or str(row.id),
+                    "climate_risk_score": row.climate_risk_score or 40,
+                    "physical_risk_score": row.physical_risk_score or 20,
+                    "network_risk_score": row.network_risk_score or 30,
+                    "valuation": float(row.current_valuation or 0),
+                }
+                asset_id_ctx = str(row.id)
+
+        # ADVISOR: recommendations using analysis context
+        recommendations = await advisor_agent.generate_recommendations(
+            asset_id=asset_id_ctx,
+            asset_data=asset_data,
+            alerts=[{"type": alert.alert_type.value, "title": alert.title, "message": alert.message}],
+            analysis=analysis_dict,
+        )
+
+        # Generative AI: short explanation of alert for UI (never fail the request)
+        explanation = ""
+        try:
+            explanation = await gen_alert_explanation(
+                alert_title=alert.title,
+                alert_message=alert.message or "",
+                alert_type=alert.alert_type.value,
+                severity=alert.severity.value,
+            )
+        except Exception as e:
+            logger.debug("Alert explanation LLM failed: %s", e)
+
+        return {
+            "alert_id": alert_id,
+            "explanation": explanation or None,
+            "analysis": {
+                "analysis_id": str(analysis.analysis_id),
+                "root_causes": analysis.root_causes,
+                "contributing_factors": analysis.contributing_factors,
+                "correlations": analysis.correlations,
+                "trends": analysis.trends,
+                "confidence": analysis.confidence,
+                "computation_time_ms": analysis.computation_time_ms,
+            },
+            "recommendations": [
+                {
+                    "id": str(r.id),
+                    "trigger": r.trigger,
+                    "asset_id": r.asset_id,
+                    "current_situation": r.current_situation,
+                    "risk_if_no_action": r.risk_if_no_action,
+                    "recommended_option": r.recommended_option,
+                    "recommendation_reason": r.recommendation_reason,
+                    "urgency": r.urgency,
+                    "options": [
+                        {
+                            "id": str(o.id),
+                            "name": o.name,
+                            "description": o.description,
+                            "upfront_cost": o.upfront_cost,
+                            "annual_cost": o.annual_cost,
+                            "risk_reduction": o.risk_reduction,
+                            "npv_5yr": o.npv_5yr,
+                            "roi_5yr": o.roi_5yr,
+                            "payback_years": o.payback_years,
+                        }
+                        for o in (r.options or [])
+                    ],
+                }
+                for r in recommendations
+            ],
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("analyze-and-recommend failed for alert %s: %s", alert_id, e)
+        raise HTTPException(
+            status_code=503,
+            detail="Analysis temporarily unavailable. Please try again.",
+        )
+
+
 @router.post("/evaluate-options")
 async def evaluate_options(
     asset_id: str,
@@ -342,3 +484,52 @@ async def evaluate_options(
             for o in evaluated
         ],
     }
+
+
+# ==================== REPORTER ENDPOINTS ====================
+
+class ReporterPDFRequest(BaseModel):
+    """Request for REPORTER stress test PDF (optionally with LLM executive summary)."""
+    test_name: str = Field(default="Stress Test Report")
+    city_name: str = Field(default="New York")
+    test_type: str = Field(default="climate")
+    severity: float = Field(default=0.5, ge=0.0, le=1.0)
+    zones: List[Dict[str, Any]] = Field(default_factory=list)
+    actions: Optional[List[Dict[str, Any]]] = None
+    executive_summary: Optional[str] = None
+    use_llm: bool = Field(default=True, description="If True and no executive_summary, try NVIDIA LLM")
+
+
+@router.post("/reporter/stress-pdf")
+async def reporter_stress_pdf(request: ReporterPDFRequest):
+    """
+    REPORTER: Generate stress test PDF report.
+    
+    When executive_summary is not provided and use_llm=True, uses NVIDIA LLM
+    to generate an executive summary before producing the PDF.
+    """
+    if not HAS_PDF:
+        raise HTTPException(
+            status_code=503,
+            detail="PDF generation is not available. Install reportlab (recommended for macOS) or WeasyPrint + system libs (cairo, pango)."
+        )
+    stress_test = {
+        "name": request.test_name,
+        "region_name": request.city_name,
+        "test_type": request.test_type,
+        "severity": request.severity,
+    }
+    if request.executive_summary:
+        stress_test["executive_summary"] = request.executive_summary
+    pdf_bytes = await reporter_agent.generate_stress_test_report(
+        stress_test=stress_test,
+        zones=request.zones,
+        actions=request.actions,
+        use_llm=request.use_llm and not request.executive_summary,
+    )
+    filename = f"stress_test_{request.city_name.replace(' ', '_')}_{request.test_type}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )

@@ -42,10 +42,22 @@ interface EventRiskGraphProps {
   height?: number
   compact?: boolean
   fullWidth?: boolean  // Use container width instead of fixed width
+  /** When set with scenarioId, fetch graph from stress/cascade pipeline; else fallback to static template. */
+  stressTestId?: string
+  scenarioId?: string
+  /** City ID for cascade build-from-context; uses 'default' when omitted. */
+  cityId?: string
+  /** Show expanded legend (link types, risk levels) under the graph. */
+  showLegend?: boolean
+  /** Show summary (Nodes, Links, Exposure) under the graph. */
+  showSummary?: boolean
 }
 
-// Map stress-test and risk-zone eventIds to template keys (fukushima2011, lehman2008, ukraine2022, covid2020)
+// Map stress-test and risk-zone eventIds to template keys (fukushima2011, lehman2008, ukraine2022, covid2020, eurozone2011)
 const EVENT_ID_TO_TEMPLATE: Record<string, string> = {
+  Sovereign_Debt_Crisis: 'eurozone2011',
+  debt_crisis: 'eurozone2011',
+  eurozone2011: 'eurozone2011',
   seismic_shock: 'fukushima2011',
   flood_event: 'fukushima2011',
   hurricane: 'fukushima2011',
@@ -320,6 +332,29 @@ function generateEventGraph(
         { source: 'fdic', target: 'svb', strength: 0.65, type: 'financial' },
       ]
     },
+    // 2011 Eurozone Debt Crisis / Sovereign Debt Crisis
+    eurozone2011: {
+      nodes: [
+        { id: 'greece', name: 'Greek Sovereign Debt', type: 'government', value: 90, risk: 1.0 },
+        { id: 'ecb', name: 'ECB', type: 'institution', value: 100, risk: 0.3 },
+        { id: 'eurobanks', name: 'Eurozone Banks', type: 'bank', value: 85, risk: 0.92 },
+        { id: 'realestate', name: 'Real Estate', type: 'realestate', value: 70, risk: 0.85 },
+        { id: 'spread', name: 'Bond Spreads', type: 'market', value: 75, risk: 0.88 },
+        { id: 'italy', name: 'Italian Debt', type: 'government', value: 80, risk: 0.78 },
+        { id: 'spain', name: 'Spanish Banks', type: 'bank', value: 65, risk: 0.82 },
+        { id: 'imf', name: 'IMF / Troika', type: 'institution', value: 95, risk: 0.25 },
+      ],
+      links: [
+        { source: 'greece', target: 'eurobanks', strength: 0.95, type: 'financial' },
+        { source: 'greece', target: 'spread', strength: 0.92, type: 'financial' },
+        { source: 'spread', target: 'italy', strength: 0.88, type: 'financial' },
+        { source: 'spread', target: 'spain', strength: 0.85, type: 'financial' },
+        { source: 'eurobanks', target: 'realestate', strength: 0.78, type: 'financial' },
+        { source: 'ecb', target: 'eurobanks', strength: 0.72, type: 'financial' },
+        { source: 'imf', target: 'greece', strength: 0.68, type: 'financial' },
+        { source: 'eurobanks', target: 'spain', strength: 0.75, type: 'financial' },
+      ]
+    },
   }
 
   // 1) Exact match (historic keys)
@@ -386,7 +421,12 @@ export default function EventRiskGraph({
   width = 500, 
   height = 350,
   compact = false,
-  fullWidth = false
+  fullWidth = false,
+  stressTestId,
+  scenarioId,
+  cityId,
+  showLegend = false,
+  showSummary = false,
 }: EventRiskGraphProps) {
   const graphRef = useRef<ForceGraphMethods>()
   const containerRef = useRef<HTMLDivElement>(null)
@@ -402,10 +442,38 @@ export default function EventRiskGraph({
     return { totalRisk, criticalNodes, criticalLinks }
   }, [graphData])
   
-  // Load graph data for event
+  // Load graph: when scenarioId is set, try stress/cascade API; on fail use static template
   useEffect(() => {
-    setGraphData(generateEventGraph(eventId, eventType, eventCategory, cityName))
-  }, [eventId, eventType, eventCategory, cityName])
+    if (scenarioId) {
+      const city = cityId || 'default'
+      fetch(`/api/v1/whatif/cascade/event-graph?scenario_id=${encodeURIComponent(scenarioId)}&city_id=${encodeURIComponent(city)}`)
+        .then((r) => {
+          if (!r.ok) throw new Error(`event-graph ${r.status}`)
+          return r.json()
+        })
+        .then((data: { nodes?: Array<{ id: string; name: string; type: string; value: number; risk: number }>; links?: Array<{ source: string; target: string; strength: number; type: 'supply' | 'financial' | 'operational' | 'geographic' }> }) => {
+          const nodes: GraphNode[] = (data.nodes || []).map((n) => ({
+            id: n.id,
+            name: n.name,
+            type: n.type || 'asset',
+            value: n.value,
+            risk: n.risk,
+          }))
+          const links: GraphLink[] = (data.links || []).map((l) => ({
+            source: l.source,
+            target: l.target,
+            strength: l.strength,
+            type: l.type || 'operational',
+          }))
+          setGraphData({ nodes, links })
+        })
+        .catch(() => {
+          setGraphData(generateEventGraph(eventId, eventType, eventCategory, cityName))
+        })
+    } else {
+      setGraphData(generateEventGraph(eventId, eventType, eventCategory, cityName))
+    }
+  }, [eventId, eventType, eventCategory, cityName, scenarioId, cityId])
   
   // Configure force simulation to spread nodes further apart
   useEffect(() => {
@@ -478,7 +546,7 @@ export default function EventRiskGraph({
       ctx.fillStyle = 'rgba(0,0,0,0.6)'
       ctx.fillRect(0, 0, 256, 48)
       ctx.fillStyle = 'white'
-      ctx.font = 'bold 16px Inter, sans-serif'
+      ctx.font = 'bold 16px "Space Grotesk", system-ui, sans-serif'
       ctx.textAlign = 'center'
       ctx.fillText(node.name, 128, 30)
       
@@ -507,8 +575,10 @@ export default function EventRiskGraph({
   // Determine actual dimensions
   const graphWidth = fullWidth ? containerSize.width : width
   const graphHeight = fullWidth ? containerSize.height : height
+  const exposure = graphData.nodes.reduce((s, n) => s + n.value * n.risk, 0)
   
   return (
+    <div className="space-y-2">
     <div 
       ref={containerRef}
       className={`relative rounded-xl overflow-hidden border border-white/10 bg-black/40 ${fullWidth ? 'w-full' : ''}`}
@@ -589,6 +659,34 @@ export default function EventRiskGraph({
           </div>
         </div>
       </div>
+    </div>
+
+    {/* Expanded legend and summary under the graph */}
+    {(showLegend || showSummary) && (
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-white/50">
+        {showLegend && (
+          <>
+            <div className="flex items-center gap-2">
+              <span className="text-white/40">Links:</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 bg-blue-500 rounded" />Supply</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 bg-purple-500 rounded" />Financial</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 bg-orange-500 rounded" />Operational</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 bg-green-500 rounded" />Geographic</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-white/40">Risk:</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500" />&gt;80%</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-orange-500" />&gt;60%</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-yellow-500" />&gt;40%</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500" />≤40%</span>
+            </div>
+          </>
+        )}
+        {showSummary && graphData.nodes.length > 0 && (
+          <span>Nodes: {graphData.nodes.length}, Links: {graphData.links.length}, Exposure ≈ ${exposure.toFixed(1)}B</span>
+        )}
+      </div>
+    )}
     </div>
   )
 }

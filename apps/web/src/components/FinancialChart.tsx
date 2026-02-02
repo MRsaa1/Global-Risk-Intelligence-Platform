@@ -178,7 +178,7 @@ export default function FinancialChart({
     },
     paper_bgcolor: 'rgba(10, 15, 26, 0)',
     plot_bgcolor: 'rgba(10, 15, 26, 0)',
-    font: { color: chartColors.text.secondary, family: 'Inter, system-ui, sans-serif' },
+    font: { color: chartColors.text.secondary, family: '"Space Grotesk", system-ui, sans-serif' },
     scene: type === 'scatter3d' || type === 'surface' || type === 'mesh3d' ? {
       xaxis: { 
         title: { text: 'Climate Risk', font: { size: 11 } }, 

@@ -61,9 +61,22 @@ class NVIDIANIMService:
         self.use_local = settings.use_local_nim
         
         self.http_client = httpx.AsyncClient(timeout=300.0)  # Long timeout for inference
+
+    @property
+    def is_enabled(self) -> bool:
+        return bool(self.use_local)
+
+    @property
+    def is_available(self) -> bool:
+        # Availability here is config-only; health checks are separate.
+        if not self.use_local:
+            return False
+        return bool((self.fourcastnet_url or "").strip() or (self.corrdiff_url or "").strip())
         
     async def check_health(self, service: str = "fourcastnet") -> bool:
         """Check if NIM service is healthy."""
+        if not self.use_local:
+            return False
         url = self.fourcastnet_url if service == "fourcastnet" else self.corrdiff_url
         
         try:

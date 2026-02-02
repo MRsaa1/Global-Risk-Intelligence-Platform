@@ -21,8 +21,10 @@ from src.models.user import User, UserRole
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# JWT Bearer token
+# JWT Bearer token (required)
 security = HTTPBearer()
+# Optional Bearer for endpoints that work with or without auth (e.g. BCP demo)
+security_optional = HTTPBearer(auto_error=False)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -110,6 +112,37 @@ async def get_current_active_user(
             detail="User account is inactive",
         )
     return current_user
+
+
+async def get_current_user_optional(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_optional),
+    db: AsyncSession = Depends(get_db),
+) -> Optional[User]:
+    """
+    Return current user if valid Bearer token is present, else None.
+    Use for endpoints that allow both authenticated and unauthenticated access (e.g. BCP).
+    """
+    if not credentials:
+        return None
+    try:
+        token = credentials.credentials
+        payload = jwt.decode(
+            token,
+            settings.secret_key,
+            algorithms=[settings.algorithm],
+        )
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            return None
+    except JWTError:
+        return None
+    result = await db.execute(
+        select(User).where(User.id == UUID(user_id))
+    )
+    user = result.scalar_one_or_none()
+    if user is None or not user.is_active:
+        return None
+    return user
 
 
 def require_role(required_role: UserRole):

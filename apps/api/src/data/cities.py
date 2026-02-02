@@ -381,7 +381,7 @@ CITIES_DATABASE: Dict[str, CityData] = {
     # ==================== EUROPE ====================
     "london": CityData(
         id="london", name="London", country="UK",
-        lat=51.5074, lng=-0.1278, exposure=38.5, assets_count=1234,
+        lat=51.5074, lng=-0.1278, exposure=520.0, assets_count=2850,
         seismic_zone=SeismicZone.STABLE,
         climate_zone=ClimateZone.TEMPERATE,
         political_region=PoliticalRegion.OECD_STABLE,
@@ -399,7 +399,7 @@ CITIES_DATABASE: Dict[str, CityData] = {
     ),
     "frankfurt": CityData(
         id="frankfurt", name="Frankfurt", country="Germany",
-        lat=50.1109, lng=8.6821, exposure=35.2, assets_count=756,
+        lat=50.1109, lng=8.6821, exposure=385.0, assets_count=1950,
         seismic_zone=SeismicZone.STABLE,
         climate_zone=ClimateZone.TEMPERATE,
         political_region=PoliticalRegion.OECD_STABLE,
@@ -462,7 +462,7 @@ CITIES_DATABASE: Dict[str, CityData] = {
     ),
     "zurich": CityData(
         id="zurich", name="Zurich", country="Switzerland",
-        lat=47.3769, lng=8.5417, exposure=42.5, assets_count=567,
+        lat=47.3769, lng=8.5417, exposure=485.0, assets_count=2100,
         seismic_zone=SeismicZone.ALPINE_HIMALAYAN,
         climate_zone=ClimateZone.TEMPERATE,
         political_region=PoliticalRegion.OECD_STABLE,
@@ -471,7 +471,7 @@ CITIES_DATABASE: Dict[str, CityData] = {
     ),
     "geneva": CityData(
         id="geneva", name="Geneva", country="Switzerland",
-        lat=46.2044, lng=6.1432, exposure=35.8, assets_count=456,
+        lat=46.2044, lng=6.1432, exposure=312.0, assets_count=1800,
         seismic_zone=SeismicZone.ALPINE_HIMALAYAN,
         climate_zone=ClimateZone.TEMPERATE,
         political_region=PoliticalRegion.OECD_STABLE,
@@ -801,15 +801,6 @@ CITIES_DATABASE: Dict[str, CityData] = {
         known_risks={"conflict": 0.95, "infrastructure": 0.88, "humanitarian": 0.90},
         major_events=["2023 Sudan Conflict", "Military Coup 2021"]
     ),
-    "tripoli_libya": CityData(
-        id="tripoli_libya", name="Tripoli", country="Libya",
-        lat=32.8872, lng=13.1913, exposure=6.5, assets_count=98,
-        seismic_zone=SeismicZone.ALPINE_HIMALAYAN,
-        climate_zone=ClimateZone.ARID,
-        political_region=PoliticalRegion.CONFLICT_ZONE,
-        known_risks={"conflict": 0.85, "political": 0.88, "infrastructure": 0.75},
-        major_events=["Libyan Civil War 2011-present", "2023 Floods"]
-    ),
     "kabul": CityData(
         id="kabul", name="Kabul", country="Afghanistan",
         lat=34.5553, lng=69.2075, exposure=3.8, assets_count=56,
@@ -872,6 +863,53 @@ CITIES_DATABASE: Dict[str, CityData] = {
         political_region=PoliticalRegion.CONFLICT_ZONE,
         known_risks={"conflict": 0.99, "infrastructure": 0.98, "humanitarian": 0.99},
         major_events=["2023-2024 Gaza War", "Multiple Conflicts"]
+    ),
+    # Additional cities from zone/event selection
+    "riyadh": CityData(
+        id="riyadh", name="Riyadh", country="Saudi Arabia",
+        lat=24.7136, lng=46.6753, exposure=28.5, assets_count=567,
+        seismic_zone=SeismicZone.ALPINE_HIMALAYAN,
+        climate_zone=ClimateZone.ARID,
+        political_region=PoliticalRegion.EMERGING_STABLE,
+        known_risks={"heat": 0.70, "water_stress": 0.65, "sand_storm": 0.50},
+        major_events=[],
+    ),
+    "beirut": CityData(
+        id="beirut", name="Beirut", country="Lebanon",
+        lat=33.8938, lng=35.5018, exposure=12.5, assets_count=234,
+        seismic_zone=SeismicZone.ALPINE_HIMALAYAN,
+        climate_zone=ClimateZone.TEMPERATE,
+        political_region=PoliticalRegion.CONFLICT_ZONE,
+        known_risks={"political": 0.75, "infrastructure": 0.65, "earthquake": 0.55},
+        major_events=["2020 Beirut Explosion", "Civil War legacy"],
+    ),
+    "kolkata": CityData(
+        id="kolkata", name="Kolkata", country="India",
+        lat=22.5726, lng=88.3639, exposure=18.5, assets_count=456,
+        seismic_zone=SeismicZone.ALPINE_HIMALAYAN,
+        climate_zone=ClimateZone.MONSOON,
+        political_region=PoliticalRegion.EMERGING_STABLE,
+        known_risks={"flood": 0.85, "cyclone": 0.70, "infrastructure": 0.65},
+        major_events=["2020 Cyclone Amphan"],
+    ),
+    "buenosaires": CityData(
+        id="buenosaires", name="Buenos Aires", country="Argentina",
+        lat=-34.6037, lng=-58.3816, exposure=28.5, assets_count=567,
+        seismic_zone=SeismicZone.STABLE,
+        climate_zone=ClimateZone.TEMPERATE,
+        political_region=PoliticalRegion.EMERGING_VOLATILE,
+        known_risks={"flood": 0.60, "political": 0.65, "economic": 0.70},
+        major_events=["2001 Economic Crisis", "2020 Default"],
+    ),
+    # Alias for risk zones (Libya)
+    "tripoli": CityData(
+        id="tripoli", name="Tripoli", country="Libya",
+        lat=32.8872, lng=13.1913, exposure=6.5, assets_count=98,
+        seismic_zone=SeismicZone.ALPINE_HIMALAYAN,
+        climate_zone=ClimateZone.ARID,
+        political_region=PoliticalRegion.CONFLICT_ZONE,
+        known_risks={"conflict": 0.85, "political": 0.88, "infrastructure": 0.75},
+        major_events=["Libyan Civil War 2011-present", "2023 Floods"],
     ),
 }
 

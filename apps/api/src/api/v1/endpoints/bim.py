@@ -6,24 +6,29 @@ Provides endpoints for:
 - 3D model retrieval
 - Element queries
 - Geometry export
+
+Uses database persistence for BIM data (models in src/models/bim.py).
 """
+import json
 import os
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, BackgroundTasks
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 import io
 
 from src.core.database import get_db
 from src.core.config import settings
 from src.models.asset import Asset
+from src.models.bim import BIMModel, BIMFloor, BIMElement, BIMSite, BIMBuilding
 from src.services.bim_processor import bim_processor, BIMProcessingResult, BIMMetadata
 
 router = APIRouter()
@@ -161,9 +166,11 @@ async def upload_bim_file(
     - Thumbnail generation (if generate_thumbnail=true)
     
     **File size limit:** 100MB
+    
+    **Persistence:** Data is stored in the database for later retrieval.
     """
     # Validate asset exists
-    result = await db.execute(select(Asset).where(Asset.id == asset_id))
+    result = await db.execute(select(Asset).where(Asset.id == str(asset_id)))
     asset = result.scalar_one_or_none()
     
     if not asset:
@@ -202,6 +209,82 @@ async def upload_bim_file(
             generate_thumbnail=generate_thumbnail,
         )
         
+        # Delete any existing BIM data for this asset
+        existing = await db.execute(
+            select(BIMModel).where(BIMModel.asset_id == str(asset_id))
+        )
+        for old_model in existing.scalars().all():
+            await db.delete(old_model)
+        
+        # Persist to database
+        if processing_result.success and processing_result.metadata:
+            meta = processing_result.metadata
+            
+            # Create BIMModel record
+            bim_model = BIMModel(
+                id=str(uuid4()),
+                asset_id=str(asset_id),
+                file_name=file.filename,
+                file_size=file_size,
+                file_hash=meta.file_hash,
+                ifc_schema=meta.ifc_schema,
+                application=meta.application,
+                author=meta.author,
+                organization=meta.organization,
+                ifc_creation_date=meta.creation_date,
+                project_name=meta.project_name,
+                site_name=meta.site_name,
+                building_name=meta.building_name,
+                element_count=meta.element_count,
+                floor_count=meta.floor_count,
+                space_count=meta.space_count,
+                wall_count=meta.wall_count,
+                door_count=meta.door_count,
+                window_count=meta.window_count,
+                gross_floor_area=meta.gross_floor_area,
+                processing_status="completed",
+                processing_time_ms=processing_result.processing_time_ms,
+                has_geometry=extract_geometry,
+                has_thumbnail=generate_thumbnail,
+                is_valid=True,
+                errors=json.dumps(processing_result.errors) if processing_result.errors else None,
+                warnings=json.dumps(processing_result.warnings) if processing_result.warnings else None,
+                created_at=datetime.utcnow(),
+            )
+            db.add(bim_model)
+            
+            # Persist floors
+            if processing_result.spatial_hierarchy:
+                floors_data = processing_result.spatial_hierarchy.get("floors", [])
+                for idx, floor_data in enumerate(floors_data):
+                    floor = BIMFloor(
+                        id=str(uuid4()),
+                        bim_model_id=bim_model.id,
+                        ifc_id=floor_data.get("id"),
+                        name=floor_data.get("name", f"Floor {idx}"),
+                        description=floor_data.get("description"),
+                        elevation=floor_data.get("elevation"),
+                        height=floor_data.get("height"),
+                        sort_order=idx,
+                    )
+                    db.add(floor)
+            
+            # Persist elements
+            if processing_result.elements:
+                for el in processing_result.elements:
+                    element = BIMElement(
+                        id=str(uuid4()),
+                        bim_model_id=bim_model.id,
+                        ifc_id=el.id,
+                        ifc_type=el.ifc_type,
+                        name=el.name,
+                        description=el.description,
+                        properties=json.dumps(el.properties) if el.properties else None,
+                    )
+                    db.add(element)
+            
+            await db.commit()
+        
         # Build response
         response = BIMUploadResponse(
             success=processing_result.success,
@@ -214,10 +297,6 @@ async def upload_bim_file(
             warnings=processing_result.warnings,
             processing_time_ms=processing_result.processing_time_ms,
         )
-        
-        # Update asset with BIM info (in production, store in dedicated table)
-        # asset.bim_file_path = str(temp_path)
-        # await db.commit()
         
         return response
         
@@ -243,9 +322,35 @@ async def get_bim_metadata(
     - Element counts (floors, spaces, walls, etc.)
     - Building information
     """
-    # In production, retrieve from database
-    # For now, return mock data
+    # Check database for persisted BIM data
+    result = await db.execute(
+        select(BIMModel).where(BIMModel.asset_id == str(asset_id))
+    )
+    bim_model = result.scalar_one_or_none()
     
+    if bim_model:
+        return BIMMetadataResponse(
+            file_name=bim_model.file_name,
+            file_size=bim_model.file_size,
+            file_hash=bim_model.file_hash or "",
+            ifc_schema=bim_model.ifc_schema or "IFC4",
+            application=bim_model.application,
+            author=bim_model.author,
+            organization=bim_model.organization,
+            creation_date=bim_model.ifc_creation_date,
+            element_count=bim_model.element_count,
+            floor_count=bim_model.floor_count,
+            space_count=bim_model.space_count,
+            wall_count=bim_model.wall_count,
+            door_count=bim_model.door_count,
+            window_count=bim_model.window_count,
+            building_name=bim_model.building_name,
+            site_name=bim_model.site_name,
+            project_name=bim_model.project_name,
+            gross_floor_area=bim_model.gross_floor_area,
+        )
+    
+    # Fallback: Return demo data if no BIM file has been uploaded
     return BIMMetadataResponse(
         file_name="building.ifc",
         file_size=15_000_000,
@@ -286,7 +391,62 @@ async def get_bim_elements(
     
     Returns paginated list of elements with their properties.
     """
-    # Mock response for now
+    # Find BIM model for this asset
+    result = await db.execute(
+        select(BIMModel).where(BIMModel.asset_id == str(asset_id))
+    )
+    bim_model = result.scalar_one_or_none()
+    
+    if bim_model:
+        # Build query for elements
+        query = select(BIMElement).where(BIMElement.bim_model_id == bim_model.id)
+        
+        # Apply filters
+        if ifc_type:
+            query = query.where(BIMElement.ifc_type == ifc_type)
+        
+        if floor:
+            # Join with floors to filter by floor name
+            query = query.join(BIMFloor, BIMElement.floor_id == BIMFloor.id, isouter=True)
+            query = query.where(BIMFloor.name == floor)
+        
+        # Get total count
+        count_query = select(func.count()).select_from(query.subquery())
+        total_result = await db.execute(count_query)
+        total = total_result.scalar() or 0
+        
+        # Apply pagination
+        query = query.limit(limit).offset(offset)
+        
+        elements_result = await db.execute(query)
+        elements = []
+        
+        for el in elements_result.scalars().all():
+            # Parse properties JSON
+            properties = {}
+            if el.properties:
+                try:
+                    properties = json.loads(el.properties)
+                except:
+                    pass
+            
+            elements.append({
+                "id": el.ifc_id,
+                "ifc_type": el.ifc_type,
+                "name": el.name,
+                "description": el.description,
+                "properties": properties,
+                "level": None,  # Would need join to get floor name
+            })
+        
+        return {
+            "items": elements,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }
+    
+    # Fallback: Return demo data if no BIM file has been uploaded
     elements = [
         {
             "id": "element-001",
@@ -337,7 +497,66 @@ async def get_bim_spatial_hierarchy(
         - Buildings
           - Floors/Storeys
     """
-    # Mock response
+    # Find BIM model for this asset
+    result = await db.execute(
+        select(BIMModel).where(BIMModel.asset_id == str(asset_id))
+    )
+    bim_model = result.scalar_one_or_none()
+    
+    if bim_model:
+        # Get floors
+        floors_result = await db.execute(
+            select(BIMFloor)
+            .where(BIMFloor.bim_model_id == bim_model.id)
+            .order_by(BIMFloor.sort_order)
+        )
+        floors = [
+            {
+                "id": f.ifc_id or f.id,
+                "name": f.name,
+                "elevation": f.elevation,
+                "height": f.height,
+            }
+            for f in floors_result.scalars().all()
+        ]
+        
+        # Get sites
+        sites_result = await db.execute(
+            select(BIMSite).where(BIMSite.bim_model_id == bim_model.id)
+        )
+        sites = [
+            {
+                "id": s.ifc_id or s.id,
+                "name": s.name,
+                "address": s.address,
+                "latitude": s.latitude,
+                "longitude": s.longitude,
+            }
+            for s in sites_result.scalars().all()
+        ]
+        
+        # Get buildings
+        buildings_result = await db.execute(
+            select(BIMBuilding).where(BIMBuilding.bim_model_id == bim_model.id)
+        )
+        buildings = [
+            {
+                "id": b.ifc_id or b.id,
+                "name": b.name,
+                "storeys": b.storey_count,
+                "gross_floor_area": b.gross_floor_area,
+            }
+            for b in buildings_result.scalars().all()
+        ]
+        
+        return BIMSpatialHierarchyResponse(
+            project=bim_model.project_name,
+            sites=sites if sites else [{"id": "site-001", "name": bim_model.site_name or "Main Site"}],
+            buildings=buildings if buildings else [{"id": "bldg-001", "name": bim_model.building_name or "Main Building", "storeys": bim_model.floor_count}],
+            floors=floors,
+        )
+    
+    # Fallback: Return demo data if no BIM file has been uploaded
     return BIMSpatialHierarchyResponse(
         project="Corporate HQ Project",
         sites=[

@@ -36,26 +36,11 @@ echo ""
 
 # Step 1: Create deployment package
 echo -e "${YELLOW}Step 1: Creating deployment package...${NC}"
-tar --exclude='node_modules' \
-    --exclude='.git' \
-    --exclude='__pycache__' \
-    --exclude='*.pyc' \
-    --exclude='.venv' \
-    --exclude='venv' \
-    --exclude='dev.db' \
-    --exclude='*.db' \
-    --exclude='.env' \
-    --exclude='.env.local' \
-    --exclude='backup_*.tar.gz' \
-    --exclude='*.log' \
-    --exclude='dist' \
-    --exclude='build' \
-    -czf /tmp/pfrp-sync-$(date +%Y%m%d_%H%M%S).tar.gz \
-    -C "$(pwd)" .
-
+# COPYFILE_DISABLE avoids Apple xattr in tarball (reduces "Ignoring unknown extended header" on Linux)
 DEPLOY_TAR="/tmp/pfrp-sync-$(date +%Y%m%d_%H%M%S).tar.gz"
-tar --exclude='node_modules' \
+COPYFILE_DISABLE=1 tar --exclude='node_modules' \
     --exclude='.git' \
+    --exclude='.DS_Store' \
     --exclude='__pycache__' \
     --exclude='*.pyc' \
     --exclude='.venv' \
@@ -105,43 +90,37 @@ if [ ! -f "apps/api/.env" ]; then
     cat > apps/api/.env << 'EOF'
 DATABASE_URL=sqlite:///./prod.db
 USE_SQLITE=true
+ENVIRONMENT=production
 DEBUG=false
-CORS_ORIGINS=["https://risk.saa-alliance.com","http://localhost:5180"]
-NVIDIA_API_KEY=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
+CORS_ORIGINS=["https://risk.saa-alliance.com"]
+
+# Secrets MUST be provided out-of-band (do not commit keys):
+# NVIDIA_API_KEY=...
+# NVIDIA_FOURCASTNET_API_KEY=...
+# NVIDIA_FLUX_API_KEY=...
+# NGC_API_KEY=...
 NVIDIA_LLM_API_URL=https://integrate.api.nvidia.com/v1
-NVIDIA_FOURCASTNET_API_KEY=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
-NVIDIA_FLUX_API_KEY=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
-NGC_API_KEY=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
 NVIDIA_MODE=cloud
-# Optional: External API keys (clients work without them using fallback data)
-NOAA_API_TOKEN=uUrbXwtEvXGZLOMupmiVucEARZieKgeS
-# CDS_API_KEY=your_copernicus_key_here
 EOF
     echo "Environment file created"
+    # Restore .env from backup so NVIDIA_API_KEY and other secrets are preserved
+    LATEST_BACKUP=$(ls -t ~/global-risk-platform-backup-*.tar.gz 2>/dev/null | head -1)
+    if [ -n "$LATEST_BACKUP" ]; then
+      tar -xzf "$LATEST_BACKUP" -O global-risk-platform/apps/api/.env > apps/api/.env.from_backup 2>/dev/null && mv apps/api/.env.from_backup apps/api/.env && echo "Restored .env from backup (secrets preserved)"
+    fi
 else
     echo "Environment file already exists, preserving it"
-    # Add new optional variables if they don't exist
-    if ! grep -q "NOAA_API_TOKEN" apps/api/.env; then
-        echo "" >> apps/api/.env
-        echo "# Optional: External API keys (added $(date +%Y-%m-%d))" >> apps/api/.env
-        echo "NOAA_API_TOKEN=uUrbXwtEvXGZLOMupmiVucEARZieKgeS" >> apps/api/.env
-        echo "# CDS_API_KEY=your_copernicus_key_here" >> apps/api/.env
-        echo "NOAA API token added"
-    else
-        # Update existing NOAA_API_TOKEN if it's commented out or has placeholder
-        sed -i 's/^# NOAA_API_TOKEN=.*/NOAA_API_TOKEN=uUrbXwtEvXGZLOMupmiVucEARZieKgeS/' apps/api/.env
-        sed -i 's/^NOAA_API_TOKEN=.*/NOAA_API_TOKEN=uUrbXwtEvXGZLOMupmiVucEARZieKgeS/' apps/api/.env
-        echo "NOAA API token updated"
-    fi
 fi
 ENDSSH
 
 # Step 5: Install dependencies
 echo -e "${YELLOW}Step 5: Installing dependencies on server...${NC}"
+echo "   (backend: ~1 min, frontend build: 2–4 min — wait for 'Frontend built')"
 ssh $SSH_OPTS $SERVER_USER@$SERVER_HOST << 'ENDSSH'
 cd ~/global-risk-platform
 
 # Backend
+echo "[Step 5a] Backend: venv and pip..."
 cd apps/api
 if [ ! -d ".venv" ]; then
     python3 -m venv .venv 2>/dev/null || python -m venv .venv
@@ -150,21 +129,23 @@ source .venv/bin/activate
 pip install --upgrade pip --quiet
 pip install -e . --quiet
 pip install aiosqlite email-validator scipy networkx --quiet
-echo "Backend dependencies installed"
+echo "[Step 5a] Backend dependencies installed"
 
 # Run database migrations
-echo "Running database migrations..."
+echo "[Step 5b] Database migrations..."
 if alembic upgrade head 2>/dev/null; then
-    echo "Database migrations completed"
+    echo "[Step 5b] Migrations OK"
 else
-    echo "Migration skipped or failed - may need manual review"
+    echo "[Step 5b] Migration skipped or failed (continuing)"
 fi
 
 # Frontend
-cd ../web
+echo "[Step 5c] Frontend: npm install..."
+cd ~/global-risk-platform/apps/web
 npm install --silent
+echo "[Step 5c] Frontend: npm run build (2–4 min)..."
 npm run build
-echo "Frontend built"
+echo "[Step 5c] Frontend built"
 ENDSSH
 
 # Step 6: Restart services
@@ -175,6 +156,7 @@ cd ~/global-risk-platform
 # Kill existing processes
 pkill -f "uvicorn src.main:app" 2>/dev/null || true
 pkill -f "npm run preview" 2>/dev/null || true
+pkill -f "serve -s dist" 2>/dev/null || true
 sleep 2
 
 # Start backend
@@ -184,10 +166,10 @@ export USE_SQLITE=true
 nohup python -m uvicorn src.main:app --host 0.0.0.0 --port 9002 > /tmp/api.log 2>&1 &
 echo "Backend started on port 9002"
 
-# Start frontend (production build)
+# Start frontend (production build with SPA fallback for /command, /dashboard, etc.)
 cd ../web
-nohup npm run preview -- --host 0.0.0.0 --port 5180 > /tmp/web.log 2>&1 &
-echo "Frontend started on port 5180"
+nohup npm run preview:prod > /tmp/web.log 2>&1 &
+echo "Frontend started on port 5180 (serve with SPA fallback)"
 
 # Wait a moment for services to start
 sleep 3
@@ -199,28 +181,40 @@ else
     echo "⚠️  Backend may not have started - check logs"
 fi
 
-if pgrep -f "npm run preview" > /dev/null; then
+if pgrep -f "serve" > /dev/null; then
     echo "✅ Frontend is running"
 else
     echo "⚠️  Frontend may not have started - check logs"
 fi
 
-# Wait for services to be ready
-sleep 5
+# Wait for API to finish startup (DB init, SENTINEL, OVERSEER)
+echo "Waiting for API to be ready (15s)..."
+sleep 15
 
-# Check new analytics endpoints
-echo "Checking analytics API..."
-if curl -s "http://localhost:9002/api/v1/analytics/risk-trends?time_range=1M" | grep -q "time_range"; then
-    echo "✅ Analytics API is working"
-else
-    echo "⚠️  Analytics API check failed - may still be starting"
-fi
-
-# Check health endpoint
-if curl -s http://localhost:9002/api/v1/health | grep -q "healthy"; then
+# Retry health check (API can take 10–30s to start)
+HEALTH_OK=
+for i in 1 2 3 4 5; do
+    if curl -sf http://localhost:9002/api/v1/health | grep -q "healthy"; then
+        HEALTH_OK=1
+        break
+    fi
+    if curl -sf http://localhost:9002/health | grep -q "healthy"; then
+        HEALTH_OK=1
+        break
+    fi
+    [ $i -lt 5 ] && sleep 5
+done
+if [ -n "$HEALTH_OK" ]; then
     echo "✅ Backend health check passed"
 else
-    echo "⚠️  Backend health check failed"
+    echo "⚠️  Backend health check failed (API may still be starting; check: tail -f /tmp/api.log)"
+fi
+
+# Check analytics (optional; depends on DB)
+if curl -sf "http://localhost:9002/api/v1/analytics/risk-trends?time_range=1M" | grep -q "time_range"; then
+    echo "✅ Analytics API is working"
+else
+    echo "⚠️  Analytics API check failed - may still be starting or DB not seeded"
 fi
 ENDSSH
 

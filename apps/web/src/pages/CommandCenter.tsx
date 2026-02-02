@@ -14,22 +14,44 @@
  * Reference: IDENTITY.md
  */
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { CubeTransparentIcon, ChartBarIcon, Cog6ToothIcon, HomeIcon, Square3Stack3DIcon, BuildingOffice2Icon } from '@heroicons/react/24/outline'
+import { CubeTransparentIcon, ChartBarIcon, Cog6ToothIcon, HomeIcon, Square3Stack3DIcon, BuildingOffice2Icon, CpuChipIcon, InformationCircleIcon, BriefcaseIcon, BanknotesIcon, ShieldExclamationIcon, SparklesIcon, LinkIcon, ServerStackIcon, DocumentTextIcon, BeakerIcon, ClipboardDocumentListIcon } from '@heroicons/react/24/outline'
 import CesiumGlobe, { RiskZone, ZoneAsset } from '../components/CesiumGlobe'
 import DigitalTwinPanel from '../components/DigitalTwinPanel'
-import { useSimulatedWebSocket, RiskUpdate } from '../lib/useWebSocket'
-import { ActionPlanModal, ZoneDetailPanel } from '../components/stress'
-import StressTestSelector from '../components/stress/StressTestSelector'
+import { useWebSocket, RiskUpdate } from '../lib/useWebSocket'
+import { ActionPlanModal, UnifiedStressTestPanel } from '../components/stress'
+import { UNIVERSAL_ACTION_PLAN_TEMPLATE } from '../lib/universalActionPlanTemplate'
+import UnifiedStressTestSelector from '../components/stress/UnifiedStressTestSelector'
 import HistoricalEventPanel from '../components/HistoricalEventPanel'
-import { RiskFlowMini } from '../components/RiskFlowDiagram'
+import SystemOverseerWidget from '../components/dashboard/SystemOverseerWidget'
+import AgentMonitoringWidget from '../components/dashboard/AgentMonitoringWidget'
 import { exportStressTestPdf } from '../lib/exportService'
+import { mapEventIdToCascadeScenarioId } from '../lib/stressTestToCascade'
+import { CURRENT_EVENTS as currentEvents, FORECAST_SCENARIOS as forecastScenarios } from '../lib/riskEventCatalog'
+import { STRESS_TYPES_WITH_ZONE_ENTITIES } from '../lib/stressTestConstants'
 // Platform state management
-import { usePlatformStore, usePortfolio, useSelectedZone, useShowDigitalTwinPanel, useActiveScenario, useSelectedStressTestId, PortfolioState as StorePortfolioState, ActiveScenarioState } from '../store/platformStore'
+import { usePlatformStore, usePortfolio, useSelectedZone, useShowDigitalTwinPanel, useActiveScenario, useSelectedStressTestId, useCommandMode, useToggleCommandMode, useRecentEvents, PortfolioState as StorePortfolioState, ActiveScenarioState } from '../store/platformStore'
+import { EventTypes } from '../types/events'
+import type { PlatformEvent } from '../types/events'
+import { CommandModePanel } from '../components/command'
+import AIAssistant from '../components/AIAssistant'
 import { usePlatformWebSocket } from '../hooks/usePlatformWebSocket'
+import { assetsApi } from '../lib/api'
 
 const API_BASE = '/api/v1'
+
+// ============================================
+// UI ATOMS
+// ============================================
+
+function Keycap({ children }: { children: React.ReactNode }) {
+  return (
+    <kbd className="px-2 py-1 rounded-md bg-white/5 border border-white/10 text-[10px] font-mono text-white/70">
+      {children}
+    </kbd>
+  )
+}
 
 // ============================================
 // TYPES
@@ -94,6 +116,45 @@ function formatBillions(value: number): string {
   return `${value.toFixed(1)}B`
 }
 
+// Determine risk posture level for institutional display
+function getRiskPosture(weightedRisk: number): { level: string; color: string; arrow: string } {
+  if (weightedRisk > 0.75) return { level: 'CRITICAL', color: 'text-red-400', arrow: '↑↑' }
+  if (weightedRisk > 0.6) return { level: 'ELEVATED', color: 'text-orange-400', arrow: '↑' }
+  if (weightedRisk > 0.4) return { level: 'MODERATE', color: 'text-amber-400', arrow: '→' }
+  return { level: 'STABLE', color: 'text-emerald-400', arrow: '↓' }
+}
+
+function formatRecentTime(timestamp: string): string {
+  const date = new Date(timestamp)
+  const now = new Date()
+  const diff = Math.floor((now.getTime() - date.getTime()) / 1000)
+  if (diff < 60) return 'now'
+  if (diff < 3600) return `${Math.floor(diff / 60)}m`
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h`
+  return `${Math.floor(diff / 86400)}d`
+}
+
+function createPlatformEvent(
+  eventType: string,
+  entityType: string,
+  entityId: string,
+  data: Record<string, unknown> = {},
+): PlatformEvent {
+  return {
+    event_id: `evt-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    event_type: eventType,
+    version: '1.0',
+    timestamp: new Date().toISOString(),
+    triggers: [],
+    actor_type: 'user',
+    entity_type: entityType,
+    entity_id: entityId,
+    action: eventType.split('.').pop() || 'updated',
+    data: { name: entityId, ...data },
+    intent: false,
+  }
+}
+
 // Risk factor → scenario IDs from registry (Stress Scenarios)
 const FACTOR_TO_SCENARIO_IDS: Record<string, string[]> = {
   climate: ['NGFS_SSP5_2050', 'NGFS_SSP2_2040', 'Flood_Extreme_100y', 'Heat_Stress_Energy', 'Sea_Level_Coastal', 'Wildfire_Insurance', 'Climate_Disclosure_Enforcement'],
@@ -111,7 +172,7 @@ const FACTOR_TO_SCENARIO_IDS: Record<string, string[]> = {
 // ============================================
 
 // View mode for risk indicators
-type RiskViewMode = 'menu' | 'historical' | 'current' | 'forecast'
+type RiskViewMode = 'menu' | 'zones' | 'historical' | 'current' | 'forecast'
 
 interface RiskLevelRowProps {
   level: 'critical' | 'high' | 'medium' | 'low'
@@ -121,13 +182,14 @@ interface RiskLevelRowProps {
   isExpanded: boolean
   onToggle: () => void
   onZoneClick: (id: string) => void
+  onZoneLinksClick?: (id: string) => void
   onHistoricalSelect?: (eventId: string) => void
   onCurrentSelect?: (zoneId: string, category: string) => void
   onForecastSelect?: (zoneId: string, horizon: number) => void
   onOpenDigitalTwin?: (cityId: string, cityName: string, eventId?: string, eventName?: string, eventCategory?: string, timeHorizon?: string) => void
 }
 
-function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZoneClick: _onZoneClick, onHistoricalSelect, onCurrentSelect: _onCurrentSelect, onForecastSelect: _onForecastSelect, onOpenDigitalTwin }: RiskLevelRowProps) {
+function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZoneClick: _onZoneClick, onZoneLinksClick, onHistoricalSelect, onCurrentSelect: _onCurrentSelect, onForecastSelect: _onForecastSelect, onOpenDigitalTwin }: RiskLevelRowProps) {
   // Note: _onZoneClick, _onCurrentSelect, _onForecastSelect are available but not directly used in this component
   const [viewMode, setViewMode] = useState<RiskViewMode>('menu')
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
@@ -1804,218 +1866,7 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
     ]},
   }
   
-  // Current events (0-1 year) with specific ongoing situations
-  // Includes all scenarios from Stress Lab integrated here
-  const currentEvents = [
-    { id: 'climate', name: 'Climate Events', events: [
-      // Stress Lab scenarios
-      { id: 'flood-rhine', name: 'Rhine Valley Flood', risk: 0.85 },
-      { id: 'heatwave-eu', name: 'European Heatwave', risk: 0.75 },
-      // Registry (NGFS): link with Stress Test (S)
-      { id: 'Flood_Extreme_100y', name: 'Flood Extreme (100y→10y)', risk: 0.85 },
-      { id: 'Heat_Stress_Energy', name: 'Heat Stress & Energy Load', risk: 0.65 },
-      { id: 'Sea_Level_Coastal', name: 'Sea Level Rise – Coastal Assets', risk: 0.70 },
-      { id: 'Wildfire_Insurance', name: 'Wildfire + Insurance Withdrawal', risk: 0.72 },
-      // Current events
-      { id: 'drought2024', name: 'European Drought 2024', risk: 0.72 },
-      { id: 'flood_asia', name: 'Southeast Asia Flooding', risk: 0.68 },
-      { id: 'wildfire_canada', name: 'Canadian Wildfires', risk: 0.65 },
-      { id: 'wildfire_aus', name: 'Australian Bushfires', risk: 0.62 },
-      { id: 'elnino', name: 'El Niño Impact', risk: 0.58 },
-      { id: 'hurricane_atlantic', name: 'Atlantic Hurricane Season', risk: 0.55 },
-      { id: 'arctic_vortex', name: 'Polar Vortex Disruption', risk: 0.48 },
-      { id: 'monsoon_fail', name: 'Indian Monsoon Failure', risk: 0.52 },
-    ]},
-    { id: 'geopolitical', name: 'Geopolitical', events: [
-      // Stress Lab scenarios
-      { id: 'conflict-east', name: 'Eastern Europe Escalation', risk: 0.95 },
-      { id: 'blockade', name: 'Trade Route Blockade', risk: 0.70 },
-      { id: 'sanctions', name: 'Major Sanctions Package', risk: 0.65 },
-      { id: 'regime-change', name: 'Regime Transition Risk', risk: 0.75 },
-      // Registry (Extended): link with Stress Test (S)
-      { id: 'Sanctions_Escalation', name: 'Sanctions Escalation', risk: 0.85 },
-      { id: 'Trade_War_Supply_Chain', name: 'Trade War / Supply Chain Disruption', risk: 0.78 },
-      { id: 'Energy_Shock', name: 'Energy Shock (gas/oil cutoff)', risk: 0.82 },
-      { id: 'Regional_Conflict_Spillover', name: 'Regional Conflict Spillover', risk: 0.88 },
-      // Current events
-      { id: 'ukraine_ongoing', name: 'Ukraine Conflict (Ongoing)', risk: 0.88 },
-      { id: 'israel_gaza', name: 'Israel-Gaza Conflict', risk: 0.85 },
-      { id: 'redsea_shipping', name: 'Red Sea Shipping Crisis', risk: 0.75 },
-      { id: 'taiwan_strait', name: 'Taiwan Strait Tensions', risk: 0.72 },
-      { id: 'korea_tensions', name: 'Korean Peninsula', risk: 0.55 },
-      { id: 'iran_israel', name: 'Iran-Israel Tensions', risk: 0.78 },
-      { id: 'nato_expansion', name: 'NATO Expansion Fallout', risk: 0.52 },
-      { id: 'south_china_sea', name: 'South China Sea Dispute', risk: 0.68 },
-      { id: 'india_pakistan', name: 'India-Pakistan Tensions', risk: 0.58 },
-      { id: 'venezuela_guyana', name: 'Venezuela-Guyana Dispute', risk: 0.45 },
-    ]},
-    { id: 'financial', name: 'Financial Stress', events: [
-      // Stress Lab scenarios
-      { id: 'liquidity-eu', name: 'Eurozone Liquidity Crisis', risk: 0.90 },
-      { id: 'credit-crunch', name: 'Credit Crunch', risk: 0.75 },
-      { id: 'basel-full', name: 'Basel IV Implementation', risk: 0.50 },
-      // Registry (EBA, Fed, IMF): link with Stress Test (S)
-      { id: 'EBA_Adverse', name: 'EBA Adverse Scenario', risk: 0.85 },
-      { id: 'FED_Severely_Adverse_CRE', name: 'Fed Severely Adverse (CRE shock)', risk: 0.90 },
-      { id: 'Liquidity_Freeze', name: 'Liquidity Freeze / Funding Stress', risk: 0.88 },
-      { id: 'Asset_Price_Collapse', name: 'Asset Price Collapse (−30–40%)', risk: 0.82 },
-      { id: 'IMF_Systemic', name: 'IMF-style Systemic Crisis', risk: 0.92 },
-      { id: 'Sovereign_Debt_Crisis', name: 'Sovereign Debt Crisis', risk: 0.88 },
-      { id: 'Currency_Devaluation', name: 'Currency Devaluation', risk: 0.75 },
-      { id: 'Government_Default', name: 'Government Default / Restructuring', risk: 0.90 },
-      // Current events
-      { id: 'rate_hikes', name: 'Central Bank Rate Hikes', risk: 0.68 },
-      { id: 'commercial_re', name: 'Commercial Real Estate Crisis', risk: 0.72 },
-      { id: 'china_property', name: 'China Property Sector', risk: 0.78 },
-      { id: 'em_debt', name: 'Emerging Market Debt', risk: 0.62 },
-      { id: 'bank_stress', name: 'Regional Bank Stress', risk: 0.58 },
-      { id: 'dollar_dominance', name: 'Dollar Dominance Challenge', risk: 0.48 },
-      { id: 'crypto_contagion', name: 'Crypto Market Contagion', risk: 0.42 },
-      { id: 'pension_shortfall', name: 'Pension Fund Shortfall', risk: 0.55 },
-      { id: 'insurance_crisis', name: 'Insurance Sector Stress', risk: 0.52 },
-      { id: 'bond_volatility', name: 'Government Bond Volatility', risk: 0.65 },
-    ]},
-    { id: 'pandemic', name: 'Pandemic & Health', events: [
-      // Stress Lab scenarios
-      { id: 'pandemic-x', name: 'Pandemic Variant X', risk: 0.80 },
-      // Registry (Extended): link with Stress Test (S)
-      { id: 'COVID19_Replay', name: 'COVID-19 Replay (calibrated)', risk: 0.80 },
-      { id: 'Pandemic_X', name: 'Pandemic X (high mortality, logistics)', risk: 0.85 },
-      // Current events
-      { id: 'covid_variants', name: 'COVID Variants Monitoring', risk: 0.35 },
-      { id: 'avian_flu', name: 'H5N1 Avian Flu Risk', risk: 0.45 },
-      { id: 'disease_x', name: 'Disease X Preparedness', risk: 0.28 },
-      { id: 'mpox_spread', name: 'Mpox Outbreak', risk: 0.38 },
-      { id: 'antibiotic_resist', name: 'Antibiotic Resistance', risk: 0.55 },
-      { id: 'zoonotic_spillover', name: 'Zoonotic Spillover Risk', risk: 0.42 },
-      { id: 'healthcare_collapse', name: 'Healthcare System Stress', risk: 0.48 },
-    ]},
-    { id: 'civil_unrest', name: 'Civil Unrest', events: [
-      // Stress Lab scenarios
-      { id: 'mass-protest', name: 'Mass Civil Unrest', risk: 0.60 },
-      { id: 'general-strike', name: 'General Strike', risk: 0.55 },
-      // Registry (Extended): link with Stress Test (S)
-      { id: 'Urban_Riots_Asset_Damage', name: 'Urban Riots → Asset Damage', risk: 0.72 },
-      { id: 'Infrastructure_Sabotage', name: 'Infrastructure Sabotage', risk: 0.80 },
-      { id: 'Prolonged_Social_Instability', name: 'Prolonged Social Instability', risk: 0.68 },
-      // Additional scenarios
-      { id: 'farmer_protests', name: 'Farmer Protests (EU)', risk: 0.52 },
-      { id: 'cost_living', name: 'Cost of Living Protests', risk: 0.58 },
-      { id: 'political_polarization', name: 'Political Polarization', risk: 0.62 },
-      { id: 'election_unrest', name: 'Election-Related Unrest', risk: 0.48 },
-      { id: 'labor_disputes', name: 'Major Labor Disputes', risk: 0.45 },
-    ]},
-    { id: 'supply', name: 'Supply Chain', events: [
-      { id: 'chip_shortage', name: 'Semiconductor Shortage', risk: 0.55 },
-      { id: 'rare_earth', name: 'Rare Earth Dependencies', risk: 0.62 },
-      { id: 'energy_transition', name: 'Energy Transition Stress', risk: 0.48 },
-      { id: 'suez_blockage', name: 'Suez Canal Disruption', risk: 0.52 },
-      { id: 'port_congestion', name: 'Major Port Congestion', risk: 0.45 },
-      { id: 'lithium_shortage', name: 'Lithium Supply Constraints', risk: 0.58 },
-      { id: 'food_supply', name: 'Global Food Supply Disruption', risk: 0.65 },
-      { id: 'pharmaceutical', name: 'Pharmaceutical Supply Risk', risk: 0.48 },
-    ]},
-    { id: 'regulatory', name: 'Regulatory & Legal', events: [
-      // Stress Lab scenarios
-      { id: 'basel-iv', name: 'Basel IV Full Implementation', risk: 0.50 },
-      // Registry (Extended): link with Stress Test (S)
-      { id: 'Sudden_Capital_Increase', name: 'Sudden Capital Requirement Increase', risk: 0.70 },
-      { id: 'Climate_Disclosure_Enforcement', name: 'Climate Disclosure Enforcement Shock', risk: 0.60 },
-      { id: 'Resolution_Regime_Activation', name: 'Resolution Regime Activation', risk: 0.85 },
-      // Additional scenarios
-      { id: 'eu_ai_act', name: 'EU AI Act Compliance', risk: 0.45 },
-      { id: 'carbon_border', name: 'Carbon Border Tax', risk: 0.52 },
-      { id: 'antitrust', name: 'Big Tech Antitrust Actions', risk: 0.48 },
-      { id: 'data_sovereignty', name: 'Data Sovereignty Rules', risk: 0.42 },
-      { id: 'esg_mandates', name: 'ESG Disclosure Mandates', risk: 0.55 },
-      { id: 'tax_reform', name: 'Global Tax Reform', risk: 0.40 },
-    ]},
-    { id: 'technology', name: 'Technology Risks', events: [
-      { id: 'ai_disruption_now', name: 'AI Job Displacement', risk: 0.58 },
-      { id: 'cyber_infrastructure', name: 'Critical Infrastructure Cyberattack', risk: 0.72 },
-      { id: 'ransomware_wave', name: 'Ransomware Wave', risk: 0.65 },
-      { id: 'cloud_outage', name: 'Major Cloud Outage', risk: 0.48 },
-      { id: 'quantum_threat', name: 'Quantum Crypto Threat', risk: 0.35 },
-      { id: 'deepfake_fraud', name: 'Deepfake Fraud Rise', risk: 0.52 },
-    ]},
-    { id: 'energy', name: 'Energy Crisis', events: [
-      { id: 'oil_shock', name: 'Oil Price Shock', risk: 0.68 },
-      { id: 'gas_shortage_eu', name: 'EU Gas Shortage', risk: 0.62 },
-      { id: 'power_grid', name: 'Power Grid Instability', risk: 0.55 },
-      { id: 'opec_action', name: 'OPEC Supply Cuts', risk: 0.58 },
-      { id: 'nuclear_phase_out', name: 'Nuclear Phase-Out Impact', risk: 0.45 },
-      { id: 'renewable_intermittency', name: 'Renewable Intermittency', risk: 0.42 },
-    ]},
-  ]
-  
-  // Forecast scenarios (5-30 years) with specific projected events
-  // Includes Sea Level Rise from Stress Lab
-  const forecastScenarios = [
-    { horizon: 5, name: '5 Year Outlook', scenarios: [
-      { id: 'ai_disruption', name: 'AI Labor Disruption', risk: 0.65, type: 'technology' },
-      { id: 'climate_migration', name: 'Climate Migration Wave', risk: 0.58, type: 'climate' },
-      { id: 'debt_crisis', name: 'Sovereign Debt Crisis', risk: 0.52, type: 'financial' },
-      { id: 'cyber_attack', name: 'Major Cyber Attack', risk: 0.48, type: 'technology' },
-      { id: 'credit_crunch_5yr', name: 'Credit Crunch Scenario', risk: 0.55, type: 'financial' },
-      { id: 'supply_chain_breakdown', name: 'Supply Chain Breakdown', risk: 0.62, type: 'supply' },
-      { id: 'energy_shock', name: 'Energy Price Shock', risk: 0.58, type: 'energy' },
-      { id: 'banking_crisis', name: 'Systemic Banking Crisis', risk: 0.68, type: 'financial' },
-      { id: 'regional_conflict', name: 'Regional Conflict Escalation', risk: 0.72, type: 'geopolitical' },
-      { id: 'pandemic_outbreak', name: 'New Pandemic Outbreak', risk: 0.45, type: 'pandemic' },
-    ]},
-    { horizon: 10, name: '10 Year Outlook', scenarios: [
-      // Stress Lab scenario
-      { id: 'sea-level-10', name: 'Sea Level Rise +0.5m', risk: 0.60, type: 'climate' },
-      { id: 'water_scarcity', name: 'Water Scarcity Crisis', risk: 0.72, type: 'climate' },
-      { id: 'biodiversity', name: 'Biodiversity Collapse', risk: 0.62, type: 'climate' },
-      { id: 'deglobalization', name: 'Deglobalization Peak', risk: 0.55, type: 'geopolitical' },
-      { id: 'pandemic_novel', name: 'Novel Pandemic', risk: 0.45, type: 'pandemic' },
-      { id: 'energy_crisis', name: 'Energy Transition Crisis', risk: 0.68, type: 'energy' },
-      { id: 'ai_governance', name: 'AI Governance Crisis', risk: 0.58, type: 'technology' },
-      { id: 'infrastructure_decay', name: 'Infrastructure Decay', risk: 0.52, type: 'infrastructure' },
-      { id: 'financial_decoupling', name: 'Financial Decoupling', risk: 0.65, type: 'financial' },
-      { id: 'mass_migration', name: 'Mass Migration Event', risk: 0.70, type: 'social' },
-      { id: 'antibiotic_failure', name: 'Antibiotic Resistance Crisis', risk: 0.55, type: 'pandemic' },
-    ]},
-    { horizon: 15, name: '15 Year Outlook', scenarios: [
-      // Registry (NGFS): link with Stress Test (S)
-      { id: 'NGFS_SSP2_2040', name: 'NGFS SSP2-4.5 (Baseline)', risk: 0.55, type: 'climate' },
-      { id: 'sea_level', name: 'Sea Level Rise +1m Impact', risk: 0.78, type: 'climate' },
-      { id: 'food_security', name: 'Global Food Security Crisis', risk: 0.72, type: 'climate' },
-      { id: 'agi_emergence', name: 'AGI Economic Shift', risk: 0.58, type: 'technology' },
-      { id: 'nuclear_proliferation', name: 'Nuclear Proliferation', risk: 0.42, type: 'geopolitical' },
-      { id: 'permafrost_methane', name: 'Permafrost Methane Release', risk: 0.68, type: 'climate' },
-      { id: 'coastal_flooding', name: 'Coastal City Flooding', risk: 0.75, type: 'climate' },
-      { id: 'currency_collapse', name: 'Major Currency Collapse', risk: 0.52, type: 'financial' },
-      { id: 'autonomous_warfare', name: 'Autonomous Warfare', risk: 0.48, type: 'geopolitical' },
-      { id: 'genetic_engineering', name: 'Genetic Engineering Risk', risk: 0.45, type: 'technology' },
-    ]},
-    { horizon: 20, name: '20 Year Outlook', scenarios: [
-      // Registry (NGFS): link with Stress Test (S)
-      { id: 'NGFS_SSP5_2050', name: 'NGFS SSP5-8.5 (2050)', risk: 0.88, type: 'climate' },
-      { id: 'arctic_collapse', name: 'Arctic Ice Collapse', risk: 0.82, type: 'climate' },
-      { id: 'demographic_crisis', name: 'Demographic Crisis (Aging)', risk: 0.75, type: 'social' },
-      { id: 'resource_wars', name: 'Resource Conflict', risk: 0.65, type: 'geopolitical' },
-      { id: 'automation_unemployment', name: 'Mass Automation Unemployment', risk: 0.68, type: 'technology' },
-      { id: 'amazon_dieback', name: 'Amazon Rainforest Dieback', risk: 0.72, type: 'climate' },
-      { id: 'ocean_acidification', name: 'Ocean Acidification Crisis', risk: 0.70, type: 'climate' },
-      { id: 'superintelligence', name: 'Superintelligence Emergence', risk: 0.55, type: 'technology' },
-      { id: 'global_water_wars', name: 'Global Water Wars', risk: 0.62, type: 'geopolitical' },
-      { id: 'mass_urbanization', name: 'Mass Urbanization Stress', risk: 0.58, type: 'social' },
-    ]},
-    { horizon: 30, name: '30 Year Outlook', scenarios: [
-      { id: 'climate_tipping', name: 'Climate Tipping Points', risk: 0.88, type: 'climate' },
-      { id: 'mass_extinction', name: 'Mass Extinction Event', risk: 0.72, type: 'climate' },
-      { id: 'global_governance', name: 'Global Governance Shift', risk: 0.55, type: 'geopolitical' },
-      { id: 'space_economy', name: 'Space Economy Disruption', risk: 0.38, type: 'technology' },
-      { id: 'synthetic_bio', name: 'Synthetic Biology Risk', risk: 0.52, type: 'pandemic' },
-      { id: 'fusion_revolution', name: 'Fusion Energy Revolution', risk: 0.35, type: 'energy' },
-      { id: 'post_scarcity', name: 'Post-Scarcity Transition', risk: 0.42, type: 'economic' },
-      { id: 'human_enhancement', name: 'Human Enhancement Divide', risk: 0.48, type: 'social' },
-      { id: 'geoengineering', name: 'Geoengineering Conflict', risk: 0.58, type: 'geopolitical' },
-      { id: 'biosphere_collapse', name: 'Biosphere Collapse', risk: 0.78, type: 'climate' },
-    ]},
-  ]
+  // Current / Forecast scenario catalogs live in ../lib/riskEventCatalog.ts
   
   // Event categories = currentEvents (used directly in JSX)
   
@@ -2103,6 +1954,16 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
               {/* ===== MAIN MENU (3 options) ===== */}
               {viewMode === 'menu' && (
                 <div className="space-y-1 py-1">
+                  {/* Option 0: Zones */}
+                  <button
+                    onClick={() => setViewMode('zones')}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-amber-500/10 transition-all text-left group"
+                  >
+                    <LinkIcon className="w-3.5 h-3.5 text-white/50 group-hover:text-white/70" />
+                    <span className="text-white/70 text-xs group-hover:text-white flex-1">Zones</span>
+                    <span className="text-white/30 text-[10px]">{zones.length}</span>
+                  </button>
+
                   {/* Option 1: Historical */}
                   <button
                     onClick={() => setViewMode('historical')}
@@ -2138,6 +1999,54 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                     <span className="text-white/70 text-xs group-hover:text-white flex-1">Forecast</span>
                     <span className="text-white/30 text-[10px]">5-30yr</span>
                   </button>
+                </div>
+              )}
+
+              {/* ===== ZONES SUBMENU ===== */}
+              {viewMode === 'zones' && (
+                <div className="space-y-1 py-1">
+                  <button
+                    onClick={() => setViewMode('menu')}
+                    className="w-full flex items-center gap-1 px-2 py-1 text-white/40 text-[10px] hover:text-white/60"
+                  >
+                    ← Back
+                  </button>
+                  <div className="text-white/30 text-[10px] px-2 py-1 uppercase tracking-wider">
+                    Zones ({label})
+                  </div>
+                  <div className="max-h-[300px] overflow-y-auto custom-scrollbar pr-1 space-y-1">
+                    {zones
+                      .slice()
+                      .sort((a, b) => b.risk - a.risk)
+                      .map((z) => (
+                        <div
+                          key={z.id}
+                          className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-amber-500/10 transition-all group"
+                        >
+                          <button
+                            onClick={() => _onZoneClick(z.id)}
+                            className="flex-1 min-w-0 text-left"
+                            title="Focus zone"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-white/70 text-xs group-hover:text-white truncate">
+                                {z.name}
+                              </span>
+                              <span className="text-white/30 text-[10px] flex-shrink-0">
+                                {(z.risk * 100).toFixed(0)}%
+                              </span>
+                            </div>
+                          </button>
+                          <button
+                            onClick={() => (onZoneLinksClick ? onZoneLinksClick(z.id) : _onZoneClick(z.id))}
+                            className="p-1.5 rounded border border-white/10 bg-black/20 text-white/55 hover:text-white hover:bg-white/10 transition-colors flex-shrink-0"
+                            title="Show dependency links for this zone"
+                          >
+                            <LinkIcon className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                  </div>
                 </div>
               )}
               
@@ -2660,6 +2569,90 @@ function EntryAnimation({ onComplete }: { onComplete: () => void }) {
   )
 }
 
+// Map climate zone display names (from globe) to cityId for Digital Twin
+const CLIMATE_CITY_DISPLAY_TO_ID: Record<string, string> = {
+  // Americas
+  'New York': 'newyork',
+  'New Orleans': 'neworleans',
+  'Los Angeles': 'losangeles',
+  'San Francisco': 'sanfrancisco',
+  'Washington DC': 'washington',
+  'Washington': 'washington',
+  'Miami': 'miami',
+  'Houston': 'houston',
+  'Phoenix': 'phoenix',
+  'Honolulu': 'honolulu',
+  'Mexico City': 'mexicocity',
+  'São Paulo': 'saopaulo',
+  'Rio de Janeiro': 'riodejaneiro',
+  'Buenos Aires': 'buenosaires',
+  'Lima': 'lima',
+  'La Paz': 'lapaz',
+  'Ottawa': 'ottawa',
+  'Toronto': 'toronto',
+  'Vancouver': 'vancouver',
+  'Montreal': 'montreal',
+  // Europe
+  'London': 'london',
+  'Paris': 'paris',
+  'Berlin': 'berlin',
+  'Frankfurt': 'frankfurt',
+  'Munich': 'munich',
+  'Amsterdam': 'amsterdam',
+  'Rotterdam': 'rotterdam',
+  'Brussels': 'brussels',
+  'Cologne': 'cologne',
+  'Rome': 'rome',
+  'Milan': 'milan',
+  'Madrid': 'madrid',
+  'Barcelona': 'barcelona',
+  'Moscow': 'moscow',
+  'Warsaw': 'warsaw',
+  'Vienna': 'vienna',
+  'Copenhagen': 'copenhagen',
+  'Zurich': 'zurich',
+  'Geneva': 'geneva',
+  // Asia
+  'Tokyo': 'tokyo',
+  'Hong Kong': 'hongkong',
+  'Shanghai': 'shanghai',
+  'Beijing': 'beijing',
+  'Seoul': 'seoul',
+  'Taipei': 'taipei',
+  'Singapore': 'singapore',
+  'Bangkok': 'bangkok',
+  'Jakarta': 'jakarta',
+  'Manila': 'manila',
+  'Ho Chi Minh': 'hochiminh',
+  'Mumbai': 'mumbai',
+  'Delhi': 'delhi',
+  'Karachi': 'karachi',
+  'Dhaka': 'dhaka',
+  'Dubai': 'dubai',
+  'Tehran': 'tehran',
+  'Baghdad': 'baghdad',
+  'Kabul': 'kabul',
+  'Sanaa': 'sanaa',
+  'Jerusalem': 'jerusalem',
+  'Tel Aviv': 'telaviv',
+  'Istanbul': 'istanbul',
+  'Guangzhou': 'guangzhou',
+  // Africa
+  'Cairo': 'cairo',
+  'Lagos': 'lagos',
+  'Johannesburg': 'johannesburg',
+  'Cape Town': 'capetown',
+  'Nairobi': 'nairobi',
+  'Khartoum': 'khartoum',
+  'Lusaka': 'lusaka',
+  // Oceania
+  'Sydney': 'sydney',
+  'Melbourne': 'melbourne',
+  'Brisbane': 'brisbane',
+  'Canberra': 'canberra',
+  'Auckland': 'auckland',
+}
+
 // ============================================
 // CITY COORDINATES DATABASE FOR DIGITAL TWIN
 // ============================================
@@ -2750,11 +2743,264 @@ const CITY_COORDINATES: Record<string, { lat: number; lng: number; exposure?: nu
   kharkiv: { lat: 49.9935, lng: 36.2304, exposure: 8.5, risk: 0.95 },
   odesa: { lat: 46.4825, lng: 30.7233, exposure: 10.5, risk: 0.88 },
   gaza: { lat: 31.5017, lng: 34.4668, exposure: 2.0, risk: 0.99 },
+  riyadh: { lat: 24.7136, lng: 46.6753, exposure: 28.5, risk: 0.55 },
+  beirut: { lat: 33.8938, lng: 35.5018, exposure: 12.5, risk: 0.75 },
+  kolkata: { lat: 22.5726, lng: 88.3639, exposure: 18.5, risk: 0.68 },
+  buenosaires: { lat: -34.6037, lng: -58.3816, exposure: 28.5, risk: 0.82 },
+  // Additional European cities
+  prague: { lat: 50.0755, lng: 14.4378, exposure: 22.5, risk: 0.52 },
+  budapest: { lat: 47.4979, lng: 19.0402, exposure: 18.5, risk: 0.55 },
+  krakow: { lat: 50.0647, lng: 19.9450, exposure: 12.5, risk: 0.48 },
+  bucharest: { lat: 44.4268, lng: 26.1025, exposure: 15.8, risk: 0.62 },
+  sofia: { lat: 42.6977, lng: 23.3219, exposure: 12.5, risk: 0.58 },
+  tallinn: { lat: 59.4370, lng: 24.7536, exposure: 15.8, risk: 0.45 },
+  riga: { lat: 56.9496, lng: 24.1052, exposure: 12.5, risk: 0.48 },
+  vilnius: { lat: 54.6872, lng: 25.2797, exposure: 10.5, risk: 0.52 },
+  luxembourg: { lat: 49.6116, lng: 6.1319, exposure: 38.5, risk: 0.42 },
+  edinburgh: { lat: 55.9533, lng: -3.1883, exposure: 18.5, risk: 0.48 },
+  glasgow: { lat: 55.8642, lng: -4.2518, exposure: 15.8, risk: 0.52 },
+  manchester: { lat: 53.4808, lng: -2.2426, exposure: 22.5, risk: 0.55 },
+  birmingham: { lat: 52.4862, lng: -1.8904, exposure: 18.5, risk: 0.52 },
+  naples: { lat: 40.8518, lng: 14.2681, exposure: 15.8, risk: 0.68 },
+  turin: { lat: 45.0703, lng: 7.6869, exposure: 18.5, risk: 0.55 },
+  valencia: { lat: 39.4699, lng: -0.3763, exposure: 15.8, risk: 0.58 },
+  seville: { lat: 37.3891, lng: -5.9845, exposure: 12.5, risk: 0.62 },
+  porto: { lat: 41.1579, lng: -8.6291, exposure: 12.5, risk: 0.52 },
+  // Additional Asian cities
+  bangalore: { lat: 12.9716, lng: 77.5946, exposure: 28.5, risk: 0.65 },
+  hyderabad: { lat: 17.3850, lng: 78.4867, exposure: 22.5, risk: 0.68 },
+  chennai: { lat: 13.0827, lng: 80.2707, exposure: 22.5, risk: 0.72 },
+  pune: { lat: 18.5204, lng: 73.8567, exposure: 18.5, risk: 0.62 },
+  ahmedabad: { lat: 23.0225, lng: 72.5714, exposure: 15.8, risk: 0.68 },
+  guangzhou: { lat: 23.1291, lng: 113.2644, exposure: 42.5, risk: 0.78 },
+  shenzhen: { lat: 22.5431, lng: 114.0579, exposure: 48.5, risk: 0.75 },
+  chengdu: { lat: 30.5728, lng: 104.0668, exposure: 28.5, risk: 0.72 },
+  wuhan: { lat: 30.5928, lng: 114.3055, exposure: 32.5, risk: 0.75 },
+  tianjin: { lat: 39.3434, lng: 117.3616, exposure: 35.2, risk: 0.72 },
+  osaka: { lat: 34.6937, lng: 135.5023, exposure: 38.5, risk: 0.85 },
+  nagoya: { lat: 35.1815, lng: 136.9066, exposure: 28.5, risk: 0.78 },
+  fukuoka: { lat: 33.5904, lng: 130.4017, exposure: 22.5, risk: 0.72 },
+  busan: { lat: 35.1796, lng: 129.0756, exposure: 25.8, risk: 0.68 },
+  kualalumpur: { lat: 3.1390, lng: 101.6869, exposure: 28.5, risk: 0.62 },
+  // Middle East expansion
+  doha: { lat: 25.2854, lng: 51.5310, exposure: 32.5, risk: 0.58 },
+  abudhabi: { lat: 24.4539, lng: 54.3773, exposure: 28.5, risk: 0.62 },
+  kuwait: { lat: 29.3759, lng: 47.9774, exposure: 22.5, risk: 0.68 },
+  amman: { lat: 31.9454, lng: 35.9284, exposure: 12.5, risk: 0.72 },
+  baku: { lat: 40.4093, lng: 49.8671, exposure: 18.5, risk: 0.75 },
+  tbilisi: { lat: 41.7151, lng: 44.8271, exposure: 10.5, risk: 0.68 },
+  yerevan: { lat: 40.1792, lng: 44.4991, exposure: 8.5, risk: 0.72 },
+  muscat: { lat: 23.5880, lng: 58.3829, exposure: 15.8, risk: 0.58 },
+  manama: { lat: 26.2285, lng: 50.5860, exposure: 18.5, risk: 0.62 },
+  // Latin America expansion
+  lima: { lat: -12.0464, lng: -77.0428, exposure: 22.5, risk: 0.75 },
+  bogota: { lat: 4.7110, lng: -74.0721, exposure: 18.5, risk: 0.78 },
+  santiago: { lat: -33.4489, lng: -70.6693, exposure: 28.5, risk: 0.68 },
+  montevideo: { lat: -34.9011, lng: -56.1645, exposure: 15.8, risk: 0.55 },
+  quito: { lat: -0.1807, lng: -78.4678, exposure: 12.5, risk: 0.72 },
+  lapaz: { lat: -16.5000, lng: -68.1500, exposure: 8.5, risk: 0.75 },
+  asuncion: { lat: -25.2637, lng: -57.5759, exposure: 10.5, risk: 0.68 },
+  panama: { lat: 8.9824, lng: -79.5199, exposure: 18.5, risk: 0.65 },
+  sanjose: { lat: 9.9281, lng: -84.0907, exposure: 12.5, risk: 0.62 },
+  guatemala: { lat: 14.6349, lng: -90.5069, exposure: 10.5, risk: 0.75 },
+  havana: { lat: 23.1136, lng: -82.3666, exposure: 12.5, risk: 0.78 },
+  santodomingo: { lat: 18.4861, lng: -69.9312, exposure: 15.8, risk: 0.72 },
+  // Africa expansion
+  nairobi: { lat: -1.2864, lng: 36.8172, exposure: 18.5, risk: 0.72 },
+  addisababa: { lat: 9.0320, lng: 38.7469, exposure: 12.5, risk: 0.75 },
+  accra: { lat: 5.6037, lng: -0.1870, exposure: 15.8, risk: 0.68 },
+  daressalaam: { lat: -6.7924, lng: 39.2083, exposure: 12.5, risk: 0.72 },
+  algiers: { lat: 36.7538, lng: 3.0588, exposure: 18.5, risk: 0.68 },
+  casablanca: { lat: 33.5731, lng: -7.5898, exposure: 22.5, risk: 0.62 },
+  tunis: { lat: 36.8065, lng: 10.1815, exposure: 15.8, risk: 0.65 },
+  kampala: { lat: 0.3476, lng: 32.5825, exposure: 10.5, risk: 0.75 },
+  lusaka: { lat: -15.3875, lng: 28.3228, exposure: 8.5, risk: 0.72 },
+  harare: { lat: -17.8252, lng: 31.0335, exposure: 10.5, risk: 0.78 },
+  kinshasa: { lat: -4.4419, lng: 15.2663, exposure: 12.5, risk: 0.82 },
+  luanda: { lat: -8.8383, lng: 13.2344, exposure: 15.8, risk: 0.75 },
+  // North America expansion
+  atlanta: { lat: 33.7490, lng: -84.3880, exposure: 28.5, risk: 0.58 },
+  dallas: { lat: 32.7767, lng: -96.7970, exposure: 32.5, risk: 0.62 },
+  phoenix: { lat: 33.4484, lng: -112.0740, exposure: 28.5, risk: 0.65 },
+  philadelphia: { lat: 39.9526, lng: -75.1652, exposure: 32.5, risk: 0.58 },
+  detroit: { lat: 42.3314, lng: -83.0458, exposure: 22.5, risk: 0.68 },
+  minneapolis: { lat: 44.9778, lng: -93.2650, exposure: 22.5, risk: 0.52 },
+  sandiego: { lat: 32.7157, lng: -117.1611, exposure: 32.5, risk: 0.68 },
+  tampa: { lat: 27.9506, lng: -82.4572, exposure: 25.8, risk: 0.75 },
+  portland: { lat: 45.5152, lng: -122.6784, exposure: 22.5, risk: 0.58 },
+  lasvegas: { lat: 36.1699, lng: -115.1398, exposure: 28.5, risk: 0.62 },
+  austin: { lat: 30.2672, lng: -97.7431, exposure: 25.8, risk: 0.58 },
+  nashville: { lat: 36.1627, lng: -86.7816, exposure: 22.5, risk: 0.55 },
+  charlotte: { lat: 35.2271, lng: -80.8431, exposure: 25.8, risk: 0.58 },
+  baltimore: { lat: 39.2904, lng: -76.6122, exposure: 28.5, risk: 0.62 },
+  // Oceania expansion
+  auckland: { lat: -36.8485, lng: 174.7633, exposure: 28.5, risk: 0.55 },
+  wellington: { lat: -41.2865, lng: 174.7762, exposure: 22.5, risk: 0.58 },
+  brisbane: { lat: -27.4698, lng: 153.0251, exposure: 28.5, risk: 0.58 },
+  perth: { lat: -31.9505, lng: 115.8605, exposure: 25.8, risk: 0.52 },
+  adelaide: { lat: -34.9285, lng: 138.6007, exposure: 22.5, risk: 0.55 },
+  christchurch: { lat: -43.5321, lng: 172.6362, exposure: 18.5, risk: 0.62 },
+  // Additional Southeast Asia
+  yangon: { lat: 16.8661, lng: 96.1951, exposure: 12.5, risk: 0.75 },
+  phnompenh: { lat: 11.5564, lng: 104.9282, exposure: 10.5, risk: 0.72 },
+  vientiane: { lat: 17.9757, lng: 102.6331, exposure: 8.5, risk: 0.68 },
+  colombo: { lat: 6.9271, lng: 79.8612, exposure: 15.8, risk: 0.72 },
+  kathmandu: { lat: 27.7172, lng: 85.3240, exposure: 8.5, risk: 0.78 },
+  // Additional cities for climate markers
+  honolulu: { lat: 21.3069, lng: -157.8583, exposure: 18.5, risk: 0.68 },
+  ottawa: { lat: 45.4215, lng: -75.6972, exposure: 22.5, risk: 0.52 },
+  canberra: { lat: -35.2809, lng: 149.1300, exposure: 18.5, risk: 0.48 },
+  baghdad: { lat: 33.3152, lng: 44.3661, exposure: 8.5, risk: 0.92 },
+  jerusalem: { lat: 31.7683, lng: 35.2137, exposure: 15.8, risk: 0.85 },
+  neworleans: { lat: 29.9511, lng: -90.0715, exposure: 22.5, risk: 0.78 },
 }
 
 function findCityCoordinates(cityId: string): { lat: number; lng: number; exposure?: number; risk?: number } | null {
   const normalized = cityId.toLowerCase().replace(/[^a-z]/g, '')
   return CITY_COORDINATES[normalized] || null
+}
+
+// Enterprise HQ / legal addresses (approx.) — companies at real locations per city
+type ZoneAssetType = ZoneAsset['type']
+const ENTERPRISE_ADDRESSES: Record<string, Array<{ name: string; type: ZoneAssetType; lat: number; lng: number }>> = {
+  frankfurt: [
+    { name: 'Deutsche Bank', type: 'bank', lat: 50.1125, lng: 8.6810 },
+    { name: 'Commerzbank', type: 'bank', lat: 50.1098, lng: 8.6755 },
+    { name: 'ECB', type: 'government', lat: 50.1105, lng: 8.6921 },
+    { name: 'Deutsche Börse', type: 'infrastructure', lat: 50.1132, lng: 8.6680 },
+    { name: 'E.ON', type: 'infrastructure', lat: 50.1080, lng: 8.6845 },
+    { name: 'DZ Bank', type: 'bank', lat: 50.1118, lng: 8.6788 },
+    { name: 'KfW', type: 'bank', lat: 50.1075, lng: 8.6900 },
+    { name: 'Allianz Global', type: 'insurer', lat: 50.1090, lng: 8.6865 },
+    { name: 'Frankfurt Airport', type: 'infrastructure', lat: 50.0379, lng: 8.5622 },
+    { name: 'Siemens Financial', type: 'enterprise', lat: 50.1102, lng: 8.6795 },
+    { name: 'Bundesbank', type: 'government', lat: 50.1088, lng: 8.6975 },
+    { name: 'DekaBank', type: 'bank', lat: 50.1120, lng: 8.6730 },
+  ],
+  london: [
+    { name: 'Bank of England', type: 'government', lat: 51.5142, lng: -0.0885 },
+    { name: 'HSBC HQ', type: 'bank', lat: 51.5070, lng: -0.1272 },
+    { name: 'Barclays', type: 'bank', lat: 51.5105, lng: -0.1025 },
+    { name: 'Lloyds', type: 'bank', lat: 51.5135, lng: -0.0810 },
+    { name: 'LSE', type: 'infrastructure', lat: 51.5143, lng: -0.0995 },
+    { name: 'Canary Wharf Group', type: 'developer', lat: 51.5054, lng: -0.0235 },
+    { name: 'Lloyd\'s of London', type: 'insurer', lat: 51.5130, lng: -0.0815 },
+    { name: 'Standard Chartered', type: 'bank', lat: 51.5078, lng: -0.0750 },
+    { name: 'NatWest', type: 'bank', lat: 51.5112, lng: -0.0875 },
+    { name: 'Aviva', type: 'insurer', lat: 51.5120, lng: -0.0950 },
+  ],
+  paris: [
+    { name: 'Banque de France', type: 'government', lat: 48.8698, lng: 2.3398 },
+    { name: 'BNP Paribas', type: 'bank', lat: 48.8805, lng: 2.3185 },
+    { name: 'Société Générale', type: 'bank', lat: 48.8785, lng: 2.3240 },
+    { name: 'AXA HQ', type: 'insurer', lat: 48.8750, lng: 2.3210 },
+    { name: 'La Défense (Arche)', type: 'infrastructure', lat: 48.8925, lng: 2.2360 },
+    { name: 'Crédit Agricole', type: 'bank', lat: 48.8680, lng: 2.3310 },
+    { name: 'Natixis', type: 'bank', lat: 48.8765, lng: 2.3180 },
+    { name: 'Euronext Paris', type: 'infrastructure', lat: 48.8485, lng: 2.3520 },
+    { name: 'Ministry of Finance', type: 'government', lat: 48.8370, lng: 2.3315 },
+    { name: 'Ile-de-France Mobilités', type: 'infrastructure', lat: 48.8440, lng: 2.3740 },
+  ],
+  cologne: [
+    { name: 'RWE', type: 'infrastructure', lat: 50.9410, lng: 6.9580 },
+    { name: 'Deutsche Telekom', type: 'infrastructure', lat: 50.9350, lng: 6.9720 },
+    { name: 'TÜV Rheinland', type: 'enterprise', lat: 50.9385, lng: 6.9650 },
+    { name: 'Ford Cologne', type: 'enterprise', lat: 50.9280, lng: 6.9850 },
+    { name: 'Uniklinik Köln', type: 'hospital', lat: 50.9245, lng: 6.9120 },
+    { name: 'Stadt Köln', type: 'government', lat: 50.9380, lng: 6.9595 },
+    { name: 'Lufthansa Technik', type: 'infrastructure', lat: 50.9520, lng: 6.9680 },
+    { name: 'Lanxess', type: 'enterprise', lat: 50.9425, lng: 6.9510 },
+  ],
+  amsterdam: [
+    { name: 'ING Group', type: 'bank', lat: 52.3635, lng: 4.9095 },
+    { name: 'ABN AMRO', type: 'bank', lat: 52.3680, lng: 4.9010 },
+    { name: 'Euronext Amsterdam', type: 'infrastructure', lat: 52.3715, lng: 4.8945 },
+    { name: 'Schiphol', type: 'infrastructure', lat: 52.3105, lng: 4.7683 },
+    { name: 'Philips', type: 'enterprise', lat: 52.3580, lng: 4.9180 },
+    { name: 'Heineken', type: 'enterprise', lat: 52.3575, lng: 4.9280 },
+    { name: 'APG', type: 'insurer', lat: 52.3620, lng: 4.9120 },
+    { name: 'Port of Amsterdam', type: 'infrastructure', lat: 52.3780, lng: 4.8940 },
+  ],
+  milan: [
+    { name: 'Intesa Sanpaolo', type: 'bank', lat: 45.4615, lng: 9.1905 },
+    { name: 'UniCredit', type: 'bank', lat: 45.4630, lng: 9.1885 },
+    { name: 'Generali', type: 'insurer', lat: 45.4655, lng: 9.1920 },
+    { name: 'Pirelli', type: 'enterprise', lat: 45.4680, lng: 9.1850 },
+    { name: 'Borsa Italiana', type: 'infrastructure', lat: 45.4640, lng: 9.1950 },
+    { name: 'Eni', type: 'enterprise', lat: 45.4620, lng: 9.1980 },
+    { name: 'Comune di Milano', type: 'government', lat: 45.4642, lng: 9.1902 },
+    { name: 'Policlinico Milano', type: 'hospital', lat: 45.4580, lng: 9.2120 },
+  ],
+  berlin: [
+    { name: 'Deutsche Bahn', type: 'infrastructure', lat: 52.5205, lng: 13.4045 },
+    { name: 'Siemens HQ', type: 'enterprise', lat: 52.5250, lng: 13.3710 },
+    { name: 'BMW Berlin', type: 'enterprise', lat: 52.5180, lng: 13.3850 },
+    { name: 'Charité', type: 'hospital', lat: 52.5275, lng: 13.3785 },
+    { name: 'Bundesrat', type: 'government', lat: 52.5055, lng: 13.3835 },
+    { name: 'Berliner Verkehr', type: 'infrastructure', lat: 52.5220, lng: 13.4110 },
+    { name: 'Vonovia', type: 'developer', lat: 52.5165, lng: 13.3920 },
+    { name: 'Vattenfall Europe', type: 'infrastructure', lat: 52.5130, lng: 13.3980 },
+    { name: 'Zalando', type: 'enterprise', lat: 52.5080, lng: 13.4520 },
+  ],
+  munich: [
+    { name: 'Allianz SE', type: 'insurer', lat: 48.1360, lng: 11.5760 },
+    { name: 'Munich Re', type: 'insurer', lat: 48.1375, lng: 11.5810 },
+    { name: 'BMW Group', type: 'enterprise', lat: 48.1775, lng: 11.5560 },
+    { name: 'Siemens', type: 'enterprise', lat: 48.1340, lng: 11.5835 },
+    { name: 'Bundesbank Munich', type: 'government', lat: 48.1385, lng: 11.5720 },
+    { name: 'Klinikum München', type: 'hospital', lat: 48.1310, lng: 11.5880 },
+    { name: 'Bayerische Landesbank', type: 'bank', lat: 48.1355, lng: 11.5795 },
+    { name: 'Hipp', type: 'enterprise', lat: 48.1320, lng: 11.5950 },
+  ],
+  kyiv: [
+    { name: 'NBU', type: 'government', lat: 50.4485, lng: 30.5240 },
+    { name: 'PrivatBank', type: 'bank', lat: 50.4510, lng: 30.5180 },
+    { name: 'Kyiv City Council', type: 'government', lat: 50.4500, lng: 30.5235 },
+    { name: 'Ukrenergo', type: 'infrastructure', lat: 50.4470, lng: 30.5300 },
+    { name: 'Darnytsia Hospital', type: 'hospital', lat: 50.4550, lng: 30.6120 },
+    { name: 'Metro Kyiv', type: 'infrastructure', lat: 50.4495, lng: 30.5225 },
+  ],
+  warsaw: [
+    { name: 'NBP', type: 'government', lat: 52.2295, lng: 21.0115 },
+    { name: 'PKO BP', type: 'bank', lat: 52.2310, lng: 21.0140 },
+    { name: 'PZU', type: 'insurer', lat: 52.2300, lng: 21.0180 },
+    { name: 'Warsaw Stock Exchange', type: 'infrastructure', lat: 52.2285, lng: 21.0205 },
+    { name: 'City of Warsaw', type: 'government', lat: 52.2298, lng: 21.0120 },
+    { name: 'Metro Warszawskie', type: 'infrastructure', lat: 52.2315, lng: 21.0080 },
+  ],
+  lyon: [
+    { name: 'Crédit Agricole Lyon', type: 'bank', lat: 45.7650, lng: 4.8360 },
+    { name: 'Valeo', type: 'enterprise', lat: 45.7620, lng: 4.8420 },
+    { name: 'Sanofi Lyon', type: 'enterprise', lat: 45.7680, lng: 4.8300 },
+    { name: 'Hospices Civils', type: 'hospital', lat: 45.7645, lng: 4.8380 },
+    { name: 'Métropole de Lyon', type: 'government', lat: 45.7642, lng: 4.8358 },
+    { name: 'SNCF Lyon', type: 'infrastructure', lat: 45.7670, lng: 4.8320 },
+  ],
+  zurich: [
+    { name: 'UBS HQ', type: 'bank', lat: 47.3770, lng: 8.5395 },
+    { name: 'Credit Suisse', type: 'bank', lat: 47.3765, lng: 8.5410 },
+    { name: 'Zurich Insurance', type: 'insurer', lat: 47.3780, lng: 8.5430 },
+    { name: 'Swiss Re', type: 'insurer', lat: 47.3755, lng: 8.5450 },
+    { name: 'SIX Group', type: 'infrastructure', lat: 47.3775, lng: 8.5380 },
+    { name: 'ETH Zurich', type: 'school', lat: 47.3762, lng: 8.5485 },
+    { name: 'City of Zurich', type: 'government', lat: 47.3768, lng: 8.5415 },
+  ],
+  losangeles: [
+    { name: 'City of LA', type: 'government', lat: 34.0522, lng: -118.2437 },
+    { name: 'LA Dept Water & Power', type: 'infrastructure', lat: 34.0530, lng: -118.2450 },
+    { name: 'Cedars-Sinai', type: 'hospital', lat: 34.0765, lng: -118.3830 },
+    { name: 'LA Metro', type: 'infrastructure', lat: 34.0550, lng: -118.2460 },
+    { name: 'LAFD HQ', type: 'government', lat: 34.0515, lng: -118.2420 },
+    { name: 'Port of LA', type: 'infrastructure', lat: 33.7540, lng: -118.2710 },
+  ],
+  sydney: [
+    { name: 'Reserve Bank of Australia', type: 'government', lat: -33.8685, lng: 151.2095 },
+    { name: 'CBA', type: 'bank', lat: -33.8695, lng: 151.2105 },
+    { name: 'Westpac', type: 'bank', lat: -33.8678, lng: 151.2088 },
+    { name: 'ASX', type: 'infrastructure', lat: -33.8680, lng: 151.2098 },
+    { name: 'QBE Insurance', type: 'insurer', lat: -33.8690, lng: 151.2110 },
+    { name: 'Sydney Airport', type: 'infrastructure', lat: -33.9395, lng: 151.1750 },
+  ],
 }
 
 // ============================================
@@ -2766,6 +3012,7 @@ export default function CommandCenter() {
   const [showEntry, setShowEntry] = useState(true)
   const [entryComplete, setEntryComplete] = useState(false)
   
+  const navigate = useNavigate()
   // Platform store - shared state with Dashboard
   const store = usePlatformStore()
   const portfolio = usePortfolio()
@@ -2774,6 +3021,9 @@ export default function CommandCenter() {
   usePlatformWebSocket(['command_center', 'dashboard', 'stress_tests'])
   
   const [focusedHotspot, setFocusedHotspot] = useState<FocusedHotspot | null>(null)
+  const [flyToHotspotId, setFlyToHotspotId] = useState<string | null>(null)
+  const [dependencyZoneId, setDependencyZoneId] = useState<string | null>(null)
+  const showDependencies = Boolean(dependencyZoneId)
   
   // Active scenario - synced to store for Dashboard
   const activeScenarioState = useActiveScenario()
@@ -2800,14 +3050,32 @@ export default function CommandCenter() {
   
   const [isSceneReady, setIsSceneReady] = useState(false)
   const [recentAlerts, setRecentAlerts] = useState<RiskUpdate[]>([])
+  const recentEvents = useRecentEvents(5)
   
   // Digital Twin panel visibility - synced to store
   const showDigitalTwin = useShowDigitalTwinPanel()
   const setShowDigitalTwin = store.setShowDigitalTwinPanel
+  
+  // Command Mode - split-view transformation
+  const commandMode = useCommandMode()
+  const toggleCommandMode = useToggleCommandMode()
   const [showZoneNav, setShowZoneNav] = useState(false)
   const [availableZones, setAvailableZones] = useState<{id: string, name: string, risk: number}[]>([])
   const [resetViewTrigger, setResetViewTrigger] = useState(0)
-  const [expandedRiskLevel, setExpandedRiskLevel] = useState<'critical' | 'high' | 'medium' | 'low' | null>(null)
+  // Disaster viz: flood + wind + metro layers (Open-Meteo, no GPU) + water level slider
+  const [showFloodLayer, setShowFloodLayer] = useState(false)
+  const [showWindLayer, setShowWindLayer] = useState(false)
+  const [showMetroFloodLayer, setShowMetroFloodLayer] = useState(false)
+  const [showHeatLayer, setShowHeatLayer] = useState(false)
+  const [showHeavyRainLayer, setShowHeavyRainLayer] = useState(false)
+  const [showDroughtLayer, setShowDroughtLayer] = useState(false)
+  const [showUvLayer, setShowUvLayer] = useState(false)
+  const [showGoogle3dLayer, setShowGoogle3dLayer] = useState(false)
+  const [floodDepthOverride, setFloodDepthOverride] = useState<number>(1)
+  const FLOOD_LEVELS_M = [0.5, 1, 2, 3, 6, 9] as const
+  const [expandedRiskLevel, setExpandedRiskLevel] = useState<'critical' | 'high' | 'medium' | 'low' | null>('critical')
+  const [highFidelityScenarioId, setHighFidelityScenarioId] = useState<string | null>(null)
+  const [highFidelityScenarioIds, setHighFidelityScenarioIds] = useState<string[]>([])
   
   // Stress Test State (integrated into Risk Zones)
   // Store the full test data locally, but sync ID to store for Dashboard access
@@ -2826,16 +3094,163 @@ export default function CommandCenter() {
   const setSelectedStressTest = (test: typeof selectedStressTestData) => {
     setSelectedStressTestData(test)
     setSelectedStressTestId(test?.id ?? null)
+    if (test) {
+      store.addEvent(createPlatformEvent(EventTypes.STRESS_TEST_STARTED, 'stress_test', test.id, { name: test.name }))
+    }
   }
   
   const [showActionPlans, setShowActionPlans] = useState(false)
   const [showStressTestSelector, setShowStressTestSelector] = useState(false)
   const [isExportingPdf, setIsExportingPdf] = useState(false)
+  const stressTestModalRef = useRef<HTMLDivElement>(null)
+
+  // Focus stress test modal when opened (e.g. via S key) so Escape and clicks work
+  useEffect(() => {
+    if (showStressTestSelector && stressTestModalRef.current) {
+      const t = requestAnimationFrame(() => {
+        stressTestModalRef.current?.focus()
+      })
+      return () => cancelAnimationFrame(t)
+    }
+  }, [showStressTestSelector])
+
+  // Timeline period index (0=T0, 1=T+1Y, … 4=T+5Y) — advances with elapsed time since scenario start
+  const [timelinePeriodIndex, setTimelinePeriodIndex] = useState(0)
+  useEffect(() => {
+    if (!activeScenarioState?.started_at) {
+      setTimelinePeriodIndex(0)
+      return
+    }
+    const startedAt = new Date(activeScenarioState.started_at).getTime()
+    const tick = () => {
+      const elapsedSec = (Date.now() - startedAt) / 1000
+      // Advance period every 8s: 0–8s T0, 8–16s T+1Y, 16–24s T+2Y, 24–32s T+3Y, 32s+ T+5Y
+      const index = Math.min(4, Math.floor(elapsedSec / 8))
+      setTimelinePeriodIndex(index)
+    }
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [activeScenarioState?.started_at])
   
   // Selected zone - synced to store for Dashboard
   const selectedZone = useSelectedZone()
   const setSelectedZone = store.setSelectedZone
-  
+
+  // Asset from URL (Assets → View on Globe / Run Stress Test)
+  const [searchParams] = useSearchParams()
+  const [focusAssetIdFromUrl, setFocusAssetIdFromUrl] = useState<string | null>(null)
+  const [focusAssetFromUrl, setFocusAssetFromUrl] = useState<{
+    id: string
+    name: string
+    latitude: number
+    longitude: number
+    exposure: number
+    impactSeverity: number
+  } | null>(null)
+  const [focusCoordinatesForGlobe, setFocusCoordinatesForGlobe] = useState<{ lat: number; lng: number } | null>(null)
+
+  useEffect(() => {
+    const assetId = searchParams.get('assetId')
+    const openTwin = searchParams.get('openTwin')
+    if (!assetId) {
+      setFocusAssetIdFromUrl(null)
+      setFocusAssetFromUrl(null)
+      setFocusCoordinatesForGlobe(null)
+      return
+    }
+    setFocusAssetIdFromUrl(assetId)
+    assetsApi.get(assetId).then((asset) => {
+      if (asset.latitude != null && asset.longitude != null) {
+        setFocusCoordinatesForGlobe({ lat: asset.latitude, lng: asset.longitude })
+      }
+      setFocusAssetFromUrl({
+        id: asset.id,
+        name: asset.name ?? 'Asset',
+        latitude: asset.latitude ?? 0,
+        longitude: asset.longitude ?? 0,
+        exposure: asset.current_valuation ?? 0,
+        impactSeverity: (asset.climate_risk_score ?? 0) / 100,
+      })
+      if (openTwin === '1') {
+        setShowDigitalTwin(true)
+      }
+    }).catch(() => {
+      setFocusAssetFromUrl(null)
+      setFocusCoordinatesForGlobe(null)
+    })
+  }, [searchParams, setShowDigitalTwin])
+
+  // Auto-enable disaster layers when flood-related stress test is selected; sync flood depth from scenario name (e.g. "0.5m")
+  useEffect(() => {
+    if (!selectedStressTest) return
+    const id = selectedStressTest.id.toLowerCase()
+    const type = selectedStressTest.type.toLowerCase()
+    const name = (selectedStressTest.name ?? '').toLowerCase()
+    
+    // Flood-related scenarios → enable flood layer
+    if (
+      id.includes('flood') ||
+      id.includes('sea_level') ||
+      id.includes('tsunami') ||
+      id.includes('heavy_rain') ||
+      type === 'flood' ||
+      type === 'heavy_rain'
+    ) {
+      setShowFloodLayer(true)
+      // Sync water level from scenario name (e.g. "San Francisco Sea Level 0.5m" -> 0.5)
+      const FLOOD_LEVELS_M = [0.5, 1, 2, 3, 6, 9] as const
+      for (const m of FLOOD_LEVELS_M) {
+        if (name.includes(`${m}m`) || name.includes(`${m} m`) || id.includes(`${m}m`) || id.includes(`${m}_m`)) {
+          setFloodDepthOverride(m)
+          break
+        }
+      }
+    }
+    
+    // Metro flood scenarios → enable metro flood layer
+    if (id.includes('metro_flood') || type === 'metro_flood') {
+      setShowMetroFloodLayer(true)
+      setShowFloodLayer(true) // also show main flood
+    }
+    
+    // Wind/hurricane scenarios → enable wind layer
+    if (
+      id.includes('wind_storm') ||
+      id.includes('hurricane') ||
+      id.includes('typhoon') ||
+      id.includes('cyclone') ||
+      type === 'wind'
+    ) {
+      setShowWindLayer(true)
+    }
+    
+    // Heat scenarios → enable heat layer
+    if (
+      id.includes('heat_stress') ||
+      id.includes('heatwave') ||
+      id.includes('heat_wave') ||
+      type === 'heat'
+    ) {
+      setShowHeatLayer(true)
+    }
+    
+    // Heavy rain scenarios → enable heavy rain layer
+    if (id.includes('heavy_rain') || type === 'heavy_rain') {
+      setShowHeavyRainLayer(true)
+    }
+    
+    // Drought scenarios → enable drought layer
+    if (id.includes('drought') || type === 'drought') {
+      setShowDroughtLayer(true)
+    }
+    
+    // UV scenarios → enable UV layer
+    if (id.includes('uv_extreme') || id.includes('uv_index') || type === 'uv') {
+      setShowUvLayer(true)
+    }
+  }, [selectedStressTest])
+
   const [selectedZoneAsset, setSelectedZoneAsset] = useState<ZoneAsset | null>(null)
   const [digitalTwinPickerMode, setDigitalTwinPickerMode] = useState(false)
   const [selectedDigitalTwinEvent, setSelectedDigitalTwinEvent] = useState<string | null>(null)
@@ -2847,14 +3262,26 @@ export default function CommandCenter() {
   const [selectedHistoricalEvent, setSelectedHistoricalEvent] = useState<string | null>(null)
   const [showHistoricalPanel, setShowHistoricalPanel] = useState(false)
   
+  // Metric tooltips (Total Exposure, At Risk) — custom hover; native title is unreliable over Cesium
+  const [metricTooltip, setMetricTooltip] = useState<'exposure' | 'atRisk' | null>(null)
+  
   // Registry scenarios for Focused Zone (Regulatory + Extended)
   const [registryScenariosFlat, setRegistryScenariosFlat] = useState<Array<{ id: string; name: string; severity_numeric?: number; horizon?: number; source?: string; category?: string; library?: string }>>([])
   const [expandedFactorIds, setExpandedFactorIds] = useState<Set<string>>(() => new Set())
+
+  // GPU / NIM / Omniverse / DFM status (visible in bottom bar)
+  const [nimHealth, setNimHealth] = useState<{ fourcastnet?: { status: string }; corrdiff?: { status: string } } | null>(null)
+  const [dfmStatus, setDfmStatus] = useState<{ use_data_federation_pipelines?: boolean; pipeline_ids?: string[]; adapters_count?: number } | null>(null)
+  const [omniverseStatus, setOmniverseStatus] = useState<{ e2cc_configured?: boolean; e2cc_base_url?: string; e2cc_use_port_forward?: boolean } | null>(null)
+  const [weatherTestResult, setWeatherTestResult] = useState<string | null>(null)
+  const [weatherTestLoading, setWeatherTestLoading] = useState(false)
   
-  // Helper to generate random assets within a zone
-  const generateZoneAssets = useCallback((zone: Omit<RiskZone, 'assets'>, count: number): ZoneAsset[] => {
+  // Generate zone assets: use ENTERPRISE_ADDRESSES (HQ/legal addresses) when zone has cityId, else fallback
+  const generateZoneAssets = useCallback((zone: Omit<RiskZone, 'assets'> & { cityId?: string }, count: number): ZoneAsset[] => {
+    const cityId = zone.cityId
+    const companies = cityId ? ENTERPRISE_ADDRESSES[cityId] : null
     const assetTypes: ZoneAsset['type'][] = ['bank', 'enterprise', 'developer', 'insurer', 'infrastructure', 'hospital', 'government']
-    const assetNames: Record<ZoneAsset['type'], string[]> = {
+    const fallbackNames: Record<ZoneAsset['type'], string[]> = {
       bank: ['Deutsche Bank', 'Commerzbank', 'UBS', 'Credit Suisse', 'ING Group', 'Santander'],
       enterprise: ['Siemens', 'BASF', 'Volkswagen', 'BMW', 'SAP', 'Bayer'],
       developer: ['Vonovia', 'LEG Immobilien', 'Aroundtown', 'Grand City', 'TAG Immobilien'],
@@ -2866,129 +3293,241 @@ export default function CommandCenter() {
       school: ['Technical University', 'Business School', 'Research Institute'],
       city: ['City Center', 'Downtown District', 'Metro Area', 'Urban Core'],
     }
-    
+
     const assets: ZoneAsset[] = []
     for (let i = 0; i < count; i++) {
-      const type = assetTypes[i % assetTypes.length]
-      const names = assetNames[type]
-      const name = names[i % names.length]
-      
-      // Random position within zone radius
-      const angle = Math.random() * 2 * Math.PI
-      const distance = Math.random() * zone.radius_km * 0.8 // 80% of radius
-      const latOffset = (distance / 111) * Math.cos(angle)
-      const lngOffset = (distance / 111) * Math.sin(angle) / Math.cos(zone.center_latitude * Math.PI / 180)
-      
+      let name: string
+      let type: ZoneAsset['type']
+      let latitude: number
+      let longitude: number
+
+      if (companies && companies.length > 0) {
+        const c = companies[i % companies.length]
+        name = c.name
+        type = c.type
+        latitude = c.lat
+        longitude = c.lng
+      } else {
+        type = assetTypes[i % assetTypes.length]
+        const names = fallbackNames[type]
+        name = names[i % names.length]
+        const angle = Math.random() * 2 * Math.PI
+        const distance = Math.random() * zone.radius_km * 0.8
+        const latOffset = (distance / 111) * Math.cos(angle)
+        const lngOffset = (distance / 111) * Math.sin(angle) / Math.cos(zone.center_latitude * Math.PI / 180)
+        latitude = zone.center_latitude + latOffset
+        longitude = zone.center_longitude + lngOffset
+      }
+
       assets.push({
         id: `${zone.id}-asset-${i}`,
-        name: `${name} ${zone.name?.split(' ')[0] || ''}`,
+        name,
         type,
-        latitude: zone.center_latitude + latOffset,
-        longitude: zone.center_longitude + lngOffset,
-        exposure: 0.5 + Math.random() * 4.5, // 0.5-5B
-        impactSeverity: zone.risk_score * (0.6 + Math.random() * 0.4), // 60-100% of zone risk
+        latitude,
+        longitude,
+        exposure: 0.5 + Math.random() * 4.5,
+        impactSeverity: zone.risk_score * (0.6 + Math.random() * 0.4),
       })
     }
     return assets
   }, [])
 
-  // Demo risk zones (generated when stress test is active)
+  // Map scenario type/id to zone category (e.g. Flood_Extreme_100y -> climate)
+  const scenarioTypeToZoneCategory = useCallback((typeOrId: string): string => {
+    const t = (typeOrId || '').toLowerCase()
+    if (['climate', 'financial', 'geopolitical', 'pandemic', 'political', 'regulatory', 'civil_unrest', 'fire'].includes(t)) return t
+    if (t === 'military') return 'geopolitical'
+    if (t === 'protest') return 'civil_unrest'
+    if (t.includes('flood') || t.includes('ngfs') || t.includes('ssp') || t.includes('sea_level') || t.includes('heat')) return 'climate'
+    if (t.includes('fire') || t.includes('wildfire')) return 'fire'
+    if (t.includes('bank') || t.includes('basel') || t.includes('credit') || t.includes('liquidity')) return 'financial'
+    if (t.includes('pandemic') || t.includes('health')) return 'pandemic'
+    if (t.includes('political') || t.includes('election')) return 'political'
+    if (t.includes('regulatory') || t.includes('eba') || t.includes('fed') || t.includes('imf')) return 'regulatory'
+    return t
+  }, [])
+
+  // Risk zones for stress tests: centers from CITY_COORDINATES so enterprises are exactly at real city locations
   const activeRiskZones = useMemo<RiskZone[]>(() => {
     if (!selectedStressTest) return []
-    
-    // Generate demo zones based on stress test type
-    const typeZonesBase: Record<string, Omit<RiskZone, 'assets'>[]> = {
+    const typeKey = scenarioTypeToZoneCategory(selectedStressTest.type)
+    const cc = (cityId: string): { center_latitude: number; center_longitude: number } => {
+      const c = CITY_COORDINATES[cityId]
+      return c ? { center_latitude: c.lat, center_longitude: c.lng } : { center_latitude: 50, center_longitude: 8 }
+    }
+
+    const typeZonesBase: Record<string, Array<Omit<RiskZone, 'assets'> & { cityId: string }>> = {
       climate: [
-        { id: 'zone-1', name: 'Rhine Valley', zone_level: 'critical', center_latitude: 50.1, center_longitude: 8.7, radius_km: 150, risk_score: 0.92, affected_assets_count: 12, total_exposure: 12.5 },
-        { id: 'zone-2', name: 'North Sea Coast', zone_level: 'high', center_latitude: 53.5, center_longitude: 8.0, radius_km: 200, risk_score: 0.75, affected_assets_count: 8, total_exposure: 8.3 },
-        { id: 'zone-3', name: 'Po Valley', zone_level: 'medium', center_latitude: 45.0, center_longitude: 11.0, radius_km: 180, risk_score: 0.55, affected_assets_count: 6, total_exposure: 6.1 },
+        // Europe
+        { id: 'zone-1', name: 'Rhine Valley (Cologne)', zone_level: 'critical', ...cc('cologne'), radius_km: 80, risk_score: 0.92, affected_assets_count: 12, total_exposure: 12.5, cityId: 'cologne' },
+        { id: 'zone-2', name: 'North Sea Coast (Amsterdam)', zone_level: 'high', ...cc('amsterdam'), radius_km: 60, risk_score: 0.75, affected_assets_count: 8, total_exposure: 8.3, cityId: 'amsterdam' },
+        { id: 'zone-3', name: 'Po Valley (Milan)', zone_level: 'medium', ...cc('milan'), radius_km: 70, risk_score: 0.55, affected_assets_count: 6, total_exposure: 6.1, cityId: 'milan' },
+        { id: 'zone-4', name: 'Thames Basin (London)', zone_level: 'high', ...cc('london'), radius_km: 65, risk_score: 0.68, affected_assets_count: 14, total_exposure: 38.5, cityId: 'london' },
+        { id: 'zone-5', name: 'Seine Valley (Paris)', zone_level: 'medium', ...cc('paris'), radius_km: 55, risk_score: 0.62, affected_assets_count: 10, total_exposure: 28.4, cityId: 'paris' },
+        { id: 'zone-6', name: 'Danube Region (Vienna)', zone_level: 'medium', ...cc('vienna'), radius_km: 50, risk_score: 0.52, affected_assets_count: 8, total_exposure: 22.5, cityId: 'vienna' },
+        { id: 'zone-7', name: 'Baltic Coast (Copenhagen)', zone_level: 'high', ...cc('copenhagen'), radius_km: 45, risk_score: 0.48, affected_assets_count: 7, total_exposure: 22.5, cityId: 'copenhagen' },
+        { id: 'zone-8', name: 'Mediterranean Coast (Barcelona)', zone_level: 'medium', ...cc('barcelona'), radius_km: 50, risk_score: 0.62, affected_assets_count: 8, total_exposure: 22.5, cityId: 'barcelona' },
+        // Asia
+        { id: 'zone-9', name: 'Yangtze Delta (Shanghai)', zone_level: 'critical', ...cc('shanghai'), radius_km: 90, risk_score: 0.82, affected_assets_count: 18, total_exposure: 55.8, cityId: 'shanghai' },
+        { id: 'zone-10', name: 'Tokyo Bay Area', zone_level: 'critical', ...cc('tokyo'), radius_km: 85, risk_score: 0.92, affected_assets_count: 20, total_exposure: 45.2, cityId: 'tokyo' },
+        { id: 'zone-11', name: 'Pearl River Delta (Guangzhou)', zone_level: 'high', ...cc('guangzhou'), radius_km: 75, risk_score: 0.78, affected_assets_count: 14, total_exposure: 42.5, cityId: 'guangzhou' },
+        { id: 'zone-12', name: 'Chao Phraya Basin (Bangkok)', zone_level: 'high', ...cc('bangkok'), radius_km: 70, risk_score: 0.72, affected_assets_count: 10, total_exposure: 28.5, cityId: 'bangkok' },
+        { id: 'zone-13', name: 'Jakarta Coastal Zone', zone_level: 'critical', ...cc('jakarta'), radius_km: 65, risk_score: 0.82, affected_assets_count: 12, total_exposure: 32.5, cityId: 'jakarta' },
+        { id: 'zone-14', name: 'Mumbai Monsoon Zone', zone_level: 'high', ...cc('mumbai'), radius_km: 60, risk_score: 0.82, affected_assets_count: 12, total_exposure: 28.4, cityId: 'mumbai' },
+        { id: 'zone-15', name: 'Dhaka Flood Plain', zone_level: 'critical', ...cc('dhaka'), radius_km: 55, risk_score: 0.88, affected_assets_count: 10, total_exposure: 12.5, cityId: 'dhaka' },
+        // Americas
+        { id: 'zone-16', name: 'New York Metro Area', zone_level: 'high', ...cc('newyork'), radius_km: 70, risk_score: 0.75, affected_assets_count: 16, total_exposure: 52.3, cityId: 'newyork' },
+        { id: 'zone-17', name: 'Miami Hurricane Zone', zone_level: 'critical', ...cc('miami'), radius_km: 60, risk_score: 0.78, affected_assets_count: 12, total_exposure: 32.5, cityId: 'miami' },
+        { id: 'zone-18', name: 'Houston Gulf Coast', zone_level: 'high', ...cc('houston'), radius_km: 65, risk_score: 0.72, affected_assets_count: 10, total_exposure: 28.5, cityId: 'houston' },
+        { id: 'zone-19', name: 'São Paulo Basin', zone_level: 'medium', ...cc('saopaulo'), radius_km: 55, risk_score: 0.72, affected_assets_count: 12, total_exposure: 38.5, cityId: 'saopaulo' },
+        { id: 'zone-20', name: 'Mexico City Valley', zone_level: 'high', ...cc('mexicocity'), radius_km: 60, risk_score: 0.72, affected_assets_count: 11, total_exposure: 32.5, cityId: 'mexicocity' },
+        // Africa & Middle East
+        { id: 'zone-21', name: 'Nile Delta (Cairo)', zone_level: 'high', ...cc('cairo'), radius_km: 50, risk_score: 0.68, affected_assets_count: 8, total_exposure: 18.5, cityId: 'cairo' },
+        { id: 'zone-22', name: 'Lagos Coastal Zone', zone_level: 'critical', ...cc('lagos'), radius_km: 45, risk_score: 0.78, affected_assets_count: 9, total_exposure: 15.8, cityId: 'lagos' },
+        { id: 'zone-23', name: 'Nairobi Highlands', zone_level: 'medium', ...cc('nairobi'), radius_km: 40, risk_score: 0.72, affected_assets_count: 7, total_exposure: 18.5, cityId: 'nairobi' },
+        { id: 'zone-24', name: 'Dubai Desert Coast', zone_level: 'high', ...cc('dubai'), radius_km: 50, risk_score: 0.68, affected_assets_count: 10, total_exposure: 32.5, cityId: 'dubai' },
+        // Oceania
+        { id: 'zone-25', name: 'Sydney Harbor Area', zone_level: 'medium', ...cc('sydney'), radius_km: 55, risk_score: 0.52, affected_assets_count: 10, total_exposure: 38.7, cityId: 'sydney' },
+        { id: 'zone-26', name: 'Auckland Volcanic Field', zone_level: 'medium', ...cc('auckland'), radius_km: 45, risk_score: 0.55, affected_assets_count: 8, total_exposure: 28.5, cityId: 'auckland' },
       ],
       financial: [
-        { id: 'zone-1', name: 'Frankfurt Hub', zone_level: 'critical', center_latitude: 50.1, center_longitude: 8.7, radius_km: 80, risk_score: 0.88, affected_assets_count: 15, total_exposure: 45.2 },
-        { id: 'zone-2', name: 'London City', zone_level: 'high', center_latitude: 51.5, center_longitude: -0.1, radius_km: 100, risk_score: 0.72, affected_assets_count: 12, total_exposure: 38.5 },
-        { id: 'zone-3', name: 'Paris District', zone_level: 'medium', center_latitude: 48.9, center_longitude: 2.35, radius_km: 90, risk_score: 0.58, affected_assets_count: 10, total_exposure: 22.1 },
+        // Global Financial Hubs
+        { id: 'zone-1', name: 'Frankfurt Hub', zone_level: 'critical', ...cc('frankfurt'), radius_km: 40, risk_score: 0.88, affected_assets_count: 15, total_exposure: 45.2, cityId: 'frankfurt' },
+        { id: 'zone-2', name: 'London City', zone_level: 'critical', ...cc('london'), radius_km: 50, risk_score: 0.72, affected_assets_count: 18, total_exposure: 48.5, cityId: 'london' },
+        { id: 'zone-3', name: 'New York Wall Street', zone_level: 'critical', ...cc('newyork'), radius_km: 45, risk_score: 0.75, affected_assets_count: 20, total_exposure: 62.3, cityId: 'newyork' },
+        { id: 'zone-4', name: 'Tokyo Financial District', zone_level: 'critical', ...cc('tokyo'), radius_km: 40, risk_score: 0.92, affected_assets_count: 16, total_exposure: 55.2, cityId: 'tokyo' },
+        { id: 'zone-5', name: 'Hong Kong Central', zone_level: 'high', ...cc('hongkong'), radius_km: 35, risk_score: 0.75, affected_assets_count: 14, total_exposure: 42.5, cityId: 'hongkong' },
+        { id: 'zone-6', name: 'Singapore CBD', zone_level: 'high', ...cc('singapore'), radius_km: 30, risk_score: 0.62, affected_assets_count: 12, total_exposure: 38.9, cityId: 'singapore' },
+        { id: 'zone-7', name: 'Paris La Défense', zone_level: 'high', ...cc('paris'), radius_km: 45, risk_score: 0.62, affected_assets_count: 12, total_exposure: 32.4, cityId: 'paris' },
+        { id: 'zone-8', name: 'Zurich Banking District', zone_level: 'high', ...cc('zurich'), radius_km: 35, risk_score: 0.45, affected_assets_count: 10, total_exposure: 42.5, cityId: 'zurich' },
+        { id: 'zone-9', name: 'Shanghai Pudong', zone_level: 'high', ...cc('shanghai'), radius_km: 50, risk_score: 0.82, affected_assets_count: 14, total_exposure: 55.8, cityId: 'shanghai' },
+        { id: 'zone-10', name: 'Dubai DIFC', zone_level: 'medium', ...cc('dubai'), radius_km: 40, risk_score: 0.68, affected_assets_count: 10, total_exposure: 32.5, cityId: 'dubai' },
+        { id: 'zone-11', name: 'Sydney Financial Quarter', zone_level: 'medium', ...cc('sydney'), radius_km: 35, risk_score: 0.52, affected_assets_count: 8, total_exposure: 38.7, cityId: 'sydney' },
+        { id: 'zone-12', name: 'Toronto Bay Street', zone_level: 'medium', ...cc('toronto'), radius_km: 40, risk_score: 0.55, affected_assets_count: 10, total_exposure: 32.5, cityId: 'toronto' },
       ],
       geopolitical: [
-        { id: 'zone-1', name: 'Eastern Border', zone_level: 'critical', center_latitude: 50.5, center_longitude: 24.0, radius_km: 300, risk_score: 0.95, affected_assets_count: 10, total_exposure: 18.7 },
-        { id: 'zone-2', name: 'Baltic Corridor', zone_level: 'high', center_latitude: 56.0, center_longitude: 24.0, radius_km: 250, risk_score: 0.78, affected_assets_count: 7, total_exposure: 9.2 },
+        // Conflict & High-Risk Zones
+        { id: 'zone-1', name: 'Eastern Border (Kyiv)', zone_level: 'critical', ...cc('kyiv'), radius_km: 120, risk_score: 0.95, affected_assets_count: 10, total_exposure: 18.7, cityId: 'kyiv' },
+        { id: 'zone-2', name: 'Donbas Region', zone_level: 'critical', ...cc('donetskluhansk'), radius_km: 100, risk_score: 0.98, affected_assets_count: 8, total_exposure: 5.2, cityId: 'donetskluhansk' },
+        { id: 'zone-3', name: 'Gaza Strip', zone_level: 'critical', ...cc('gaza'), radius_km: 40, risk_score: 0.99, affected_assets_count: 6, total_exposure: 2.0, cityId: 'gaza' },
+        { id: 'zone-4', name: 'Damascus Region', zone_level: 'critical', ...cc('damascus'), radius_km: 80, risk_score: 0.98, affected_assets_count: 7, total_exposure: 5.2, cityId: 'damascus' },
+        { id: 'zone-5', name: 'Baltic Corridor (Warsaw)', zone_level: 'high', ...cc('warsaw'), radius_km: 100, risk_score: 0.78, affected_assets_count: 9, total_exposure: 18.5, cityId: 'warsaw' },
+        { id: 'zone-6', name: 'Taiwan Strait (Taipei)', zone_level: 'high', ...cc('taipei'), radius_km: 90, risk_score: 0.78, affected_assets_count: 10, total_exposure: 28.9, cityId: 'taipei' },
+        { id: 'zone-7', name: 'Korean Peninsula (Seoul)', zone_level: 'high', ...cc('seoul'), radius_km: 85, risk_score: 0.72, affected_assets_count: 12, total_exposure: 38.5, cityId: 'seoul' },
+        { id: 'zone-8', name: 'Persian Gulf (Tehran)', zone_level: 'high', ...cc('tehran'), radius_km: 95, risk_score: 0.82, affected_assets_count: 8, total_exposure: 22.8, cityId: 'tehran' },
+        { id: 'zone-9', name: 'South China Sea (Manila)', zone_level: 'medium', ...cc('manila'), radius_km: 70, risk_score: 0.75, affected_assets_count: 8, total_exposure: 22.5, cityId: 'manila' },
+        { id: 'zone-10', name: 'Black Sea (Istanbul)', zone_level: 'medium', ...cc('istanbul'), radius_km: 75, risk_score: 0.72, affected_assets_count: 10, total_exposure: 28.5, cityId: 'istanbul' },
       ],
       pandemic: [
-        { id: 'zone-1', name: 'Metropolitan Core', zone_level: 'critical', center_latitude: 52.5, center_longitude: 13.4, radius_km: 120, risk_score: 0.85, affected_assets_count: 18, total_exposure: 32.5 },
-        { id: 'zone-2', name: 'Industrial Belt', zone_level: 'high', center_latitude: 51.2, center_longitude: 7.0, radius_km: 200, risk_score: 0.68, affected_assets_count: 12, total_exposure: 18.3 },
-        { id: 'zone-3', name: 'Southern Region', zone_level: 'medium', center_latitude: 48.1, center_longitude: 11.6, radius_km: 150, risk_score: 0.52, affected_assets_count: 9, total_exposure: 14.1 },
+        // High-Density Urban Centers
+        { id: 'zone-1', name: 'Metropolitan Core (Berlin)', zone_level: 'critical', ...cc('berlin'), radius_km: 50, risk_score: 0.85, affected_assets_count: 18, total_exposure: 32.5, cityId: 'berlin' },
+        { id: 'zone-2', name: 'Industrial Belt (Cologne)', zone_level: 'high', ...cc('cologne'), radius_km: 60, risk_score: 0.68, affected_assets_count: 12, total_exposure: 18.3, cityId: 'cologne' },
+        { id: 'zone-3', name: 'Southern Region (Munich)', zone_level: 'medium', ...cc('munich'), radius_km: 55, risk_score: 0.52, affected_assets_count: 9, total_exposure: 14.1, cityId: 'munich' },
+        { id: 'zone-4', name: 'New York Metro', zone_level: 'critical', ...cc('newyork'), radius_km: 65, risk_score: 0.75, affected_assets_count: 20, total_exposure: 52.3, cityId: 'newyork' },
+        { id: 'zone-5', name: 'London Greater Area', zone_level: 'critical', ...cc('london'), radius_km: 70, risk_score: 0.68, affected_assets_count: 18, total_exposure: 38.5, cityId: 'london' },
+        { id: 'zone-6', name: 'Tokyo Megacity', zone_level: 'critical', ...cc('tokyo'), radius_km: 80, risk_score: 0.92, affected_assets_count: 22, total_exposure: 45.2, cityId: 'tokyo' },
+        { id: 'zone-7', name: 'Mumbai Urban Area', zone_level: 'critical', ...cc('mumbai'), radius_km: 60, risk_score: 0.82, affected_assets_count: 16, total_exposure: 28.4, cityId: 'mumbai' },
+        { id: 'zone-8', name: 'São Paulo Metro', zone_level: 'high', ...cc('saopaulo'), radius_km: 65, risk_score: 0.72, affected_assets_count: 14, total_exposure: 38.5, cityId: 'saopaulo' },
+        { id: 'zone-9', name: 'Lagos Megacity', zone_level: 'critical', ...cc('lagos'), radius_km: 55, risk_score: 0.78, affected_assets_count: 12, total_exposure: 15.8, cityId: 'lagos' },
+        { id: 'zone-10', name: 'Jakarta Metro', zone_level: 'high', ...cc('jakarta'), radius_km: 60, risk_score: 0.82, affected_assets_count: 14, total_exposure: 32.5, cityId: 'jakarta' },
       ],
       political: [
-        { id: 'zone-1', name: 'Capital Region', zone_level: 'high', center_latitude: 52.5, center_longitude: 13.4, radius_km: 100, risk_score: 0.72, affected_assets_count: 10, total_exposure: 28.5 },
-        { id: 'zone-2', name: 'Financial District', zone_level: 'medium', center_latitude: 50.1, center_longitude: 8.7, radius_km: 80, risk_score: 0.55, affected_assets_count: 8, total_exposure: 22.1 },
+        // Capital Cities & Government Centers
+        { id: 'zone-1', name: 'Capital Region (Berlin)', zone_level: 'high', ...cc('berlin'), radius_km: 45, risk_score: 0.72, affected_assets_count: 10, total_exposure: 28.5, cityId: 'berlin' },
+        { id: 'zone-2', name: 'Financial District (Frankfurt)', zone_level: 'medium', ...cc('frankfurt'), radius_km: 35, risk_score: 0.55, affected_assets_count: 8, total_exposure: 22.1, cityId: 'frankfurt' },
+        { id: 'zone-3', name: 'Washington DC Area', zone_level: 'high', ...cc('washington'), radius_km: 50, risk_score: 0.48, affected_assets_count: 12, total_exposure: 42.1, cityId: 'washington' },
+        { id: 'zone-4', name: 'Moscow Center', zone_level: 'high', ...cc('moscow'), radius_km: 55, risk_score: 0.72, affected_assets_count: 14, total_exposure: 35.2, cityId: 'moscow' },
+        { id: 'zone-5', name: 'Beijing Government District', zone_level: 'high', ...cc('beijing'), radius_km: 60, risk_score: 0.78, affected_assets_count: 16, total_exposure: 48.2, cityId: 'beijing' },
+        { id: 'zone-6', name: 'Paris Government Quarter', zone_level: 'medium', ...cc('paris'), radius_km: 40, risk_score: 0.62, affected_assets_count: 10, total_exposure: 28.4, cityId: 'paris' },
+        { id: 'zone-7', name: 'London Westminster', zone_level: 'medium', ...cc('london'), radius_km: 35, risk_score: 0.68, affected_assets_count: 12, total_exposure: 38.5, cityId: 'london' },
+        { id: 'zone-8', name: 'Brasília Federal District', zone_level: 'medium', ...cc('buenosaires'), radius_km: 45, risk_score: 0.82, affected_assets_count: 8, total_exposure: 28.5, cityId: 'buenosaires' },
       ],
       regulatory: [
-        { id: 'zone-1', name: 'Banking Sector', zone_level: 'high', center_latitude: 50.1, center_longitude: 8.7, radius_km: 100, risk_score: 0.68, affected_assets_count: 12, total_exposure: 42.5 },
-        { id: 'zone-2', name: 'Insurance Hub', zone_level: 'medium', center_latitude: 48.1, center_longitude: 11.6, radius_km: 80, risk_score: 0.52, affected_assets_count: 8, total_exposure: 18.3 },
+        // Banking & Insurance Hubs
+        { id: 'zone-1', name: 'Banking Sector (Frankfurt)', zone_level: 'high', ...cc('frankfurt'), radius_km: 40, risk_score: 0.68, affected_assets_count: 12, total_exposure: 42.5, cityId: 'frankfurt' },
+        { id: 'zone-2', name: 'Insurance Hub (Munich)', zone_level: 'medium', ...cc('munich'), radius_km: 35, risk_score: 0.52, affected_assets_count: 8, total_exposure: 18.3, cityId: 'munich' },
+        { id: 'zone-3', name: 'London Financial Services', zone_level: 'high', ...cc('london'), radius_km: 45, risk_score: 0.68, affected_assets_count: 14, total_exposure: 38.5, cityId: 'london' },
+        { id: 'zone-4', name: 'Zurich Banking Center', zone_level: 'high', ...cc('zurich'), radius_km: 35, risk_score: 0.45, affected_assets_count: 10, total_exposure: 42.5, cityId: 'zurich' },
+        { id: 'zone-5', name: 'New York Financial District', zone_level: 'critical', ...cc('newyork'), radius_km: 40, risk_score: 0.75, affected_assets_count: 16, total_exposure: 52.3, cityId: 'newyork' },
+        { id: 'zone-6', name: 'Singapore Financial Hub', zone_level: 'medium', ...cc('singapore'), radius_km: 30, risk_score: 0.62, affected_assets_count: 10, total_exposure: 38.9, cityId: 'singapore' },
+        { id: 'zone-7', name: 'Luxembourg Financial Center', zone_level: 'high', ...cc('luxembourg'), radius_km: 25, risk_score: 0.42, affected_assets_count: 8, total_exposure: 38.5, cityId: 'luxembourg' },
       ],
       civil_unrest: [
-        { id: 'zone-1', name: 'Urban Center', zone_level: 'critical', center_latitude: 48.9, center_longitude: 2.35, radius_km: 50, risk_score: 0.88, affected_assets_count: 14, total_exposure: 35.2 },
-        { id: 'zone-2', name: 'Industrial Zone', zone_level: 'high', center_latitude: 49.5, center_longitude: 2.1, radius_km: 80, risk_score: 0.72, affected_assets_count: 9, total_exposure: 18.5 },
+        // Urban Protest-Prone Areas
+        { id: 'zone-1', name: 'Urban Center (Paris)', zone_level: 'critical', ...cc('paris'), radius_km: 25, risk_score: 0.88, affected_assets_count: 14, total_exposure: 35.2, cityId: 'paris' },
+        { id: 'zone-2', name: 'Industrial Zone (Lyon)', zone_level: 'high', ...cc('lyon'), radius_km: 40, risk_score: 0.72, affected_assets_count: 9, total_exposure: 18.5, cityId: 'lyon' },
+        { id: 'zone-3', name: 'Hong Kong Central', zone_level: 'high', ...cc('hongkong'), radius_km: 30, risk_score: 0.75, affected_assets_count: 12, total_exposure: 42.5, cityId: 'hongkong' },
+        { id: 'zone-4', name: 'Santiago Downtown', zone_level: 'high', ...cc('santiago'), radius_km: 35, risk_score: 0.68, affected_assets_count: 10, total_exposure: 28.5, cityId: 'santiago' },
+        { id: 'zone-5', name: 'Caracas Urban Area', zone_level: 'critical', ...cc('caracas'), radius_km: 40, risk_score: 0.95, affected_assets_count: 8, total_exposure: 8.5, cityId: 'caracas' },
+        { id: 'zone-6', name: 'Beirut City Center', zone_level: 'high', ...cc('beirut'), radius_km: 30, risk_score: 0.75, affected_assets_count: 8, total_exposure: 12.5, cityId: 'beirut' },
+      ],
+      fire: [
+        // Wildfire-Prone Regions
+        { id: 'zone-1', name: 'Wildland-Urban Interface (LA)', zone_level: 'critical', ...cc('losangeles'), radius_km: 45, risk_score: 0.9, affected_assets_count: 14, total_exposure: 28.5, cityId: 'losangeles' },
+        { id: 'zone-2', name: 'Forest Corridor (Zurich)', zone_level: 'high', ...cc('zurich'), radius_km: 50, risk_score: 0.72, affected_assets_count: 8, total_exposure: 12.3, cityId: 'zurich' },
+        { id: 'zone-3', name: 'Coastal Bushland (Sydney)', zone_level: 'medium', ...cc('sydney'), radius_km: 55, risk_score: 0.58, affected_assets_count: 10, total_exposure: 38.7, cityId: 'sydney' },
+        { id: 'zone-4', name: 'San Francisco Bay Hills', zone_level: 'high', ...cc('sanfrancisco'), radius_km: 40, risk_score: 0.78, affected_assets_count: 12, total_exposure: 48.5, cityId: 'sanfrancisco' },
+        { id: 'zone-5', name: 'Athens Forest Ring', zone_level: 'critical', ...cc('athens'), radius_km: 45, risk_score: 0.62, affected_assets_count: 8, total_exposure: 15.8, cityId: 'athens' },
+        { id: 'zone-6', name: 'Perth Bushfire Zone', zone_level: 'high', ...cc('perth'), radius_km: 50, risk_score: 0.52, affected_assets_count: 8, total_exposure: 25.8, cityId: 'perth' },
+        { id: 'zone-7', name: 'Cape Town Mountain Fire', zone_level: 'medium', ...cc('capetown'), radius_km: 45, risk_score: 0.58, affected_assets_count: 7, total_exposure: 18.5, cityId: 'capetown' },
       ],
     }
-    
-    const typeKey =
-      selectedStressTest.type === 'military' ? 'geopolitical'
-      : selectedStressTest.type === 'protest' ? 'civil_unrest'
-      : selectedStressTest.type
-    const baseZones = typeZonesBase[typeKey] ?? typeZonesBase.climate
-    
-    // Add assets to each zone
-    return baseZones.map(zone => ({
-      ...zone,
-      assets: generateZoneAssets(zone, zone.affected_assets_count || 8),
-    }))
-  }, [selectedStressTest, generateZoneAssets])
+    const baseZones = typeZonesBase[typeKey] ?? []
+    return baseZones.map(zone => {
+      const { cityId: _cityId, ...zoneRest } = zone
+      return {
+        ...zoneRest,
+        assets: generateZoneAssets(zone, zone.affected_assets_count || 8),
+      } as RiskZone
+    })
+  }, [selectedStressTest, generateZoneAssets, scenarioTypeToZoneCategory])
+
+  // Disaster viz center for flood/wind/metro/heat layers: use selected zone or first active zone; fallback NYC when no stress test
+  const disasterCenter = useMemo(() => {
+    if (activeRiskZones.length > 0) {
+      const zone = selectedZone && activeRiskZones.some(z => z.id === selectedZone.id) ? selectedZone : activeRiskZones[0]
+      return { lat: zone.center_latitude, lng: zone.center_longitude }
+    }
+    return { lat: 40.7128, lng: -74.0060 }
+  }, [activeRiskZones, selectedZone])
+
+  // For flood/sea_level stress tests: use scenario city when detectable so flood zone shows at the right city (e.g. San Francisco)
+  const floodCenter = useMemo(() => {
+    if (!showFloodLayer || !selectedStressTest) return disasterCenter
+    const t = (selectedStressTest.type || '').toLowerCase()
+    const id = (selectedStressTest.id || '').toLowerCase()
+    const name = (selectedStressTest.name || '').toLowerCase()
+    const isFloodRelated =
+      t.includes('flood') || t.includes('sea_level') || t.includes('tsunami') || t.includes('heavy_rain') ||
+      id.includes('flood') || id.includes('sea_level') || id.includes('sea-level') || id.includes('tsunami') ||
+      name.includes('flood') || name.includes('sea level') || name.includes('sea-level') || name.includes('water level')
+    if (!isFloodRelated) return disasterCenter
+    // Resolve city from scenario name or id (e.g. "San Francisco Sea Level 0.5m" -> sanfrancisco)
+    const normalizedName = (selectedStressTest.name?.trim() ?? '').toLowerCase()
+    const displayKey = Object.keys(CLIMATE_CITY_DISPLAY_TO_ID).find((k) => normalizedName.includes(k.toLowerCase()))
+    const cityIdFromDisplay = displayKey ? CLIMATE_CITY_DISPLAY_TO_ID[displayKey] : null
+    const cityIdFromId = selectedStressTest.id
+      ? (Object.keys(CITY_COORDINATES).find((cid) => (selectedStressTest.id ?? '').toLowerCase().includes(cid)) ?? null)
+      : null
+    const cityId = cityIdFromDisplay ?? cityIdFromId ?? (CITY_COORDINATES[selectedStressTest.id?.toLowerCase().replace(/\s+/g, '') ?? ''] ? selectedStressTest.id?.toLowerCase().replace(/\s+/g, '') : null)
+    if (cityId && CITY_COORDINATES[cityId]) {
+      return { lat: CITY_COORDINATES[cityId].lat, lng: CITY_COORDINATES[cityId].lng }
+    }
+    return disasterCenter
+  }, [showFloodLayer, selectedStressTest, disasterCenter])
+
+  const windCenter = disasterCenter
+  const metroCenter = disasterCenter
   
-  // Sample action plans for demo
-  const demoActionPlans = [
-    {
-      id: '1',
-      organizationType: 'developer',
-      actions: ['Review all projects within risk zone perimeter', 'Update construction insurance coverage', 'Develop site evacuation procedures'],
-      priority: 'high' as const,
-      timeline: '72h',
-      riskReduction: 0.3,
-      estimatedCost: 500000,
-    },
-    {
-      id: '2',
-      organizationType: 'insurer',
-      actions: ['Increase claims reserves allocation', 'Activate reinsurance treaties', 'Deploy damage assessment teams'],
-      priority: 'critical' as const,
-      timeline: '24h',
-      riskReduction: 0.25,
-    },
-    {
-      id: '3',
-      organizationType: 'bank',
-      actions: ['Review credit limits for borrowers in zone', 'Reassess collateral valuations', 'Prepare loan restructuring programs'],
-      priority: 'high' as const,
-      timeline: '1 week',
-      riskReduction: 0.2,
-    },
-    {
-      id: '4',
-      organizationType: 'enterprise',
-      actions: ['Activate business continuity plan', 'Secure critical equipment and assets', 'Establish backup communication channels'],
-      priority: 'high' as const,
-      timeline: 'immediate',
-      riskReduction: 0.35,
-    },
-    {
-      id: '5',
-      organizationType: 'military',
-      actions: ['Prepare civil support operations', 'Secure critical infrastructure perimeter', 'Coordinate with civilian emergency services'],
-      priority: 'high' as const,
-      timeline: '24h',
-      riskReduction: 0.15,
-    },
-  ]
-  
+  // Universal stress test action plan template (dateCreated refreshed when modal opens)
+  const actionPlanTemplate = useMemo(
+    () => ({
+      ...UNIVERSAL_ACTION_PLAN_TEMPLATE,
+      dateCreated: new Date().toISOString().slice(0, 10),
+    }),
+    [showActionPlans]
+  )
+
   // Handle entry animation complete
   const handleEntryComplete = useCallback(() => {
     setShowEntry(false)
@@ -2996,20 +3535,34 @@ export default function CommandCenter() {
   }, [])
   
   // WebSocket for real-time updates
-  const { status: wsStatus } = useSimulatedWebSocket((msg) => {
-    if (msg.type === 'risk_update') {
+  const { status: wsStatus } = useWebSocket({
+    url: '/api/v1/streaming/ws/stream',
+    onMessage: (msg) => {
+      if (msg.type !== 'risk_update') return
       const update = msg as RiskUpdate
-      setRecentAlerts(prev => [update, ...prev.slice(0, 2)])
-      
-      // Update portfolio if significant change - synced to Dashboard via store
+      setRecentAlerts((prev) => [update, ...prev.slice(0, 2)])
+
+      // Optional: light portfolio drift for UI feedback, based on real stream deltas
       if (Math.abs(update.risk_score - update.previous_score) > 0.05) {
         const currentWeightedRisk = store.portfolioConfirmed.weightedRisk
         store.updatePortfolio({
           weightedRisk: currentWeightedRisk + (update.risk_score - update.previous_score) * 0.1,
         })
       }
-    }
+    },
   })
+
+  // Recent Activity: log when Digital Twin is opened (once per open)
+  const prevTwinOpenRef = useRef(false)
+  useEffect(() => {
+    if (showDigitalTwin && !prevTwinOpenRef.current) {
+      prevTwinOpenRef.current = true
+      const name = focusedHotspot?.name || selectedZoneAsset?.name || 'Digital Twin'
+      const id = focusedHotspot?.id || selectedZoneAsset?.id || 'twin'
+      store.addEvent(createPlatformEvent(EventTypes.TWIN_OPENED, 'twin', id, { name }))
+    }
+    if (!showDigitalTwin) prevTwinOpenRef.current = false
+  }, [showDigitalTwin, focusedHotspot?.name, focusedHotspot?.id, selectedZoneAsset?.name, selectedZoneAsset?.id, store])
 
   // Load initial data
   useEffect(() => {
@@ -3150,6 +3703,7 @@ export default function CommandCenter() {
     if (data) {
       console.log('Found hotspot data:', data.name)
       setFocusedHotspot(data)
+      store.addEvent(createPlatformEvent(EventTypes.ZONE_SELECTED, 'zone', hotspotId, { name: data.name }))
     } else {
       console.log('Hotspot not found, using default')
       setFocusedHotspot({
@@ -3161,8 +3715,9 @@ export default function CommandCenter() {
         trend: 'up',
         factors: { climate: 0.5, credit: 0.5, operational: 0.5, geopolitical: 0.5, flood: 0.5, earthquake: 0.5, fire: 0.5, structural: 0.5 },
       })
+      store.addEvent(createPlatformEvent(EventTypes.ZONE_SELECTED, 'zone', hotspotId, { name: hotspotId }))
     }
-  }, [])
+  }, [store])
 
   // Handle scenario activation (keyboard shortcut in future)
   const activateScenario = useCallback((type: string, severity: number) => {
@@ -3175,18 +3730,35 @@ export default function CommandCenter() {
     setSelectedZone(null)
   }, [])
 
+  // Omniverse / E2CC: open launch URL; if localhost, user needs port-forward 8010 on their machine
+  const handleOmniverseOpen = useCallback(async (launchParams?: URLSearchParams) => {
+    try {
+      const statusRes = await fetch('/api/v1/omniverse/status')
+      const status = await statusRes.json()
+      const url = launchParams ? `/api/v1/omniverse/launch?${launchParams}` : '/api/v1/omniverse/launch'
+      const res = await fetch(url)
+      const data = await res.json()
+      if (data?.launch_url) {
+        window.open(data.launch_url, '_blank', 'noopener,noreferrer')
+        if (status?.e2cc_use_port_forward) {
+          console.info('E2CC: if tab is empty, on Mac run port-forward 8010: brev port-forward saaaliance → 8010, 8010')
+        }
+      }
+    } catch (e) {
+      console.warn('Omniverse launch failed:', e)
+    }
+  }, [])
+
   // Track if user manually deselected zone (to prevent auto-zoom loop)
   const userDeselectedZoneRef = useRef(false)
   
   // Stress test selection is handled via Digital Twin panel
   
-  // Auto-zoom to first zone ONLY when stress test is first selected
+  // Auto-zoom to first zone when a stress test is selected (so globe zooms to a zone with entities).
+  // Zones are generated from scenario type: climate → Rhine/North Sea/Po; financial → Frankfurt/London/Paris;
+  // regulatory → Banking Sector/Insurance Hub; geopolitical → Eastern Border/Baltic; etc.
+  // If user had previously deselected a zone, we still allow zoom on next scenario pick by resetting the ref when scenario changes (see onSelect below).
   useEffect(() => {
-    // Only auto-zoom if:
-    // 1. We have zones
-    // 2. Stress test is selected
-    // 3. No zone is selected
-    // 4. User didn't manually deselect
     if (activeRiskZones.length > 0 && selectedStressTest && !selectedZone && !userDeselectedZoneRef.current) {
       const timer = setTimeout(() => {
         setSelectedZone(activeRiskZones[0])
@@ -3194,7 +3766,7 @@ export default function CommandCenter() {
       }, 300)
       return () => clearTimeout(timer)
     }
-  }, [activeRiskZones, selectedStressTest]) // Removed selectedZone from deps!
+  }, [activeRiskZones, selectedStressTest])
 
   // Ensure main container can receive focus for keyboard events
   const containerRef = useRef<HTMLDivElement>(null)
@@ -3221,6 +3793,62 @@ export default function CommandCenter() {
       .catch(() => {})
   }, [])
 
+  // Fetch high-fidelity scenario IDs (WRF/ADCIRC) for disaster layer source option
+  useEffect(() => {
+    fetch(`${API_BASE}/climate/high-fidelity/scenarios`)
+      .then((r) => (r.ok ? r.json() : { scenario_ids: [] }))
+      .then((data: { scenario_ids?: string[] }) => {
+        const ids = data?.scenario_ids ?? []
+        setHighFidelityScenarioIds(ids)
+        // Clear selection if current value is not in the list (avoids "ghost" value / dash in select)
+        setHighFidelityScenarioId((prev) => (prev && ids.length && ids.includes(prev) ? prev : null))
+      })
+      .catch(() => {})
+  }, [])
+
+  // Fetch GPU / NIM / Omniverse / DFM status for bottom bar
+  useEffect(() => {
+    Promise.all([
+      fetch(`${API_BASE}/nvidia/nim/health`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch(`${API_BASE}/data-federation/status`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch(`${API_BASE}/omniverse/status`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+    ]).then(([nim, dfm, omni]) => {
+      setNimHealth(nim)
+      setDfmStatus(dfm)
+      setOmniverseStatus(omni)
+    })
+  }, [])
+
+  // Run weather_forecast pipeline (FourCastNet NIM) for visibility
+  const handleTestWeatherNim = useCallback(async () => {
+    setWeatherTestLoading(true)
+    setWeatherTestResult(null)
+    try {
+      const res = await fetch(`${API_BASE}/data-federation/pipelines/weather_forecast/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          region: { lat: 25.76, lon: -80.19, radius_km: 100 },
+          time_range: { days_back: 0 },
+          options: { simulation_length: 4 },
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setWeatherTestResult(`Error: ${data?.detail || res.status}`)
+        return
+      }
+      const steps = data?.artifacts?.forecast?.forecasts?.length ?? data?.meta?.steps ?? 0
+      setWeatherTestResult(steps ? `${steps} steps from FourCastNet NIM ✓` : 'No forecast data')
+      setTimeout(() => setWeatherTestResult(null), 6000)
+    } catch (e) {
+      setWeatherTestResult(`Failed: ${e instanceof Error ? e.message : 'network'}`)
+      setTimeout(() => setWeatherTestResult(null), 5000)
+    } finally {
+      setWeatherTestLoading(false)
+    }
+  }, [])
+
   return (
     <div 
       ref={containerRef}
@@ -3243,15 +3871,25 @@ export default function CommandCenter() {
       {/* ============================================ */}
       {/* SCENE LAYER - Full screen, Earth dominates */}
       {/* Paused when Digital Twin is open to prevent WebGL context conflicts */}
+      {/* Animates to left 40% when Command Mode is active */}
       {/* ============================================ */}
-      <div className={`absolute inset-0 transition-opacity duration-300 ${showDigitalTwin ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+      <motion.div 
+        className={`absolute top-0 left-0 transition-opacity duration-300 ${
+          showDigitalTwin ? 'opacity-0 pointer-events-none' : 'opacity-100'
+        } ${commandMode ? 'overflow-hidden rounded-2xl border border-white/10 shadow-2xl bg-black/30' : ''}`}
+        animate={{
+          width: commandMode ? '40%' : '100%',
+          height: commandMode ? '55%' : '100%',
+        }}
+        transition={{ duration: 0.5, ease: 'easeInOut' }}
+      >
         <CesiumGlobe 
           onAssetSelect={handleHotspotFocus}
-          selectedAsset={focusedHotspot?.id || null}
+          selectedAsset={flyToHotspotId}
           scenario={activeScenario?.type}
           resetViewTrigger={resetViewTrigger}
           onHotspotsLoaded={(spots) => setAvailableZones(spots.map(s => ({ id: s.id, name: s.name, risk: s.risk })))}
-          riskZones={[]}
+          riskZones={activeRiskZones}
           selectedZone={selectedZone}
           onZoneClick={(zone) => {
             if (zone) {
@@ -3259,6 +3897,8 @@ export default function CommandCenter() {
               setSelectedZone(zone)
             }
           }}
+          showDependencies={showDependencies}
+          selectedZoneForDependencies={dependencyZoneId}
           onZoneAssetClick={(asset) => {
             if (asset) {
               console.log('Asset clicked:', asset.name, '- opening Digital Twin with OSM Buildings')
@@ -3269,8 +3909,77 @@ export default function CommandCenter() {
           }}
           paused={showDigitalTwin}
           activeRiskFilter={expandedRiskLevel ?? 'critical'}
+          showFloodLayer={showFloodLayer}
+          floodCenter={floodCenter}
+          floodDepthOverride={floodDepthOverride}
+          showWindLayer={showWindLayer}
+          windCenter={windCenter}
+          showMetroFloodLayer={showMetroFloodLayer}
+          metroCenter={metroCenter}
+          showHeatLayer={showHeatLayer}
+          showHeavyRainLayer={showHeavyRainLayer}
+          showDroughtLayer={showDroughtLayer}
+          showUvLayer={showUvLayer}
+          anomalyCenter={floodCenter}
+          highFidelityFloodScenarioId={highFidelityScenarioId}
+          highFidelityWindScenarioId={highFidelityScenarioId}
+          showGoogle3dLayer={showGoogle3dLayer}
+          onClimateZoneDoubleClick={(info) => {
+            const cityId = CLIMATE_CITY_DISPLAY_TO_ID[info.cityName] ?? info.cityName.toLowerCase().replace(/\s+/g, '')
+            const coords = CITY_COORDINATES[cityId]
+            const hotspotData = HOTSPOT_DATA[cityId]
+            const hotspot: FocusedHotspot = hotspotData ?? {
+              id: cityId,
+              name: info.cityName,
+              region: '',
+              risk: coords?.risk ?? 0.5,
+              exposure: coords?.exposure ?? 10,
+              trend: 'up',
+              factors: {
+                climate: 0.5,
+                credit: 0.5,
+                operational: 0.5,
+                geopolitical: 0.5,
+                flood: 0.5,
+                earthquake: 0.5,
+                fire: 0.5,
+                structural: 0.5,
+              },
+            }
+            setFocusedHotspot(hotspot)
+            store.addEvent(createPlatformEvent(EventTypes.ZONE_SELECTED, 'zone', cityId, { name: info.cityName }))
+            // Set dynamicAsset with coordinates so Digital Twin uses correct city location (not NYC fallback)
+            const lat = coords?.lat ?? info.lat
+            const lng = coords?.lng ?? info.lng
+            setSelectedZoneAsset({
+              id: cityId,
+              name: info.cityName,
+              type: 'city',
+              latitude: lat,
+              longitude: lng,
+              exposure: coords?.exposure ?? 10,
+              impactSeverity: coords?.risk ?? 0.5,
+            })
+            setShowDigitalTwin(true)
+          }}
+          focusCoordinates={focusCoordinatesForGlobe}
         />
-      </div>
+      </motion.div>
+      
+      {/* ============================================ */}
+      {/* COMMAND MODE PANEL - Shows when toggled */}
+      {/* 4-panel grid with live stress test data */}
+      {/* ============================================ */}
+      <AnimatePresence>
+        {commandMode && !showDigitalTwin && (
+          <CommandModePanel
+            stressTest={store.activeStressTest}
+            selectedZone={selectedZone}
+            portfolio={portfolio}
+            onClose={toggleCommandMode}
+          />
+        )}
+      </AnimatePresence>
 
       {/* ============================================ */}
       {/* UI LAYER - HUD overlay, minimal, no frames */}
@@ -3278,15 +3987,73 @@ export default function CommandCenter() {
       <AnimatePresence>
         {isSceneReady && entryComplete && (
           <>
-            {/* TOP RIGHT - Quick Navigation */}
+            {/* TOP RIGHT - Disaster viz under Settings: icons only, aligned, a bit lower */}
+            {/* TOP RIGHT - Unified panel: layer checkboxes (when !commandMode) + quick nav icons, one style */}
             <motion.div 
-              className="absolute top-6 right-8 pointer-events-auto z-50 flex items-center gap-3"
+              className="absolute top-6 right-8 pointer-events-auto z-50"
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.5 }}
             >
-              {/* Navigation Links */}
-              <div className="flex items-center gap-2 bg-black/40 backdrop-blur-sm rounded-full px-2 py-1.5 border border-white/10">
+              <div className="flex items-center gap-2 flex-wrap rounded-full bg-black/50 backdrop-blur-sm border border-white/10 px-2.5 py-1.5">
+                {!commandMode && (
+                  <>
+                    <select
+                      value={highFidelityScenarioId ?? ''}
+                      onChange={(e) => setHighFidelityScenarioId(e.target.value || null)}
+                      className="rounded border border-slate-600 bg-slate-900/95 text-slate-300 text-[10px] py-1 px-1.5 focus:ring-white/30 max-w-[140px]"
+                      title="Flood/Wind: Open-Meteo or High-Fidelity"
+                    >
+                      <option value="">Open-Meteo (live)</option>
+                      {highFidelityScenarioIds.map((id) => (
+                        <option key={id} value={id}>
+                          {id === 'wrf_nyc_001' ? 'High-Fidelity: wrf_nyc_001' : `High-Fidelity: ${id}`}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="w-px h-4 bg-white/20" aria-hidden />
+                    <label className="flex items-center gap-1.5 cursor-pointer group" title="Google Photorealistic 3D">
+                      <input type="checkbox" checked={showGoogle3dLayer} onChange={(e) => setShowGoogle3dLayer(e.target.checked)} className="rounded border-slate-500 bg-slate-900/95 text-white/90 focus:ring-white/30 flex-shrink-0 accent-slate-400 w-3.5 h-3.5" />
+                      <span className="w-4 h-4 flex-shrink-0 text-slate-400 group-hover:text-white/80" aria-hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-full h-full"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer group" title="Flood">
+                      <input type="checkbox" checked={showFloodLayer} onChange={(e) => setShowFloodLayer(e.target.checked)} className="rounded border-slate-500 bg-slate-900/95 text-white/90 focus:ring-white/30 flex-shrink-0 accent-slate-400 w-3.5 h-3.5" />
+                      <span className="w-4 h-4 flex-shrink-0 text-slate-400 group-hover:text-white/80" aria-hidden><svg viewBox="0 0 24 24" fill="currentColor" className="w-full h-full"><path d="M12 2C8 6 4 8 4 12c0 3.3 2.7 6 6 6s6-2.7 6-6c0-4-4-6-8-10zm0 14c-1.1 0-2-.9-2-2 0-.7.4-1.4 1-1.7V12h2v2.3c.6.3 1 1 1 1.7 0 1.1-.9 2-2 2z"/></svg></span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer group" title="Wind">
+                      <input type="checkbox" checked={showWindLayer} onChange={(e) => setShowWindLayer(e.target.checked)} className="rounded border-slate-500 bg-slate-900/95 text-white/90 focus:ring-white/30 flex-shrink-0 accent-slate-400 w-3.5 h-3.5" />
+                      <span className="w-4 h-4 flex-shrink-0 text-slate-400 group-hover:text-white/80" aria-hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-full h-full"><path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2 2 0 1 1 19 4H2m0 14h8a2 2 0 1 1 0 4H2"/></svg></span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer group" title="Metro flood">
+                      <input type="checkbox" checked={showMetroFloodLayer} onChange={(e) => setShowMetroFloodLayer(e.target.checked)} className="rounded border-slate-500 bg-slate-900/95 text-white/90 focus:ring-white/30 flex-shrink-0 accent-slate-400 w-3.5 h-3.5" />
+                      <span className="w-4 h-4 flex-shrink-0 text-slate-400 group-hover:text-white/80" aria-hidden><svg viewBox="0 0 24 24" fill="currentColor" className="w-full h-full"><path d="M4 6h16v10H4V6zm2 2v6h3V8H6zm5 0v6h2V8h-2zm5 0v6h3V8h-3zM5 18h14v2H5v-2z"/></svg></span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer group" title="Heat stress">
+                      <input type="checkbox" checked={showHeatLayer} onChange={(e) => setShowHeatLayer(e.target.checked)} className="rounded border-slate-500 bg-slate-900/95 text-white/90 focus:ring-white/30 flex-shrink-0 accent-slate-400 w-3.5 h-3.5" />
+                      <span className="w-4 h-4 flex-shrink-0 text-slate-400 group-hover:text-white/80" aria-hidden><svg viewBox="0 0 24 24" fill="currentColor" className="w-full h-full"><path d="M6.76 4.84l-1.8-1.79-1.41 1.41 1.79 1.79 1.42-1.41zM4 10.5H1v2h3v-2zm9-11.19h2V3.5h-2V-.69zM20 10.5v2h3v-2h-3zm-8-5c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm0 10c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4zm-1-9h2V7h-2V6.5zm1.09 7.5c.46 0 .84-.37.84-.84 0-.46-.38-.84-.84-.84-.46 0-.84.38-.84.84 0 .47.38.84.84.84z"/></svg></span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer group" title="Heavy rain">
+                      <input type="checkbox" checked={showHeavyRainLayer} onChange={(e) => setShowHeavyRainLayer(e.target.checked)} className="rounded border-slate-500 bg-slate-900/95 text-white/90 focus:ring-white/30 flex-shrink-0 accent-slate-400 w-3.5 h-3.5" />
+                      <span className="w-4 h-4 flex-shrink-0 text-slate-400 group-hover:text-white/80" aria-hidden><svg viewBox="0 0 24 24" fill="currentColor" className="w-full h-full"><path d="M6.5 10c-.22 0-.4.18-.4.4v.2c0 .22.18.4.4.4h.01c.22 0 .4-.18.4-.4v-.2c-.01-.22-.19-.4-.4-.4z"/><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/></svg></span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer group" title="Drought">
+                      <input type="checkbox" checked={showDroughtLayer} onChange={(e) => setShowDroughtLayer(e.target.checked)} className="rounded border-slate-500 bg-slate-900/95 text-white/90 focus:ring-white/30 flex-shrink-0 accent-slate-400 w-3.5 h-3.5" />
+                      <span className="w-4 h-4 flex-shrink-0 text-slate-400 group-hover:text-white/80" aria-hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-full h-full"><path d="M12 3v18M5 8h4l2 4 2-4h4M4 14h3l2 4 2-4h5M8 20h2M14 20h2"/></svg></span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer group" title="UV index">
+                      <input type="checkbox" checked={showUvLayer} onChange={(e) => setShowUvLayer(e.target.checked)} className="rounded border-slate-500 bg-slate-900/95 text-white/90 focus:ring-white/30 flex-shrink-0 accent-slate-400 w-3.5 h-3.5" />
+                      <span className="w-4 h-4 flex-shrink-0 text-slate-400 group-hover:text-white/80" aria-hidden><svg viewBox="0 0 24 24" fill="currentColor" className="w-full h-full"><path d="M6.76 4.84l-1.8-1.79-1.41 1.41 1.79 1.79 1.42-1.41zM1 10.5h3v2H1v-2zm9-9.19h2V3.5h-2V1.31zM20 10.5v2h3v-2h-3zm-9 4.69h2v2.19h-2V15.19zM12 5.5c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm0 10c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4zm-1-4h2v2h-2v-2z"/></svg></span>
+                    </label>
+                    {showFloodLayer && (
+                      <div className="flex items-center gap-1">
+                        {FLOOD_LEVELS_M.map((m) => (
+                          <button key={m} type="button" onClick={() => setFloodDepthOverride(m)} className={`px-1.5 py-0.5 rounded text-[10px] transition-colors ${floodDepthOverride === m ? 'bg-slate-600 text-white border border-slate-500' : 'bg-slate-900/90 text-slate-400 hover:text-white/80 border border-slate-600'}`} title={`Water ${m} m`}>{m}</button>
+                        ))}
+                      </div>
+                    )}
+                    <span className="w-px h-4 bg-white/20" aria-hidden />
+                  </>
+                )}
                 <Link 
                   to="/dashboard"
                   className="p-2 rounded-full text-white/50 hover:text-white hover:bg-white/10 transition-all"
@@ -3309,11 +4076,78 @@ export default function CommandCenter() {
                   <Square3Stack3DIcon className="w-4 h-4" />
                 </Link>
                 <Link 
+                  to="/analytics"
+                  className="p-2 rounded-full text-white/50 hover:text-white hover:bg-white/10 transition-all"
+                  title="Advanced Analytics"
+                >
+                  <CpuChipIcon className="w-4 h-4" />
+                </Link>
+                <Link 
                   to="/visualizations"
                   className="p-2 rounded-full text-white/50 hover:text-white hover:bg-white/10 transition-all"
                   title="Visualizations & Risk Flow"
                 >
                   <ChartBarIcon className="w-4 h-4" />
+                </Link>
+                <div className="w-px h-4 bg-white/20" /> {/* Divider */}
+                <Link 
+                  to="/projects"
+                  className="p-2 rounded-full text-white/50 hover:text-amber-400 hover:bg-amber-500/20 transition-all"
+                  title="Project Finance"
+                >
+                  <BriefcaseIcon className="w-4 h-4" />
+                </Link>
+                <Link 
+                  to="/portfolios"
+                  className="p-2 rounded-full text-white/50 hover:text-green-400 hover:bg-green-500/20 transition-all"
+                  title="Portfolios & REIT"
+                >
+                  <BanknotesIcon className="w-4 h-4" />
+                </Link>
+                <Link 
+                  to="/fraud"
+                  className="p-2 rounded-full text-white/50 hover:text-red-400 hover:bg-red-500/20 transition-all"
+                  title="Fraud Detection"
+                >
+                  <ShieldExclamationIcon className="w-4 h-4" />
+                </Link>
+                <div className="w-px h-4 bg-white/20" /> {/* Divider */}
+                <Link 
+                  to="/agents"
+                  className="p-2 rounded-full text-white/50 hover:text-purple-400 hover:bg-purple-500/20 transition-all"
+                  title="AI Agents Monitoring (NeMo)"
+                >
+                  <SparklesIcon className="w-4 h-4" />
+                </Link>
+                <div className="w-px h-4 bg-white/20" /> {/* Divider */}
+                <Link 
+                  to="/risk-zones-analysis"
+                  className="p-2 rounded-full text-white/50 hover:text-cyan-400 hover:bg-cyan-500/20 transition-all"
+                  title="Risk Zones Dependencies Analysis"
+                >
+                  <LinkIcon className="w-4 h-4" />
+                </Link>
+                <div className="w-px h-4 bg-white/20" /> {/* Divider */}
+                <Link 
+                  to="/action-plans"
+                  className="p-2 rounded-full text-white/50 hover:text-amber-400 hover:bg-amber-500/20 transition-all"
+                  title="Detailed sector plans"
+                >
+                  <DocumentTextIcon className="w-4 h-4" />
+                </Link>
+                <Link 
+                  to="/stress-planner"
+                  className="p-2 rounded-full text-white/50 hover:text-amber-400 hover:bg-amber-500/20 transition-all"
+                  title="Interactive Stress Planner"
+                >
+                  <BeakerIcon className="w-4 h-4" />
+                </Link>
+                <Link 
+                  to="/bcp-generator"
+                  className="p-2 rounded-full text-white/50 hover:text-amber-400 hover:bg-amber-500/20 transition-all"
+                  title="BCP Generator"
+                >
+                  <ClipboardDocumentListIcon className="w-4 h-4" />
                 </Link>
                 <Link 
                   to="/settings"
@@ -3325,39 +4159,86 @@ export default function CommandCenter() {
               </div>
             </motion.div>
             
-            {/* TOP LEFT - Core Metrics (HUD style, clickable) */}
-            <motion.div 
-              className="absolute top-8 left-8 pointer-events-auto"
-              initial={{ opacity: 0, x: -30 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.8, delay: 0.3 }}
-            >
-              {/* Total Exposure */}
-              <div className="mb-4">
+            {/* TOP LEFT - Institutional KPIs (Board-level, € denominated) */}
+            {!commandMode && (
+              <motion.div 
+                className="absolute top-8 left-8 pointer-events-auto"
+                initial={{ opacity: 0, x: -30 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.8, delay: 0.3 }}
+              >
+              {/* GLOBAL RISK POSTURE - Hero metric */}
+              <div className="mb-5">
                 <div className="text-white/30 text-[10px] uppercase tracking-[0.2em] mb-1">
-                  Total Exposure
+                  Global Risk Posture
                 </div>
-                <div className="text-white text-3xl font-extralight tracking-tight">
-                  ${formatBillions(portfolio.totalExposure)}
+                <div className={`text-2xl font-bold tracking-wide ${getRiskPosture(portfolio.weightedRisk).color}`}>
+                  {getRiskPosture(portfolio.weightedRisk).level} {getRiskPosture(portfolio.weightedRisk).arrow}
                 </div>
               </div>
               
-              {/* At Risk */}
+              {/* Capital at Risk (30d) */}
               <div className="mb-4">
-                <div className="text-white/30 text-[10px] uppercase tracking-[0.2em] mb-1">
-                  At Risk
+                <div
+                  className="relative"
+                  onMouseEnter={() => setMetricTooltip('exposure')}
+                  onMouseLeave={() => setMetricTooltip(null)}
+                >
+                  <div className="text-white/30 text-[10px] uppercase tracking-[0.2em] mb-1 flex items-center gap-1">
+                    Capital at Risk (30d)
+                    <InformationCircleIcon className="w-3 h-3 text-white/20 flex-shrink-0" />
+                  </div>
+                  {metricTooltip === 'exposure' && (
+                    <div className="absolute left-0 bottom-full mb-1 z-[100] min-w-[240px] max-w-[300px] px-3 py-2 rounded-lg bg-slate-900/95 border border-white/15 text-white/90 text-xs shadow-xl pointer-events-auto">
+                      30-day Capital at Risk (CaR). Based on simulated loss scenarios across all monitored assets.
+                    </div>
+                  )}
+                </div>
+                <div className="text-white text-3xl font-extralight tracking-tight">
+                  €{Math.round(portfolio.atRisk || 420)}M
+                  <span className="text-red-400/70 text-sm ml-2">+€65M WoW</span>
+                </div>
+              </div>
+              
+              {/* Stress Loss P95 */}
+              <div className="mb-4">
+                <div
+                  className="relative"
+                  onMouseEnter={() => setMetricTooltip('atRisk')}
+                  onMouseLeave={() => setMetricTooltip(null)}
+                >
+                  <div className="text-white/30 text-[10px] uppercase tracking-[0.2em] mb-1 flex items-center gap-1">
+                    Stress Loss (P95)
+                    <InformationCircleIcon className="w-3 h-3 text-white/20 flex-shrink-0" />
+                  </div>
+                  {metricTooltip === 'atRisk' && (
+                    <div className="absolute left-0 bottom-full mb-1 z-[100] min-w-[240px] max-w-[300px] px-3 py-2 rounded-lg bg-slate-900/95 border border-white/15 text-white/90 text-xs shadow-xl pointer-events-auto">
+                      95th percentile loss under severe but plausible scenarios. Used for capital allocation decisions.
+                    </div>
+                  )}
                 </div>
                 <div className={`text-2xl font-extralight ${getRiskColor(portfolio.weightedRisk)}`}>
-                  ${formatBillions(portfolio.atRisk)}
-                  <span className="text-white/30 text-sm ml-2">
-                    ({(portfolio.atRisk / portfolio.totalExposure * 100).toFixed(1)}%)
-                  </span>
+                  €{Math.round((portfolio.atRisk || 420) * 0.75)}M
+                  <span className="text-orange-400/70 text-sm ml-2">+11%</span>
+                </div>
+              </div>
+              
+              {/* Risk Velocity */}
+              <div className="mb-4">
+                <div className="text-white/30 text-[10px] uppercase tracking-[0.2em] mb-1">
+                  Risk Velocity
+                </div>
+                <div className={`text-xl font-extralight ${portfolio.weightedRisk > 0.5 ? 'text-red-400' : 'text-emerald-400'}`}>
+                  {portfolio.weightedRisk > 0.5 ? '+22%' : '-5%'}
+                  <span className="text-white/30 text-sm ml-2">MoM</span>
                 </div>
               </div>
               
               {/* Risk Level Indicators - Clickable */}
-              <div className="text-white/30 text-[10px] uppercase tracking-[0.2em] mb-2">
-                Risk Zones
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-white/30 text-[10px] uppercase tracking-[0.2em]">
+                  Risk Zones
+                </div>
               </div>
               <div className="space-y-1.5">
                 {/* Critical */}
@@ -3368,7 +4249,11 @@ export default function CommandCenter() {
                   zones={availableZones.filter(z => z.risk > 0.8)}
                   isExpanded={expandedRiskLevel === 'critical'}
                   onToggle={() => setExpandedRiskLevel(expandedRiskLevel === 'critical' ? null : 'critical')}
-                  onZoneClick={(id) => { handleHotspotFocus(id); setExpandedRiskLevel(null); }}
+                  onZoneClick={(id) => { handleHotspotFocus(id) }}
+                  onZoneLinksClick={(id) => {
+                    handleHotspotFocus(id)
+                    setDependencyZoneId((prev) => (prev === id ? null : id))
+                  }}
                   onHistoricalSelect={(eventId) => {
                     setSelectedHistoricalEvent(eventId)
                     setShowHistoricalPanel(true)
@@ -3409,7 +4294,11 @@ export default function CommandCenter() {
                   zones={availableZones.filter(z => z.risk > 0.6 && z.risk <= 0.8)}
                   isExpanded={expandedRiskLevel === 'high'}
                   onToggle={() => setExpandedRiskLevel(expandedRiskLevel === 'high' ? null : 'high')}
-                  onZoneClick={(id) => { handleHotspotFocus(id); setExpandedRiskLevel(null); }}
+                  onZoneClick={(id) => { handleHotspotFocus(id) }}
+                  onZoneLinksClick={(id) => {
+                    handleHotspotFocus(id)
+                    setDependencyZoneId((prev) => (prev === id ? null : id))
+                  }}
                   onHistoricalSelect={(eventId) => {
                     setSelectedHistoricalEvent(eventId)
                     setShowHistoricalPanel(true)
@@ -3446,7 +4335,11 @@ export default function CommandCenter() {
                   zones={availableZones.filter(z => z.risk > 0.4 && z.risk <= 0.6)}
                   isExpanded={expandedRiskLevel === 'medium'}
                   onToggle={() => setExpandedRiskLevel(expandedRiskLevel === 'medium' ? null : 'medium')}
-                  onZoneClick={(id) => { handleHotspotFocus(id); setExpandedRiskLevel(null); }}
+                  onZoneClick={(id) => { handleHotspotFocus(id) }}
+                  onZoneLinksClick={(id) => {
+                    handleHotspotFocus(id)
+                    setDependencyZoneId((prev) => (prev === id ? null : id))
+                  }}
                   onHistoricalSelect={(eventId) => {
                     setSelectedHistoricalEvent(eventId)
                     setShowHistoricalPanel(true)
@@ -3483,7 +4376,11 @@ export default function CommandCenter() {
                   zones={availableZones.filter(z => z.risk <= 0.4)}
                   isExpanded={expandedRiskLevel === 'low'}
                   onToggle={() => setExpandedRiskLevel(expandedRiskLevel === 'low' ? null : 'low')}
-                  onZoneClick={(id) => { handleHotspotFocus(id); setExpandedRiskLevel(null); }}
+                  onZoneClick={(id) => { handleHotspotFocus(id) }}
+                  onZoneLinksClick={(id) => {
+                    handleHotspotFocus(id)
+                    setDependencyZoneId((prev) => (prev === id ? null : id))
+                  }}
                   onHistoricalSelect={(eventId) => {
                     setSelectedHistoricalEvent(eventId)
                     setShowHistoricalPanel(true)
@@ -3515,373 +4412,287 @@ export default function CommandCenter() {
               </div>
 
               {/* Stress Lab removed - integrated into Risk Zones */}
-            </motion.div>
+              </motion.div>
+            )}
 
-            {/* TOP RIGHT - Stress Test Results Panel (when active) */}
+            {/* TOP RIGHT - Unified Stress Test + Zone Panel (single panel when stress test active) */}
             <AnimatePresence>
-              {activeScenario && (
-                <motion.div 
-                  className="absolute top-8 right-8 pointer-events-auto w-72"
+              {activeScenario && !commandMode && (
+                <motion.div
+                  className="absolute top-8 right-8 pointer-events-auto"
                   initial={{ opacity: 0, x: 50, scale: 0.95 }}
                   animate={{ opacity: 1, x: 0, scale: 1 }}
                   exit={{ opacity: 0, x: 50, scale: 0.95 }}
                   transition={{ duration: 0.4 }}
                 >
-                  <div className="bg-black/70 backdrop-blur-xl border border-red-500/10 rounded-xl overflow-hidden">
-                    {/* Header */}
-                    <div className="px-4 py-3 bg-red-500/5 border-b border-red-500/10 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-red-400/60 animate-pulse" />
-                        <span className="text-red-300 text-xs uppercase tracking-wider font-medium">
-                          Stress Test Active
-                        </span>
-                      </div>
-                      <button
-                        onClick={deactivateScenario}
-                        className="text-white/40 hover:text-white transition-colors"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </div>
-                    
-                    {/* Scenario Info */}
-                    <div className="px-4 py-3 border-b border-white/5">
-                      <div className="text-white text-sm font-medium mb-1">
-                        {activeScenario.type}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 h-1.5 bg-amber-500/15 rounded-full overflow-hidden">
-                          <motion.div 
-                            className="h-full bg-amber-400/65 rounded-full"
-                            initial={{ width: 0 }}
-                            animate={{ width: `${activeScenario.severity * 100}%` }}
-                            transition={{ duration: 0.6 }}
-                          />
-                        </div>
-                        <span className="text-white/60 text-xs font-mono">
-                          {(activeScenario.severity * 100).toFixed(0)}%
-                        </span>
-                      </div>
-                    </div>
-                    
-                    {/* Stress Results - Monte Carlo Risk Metrics */}
-                    <div className="p-4 space-y-3">
-                      {/* VaR 99% - Monte Carlo */}
-                      <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-white/50 text-xs">VaR 99%</span>
-                          <span className="text-[8px] text-amber-300/40 bg-amber-500/5 px-1 rounded">MC</span>
-                        </div>
-                        <motion.span 
-                          className="text-red-300 font-mono text-sm"
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          transition={{ delay: 0.2 }}
-                        >
-                          ${(portfolio.atRisk * activeScenario.severity * 0.15).toFixed(1)}B
-                        </motion.span>
-                      </div>
-                      
-                      {/* Expected Shortfall (CVaR) */}
-                      <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-white/50 text-xs">ES (CVaR)</span>
-                          <span className="text-[8px] text-amber-300/40 bg-amber-500/5 px-1 rounded">Copula</span>
-                        </div>
-                        <motion.span 
-                          className="text-orange-300 font-mono text-sm"
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          transition={{ delay: 0.3 }}
-                        >
-                          ${(portfolio.atRisk * activeScenario.severity * 0.22).toFixed(1)}B
-                        </motion.span>
-                      </div>
-                      
-                      {/* Max Loss */}
-                      <div className="flex justify-between items-center">
-                        <span className="text-white/50 text-xs">Max Drawdown</span>
-                        <motion.span 
-                          className="text-red-300 font-mono text-sm"
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          transition={{ delay: 0.4 }}
-                        >
-                          ${(portfolio.atRisk * activeScenario.severity * 0.35).toFixed(1)}B
-                        </motion.span>
-                      </div>
-                      
-                      {/* Affected Assets */}
-                      <div className="flex justify-between items-center pt-2 border-t border-white/5">
-                        <span className="text-white/50 text-xs">Affected Zones</span>
-                        <motion.span 
-                          className="text-amber-300 font-mono text-sm"
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          transition={{ delay: 0.5 }}
-                        >
-                          {Math.ceil(portfolio.criticalCount * (1 + activeScenario.severity))}
-                        </motion.span>
-                      </div>
-                      
-                      {/* Recovery Time */}
-                      <div className="flex justify-between items-center">
-                        <span className="text-white/50 text-xs">Est. Recovery</span>
-                        <motion.span 
-                          className="text-amber-300 font-mono text-sm"
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          transition={{ delay: 0.6 }}
-                        >
-                          {(1.5 + activeScenario.severity * 3).toFixed(1)} yrs
-                        </motion.span>
-                      </div>
-                    </div>
-                    
-                    {/* Risk Flow Mini */}
-                    <div className="px-3 py-2 border-t border-white/5">
-                      <div className="text-white/40 text-[10px] uppercase tracking-wider mb-1">Impact Flow</div>
-                      <RiskFlowMini 
-                        riskZones={availableZones.slice(0, 4).map(z => ({
-                          name: z.name,
-                          risk: z.risk,
-                          exposure: 10 + z.risk * 40,
-                        }))}
-                        height={120}
-                      />
-                    </div>
-                    
-                    {/* Simulation Info - Monte Carlo Details */}
-                    <div className="px-3 py-2 bg-amber-500/5 border-t border-amber-500/10">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-white/40 text-[10px] uppercase tracking-wider">Monte Carlo Engine</span>
-                        <div className="flex items-center gap-1">
-                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                          <span className="text-emerald-400/70 text-[9px]">Active</span>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 text-[10px]">
-                        <div className="flex justify-between">
-                          <span className="text-white/40">Simulations</span>
-                          <span className="text-white/60 font-mono">10,000</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-white/40">Copula</span>
-                          <span className="text-amber-400/70 font-mono">Gaussian</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-white/40">Confidence</span>
-                          <span className="text-white/60 font-mono">99%</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-white/40">Engine</span>
-                          <span className="text-amber-400/70 font-mono">NumPy</span>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {/* Action Buttons */}
-                    <div className="p-3 border-t border-white/5 space-y-2">
-                      <button
-                        onClick={() => setShowActionPlans(true)}
-                        className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 transition-all text-xs text-amber-400 hover:text-amber-300"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                        </svg>
-                        View Action Plans
-                      </button>
-                      <button
-                        onClick={async () => {
-                          setIsExportingPdf(true)
-                          try {
-                            const stressTestData = {
-                              name: activeScenario.type,
-                              type: 'climate',
-                              scenario_name: activeScenario.type,
-                              severity: activeScenario.severity,
-                              nvidia_enhanced: true,
-                            }
-                            const zones = [
-                              { name: 'Critical Zone', zone_level: 'critical', expected_loss: portfolio.atRisk * 0.4, affected_assets_count: portfolio.criticalCount, population_affected: 50000 },
-                              { name: 'High Risk Zone', zone_level: 'high', expected_loss: portfolio.atRisk * 0.3, affected_assets_count: portfolio.highCount, population_affected: 30000 },
-                              { name: 'Medium Risk Zone', zone_level: 'medium', expected_loss: portfolio.atRisk * 0.2, affected_assets_count: portfolio.mediumCount, population_affected: 15000 },
-                            ]
-                            await exportStressTestPdf(stressTestData, zones)
-                            console.log('✅ PDF exported successfully')
-                          } catch (error) {
-                            console.error('❌ PDF export failed:', error)
-                          } finally {
-                            setIsExportingPdf(false)
-                          }
-                        }}
-                        disabled={isExportingPdf}
-                        className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border transition-all text-xs ${
-                          isExportingPdf 
-                            ? 'bg-white/5 border-white/10 text-white/40 cursor-not-allowed'
-                            : 'bg-white/5 hover:bg-white/10 border-white/10 text-white/60 hover:text-white'
-                        }`}
-                      >
-                        {isExportingPdf ? (
-                          <>
-                            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                            </svg>
-                            Generating...
-                          </>
-                        ) : (
-                          <>
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                            </svg>
-                            Export Report
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
+                  <UnifiedStressTestPanel
+                    activeScenario={activeScenario}
+                    portfolio={{ atRisk: portfolio.atRisk, criticalCount: portfolio.criticalCount }}
+                    zone={selectedZone && activeScenario ? {
+                      id: selectedZone.id,
+                      name: selectedZone.name || 'Risk Zone',
+                      level: selectedZone.zone_level,
+                      stressTestName: activeScenario.type,
+                      metrics: {
+                        totalExposure: selectedZone.total_exposure || 10,
+                        expectedLoss: (selectedZone.total_exposure || 10) * selectedZone.risk_score * 0.3,
+                        recoveryMonths: Math.ceil(12 + selectedZone.risk_score * 24),
+                        affectedCount: selectedZone.assets?.length || selectedZone.affected_assets_count || 0,
+                        riskScore: selectedZone.risk_score,
+                      },
+                      entities: (selectedZone.assets || []).map(asset => ({
+                        id: asset.id,
+                        name: asset.name,
+                        type: asset.type,
+                        exposure: asset.exposure,
+                        impactSeverity: asset.impactSeverity,
+                        location: selectedZone.name || 'Zone',
+                      })),
+                    } : null}
+                    onCloseScenario={deactivateScenario}
+                    onCloseZone={() => { userDeselectedZoneRef.current = true; setSelectedZone(null); }}
+                    onViewActionPlans={() => setShowActionPlans(true)}
+                    onExportPdf={async () => {
+                      setIsExportingPdf(true)
+                      try {
+                        const stressTestData = {
+                          name: activeScenario.type,
+                          type: 'climate',
+                          scenario_name: activeScenario.type,
+                          severity: activeScenario.severity,
+                          nvidia_enhanced: true,
+                        }
+                        const zones = [
+                          { name: 'Critical Zone', zone_level: 'critical' as const, expected_loss: portfolio.atRisk * 0.4, affected_assets_count: portfolio.criticalCount, population_affected: 50000 },
+                          { name: 'High Risk Zone', zone_level: 'high' as const, expected_loss: portfolio.atRisk * 0.3, affected_assets_count: portfolio.highCount, population_affected: 30000 },
+                          { name: 'Medium Risk Zone', zone_level: 'medium' as const, expected_loss: portfolio.atRisk * 0.2, affected_assets_count: portfolio.mediumCount, population_affected: 15000 },
+                        ]
+                        await exportStressTestPdf(stressTestData, zones)
+                        console.log('✅ PDF exported successfully')
+                      } catch (error) {
+                        console.error('❌ PDF export failed:', error)
+                      } finally {
+                        setIsExportingPdf(false)
+                      }
+                    }}
+                    isExportingPdf={isExportingPdf}
+                    onEntityClick={(entity) => {
+                      const fullAsset = selectedZone?.assets?.find(a => a.id === entity.id)
+                      if (fullAsset) {
+                        setSelectedZoneAsset(fullAsset)
+                      } else {
+                        setSelectedZoneAsset({
+                          id: entity.id,
+                          name: entity.name,
+                          type: entity.type as ZoneAsset['type'],
+                          latitude: selectedZone?.center_latitude || 50,
+                          longitude: selectedZone?.center_longitude || 8,
+                          exposure: entity.exposure,
+                          impactSeverity: entity.impactSeverity,
+                        })
+                      }
+                      setShowDigitalTwin(true)
+                    }}
+                    onOpenCascade={selectedStressTest ? () => navigate(`/analytics?tab=cascade&scenario=${encodeURIComponent(mapEventIdToCascadeScenarioId(selectedStressTest.id))}`) : undefined}
+                    eventIdForCascade={selectedStressTest?.id}
+                  />
                 </motion.div>
               )}
             </AnimatePresence>
 
-            {/* BOTTOM LEFT - System Status (minimal) */}
-            <motion.div 
-              className="absolute bottom-8 left-8 pointer-events-none"
+            {/* BOTTOM BAR - one row: [Live · time] | [Scenario Timeline when active] | [1-8 Jump …] */}
+            <motion.div
+              className="absolute bottom-8 left-8 right-8 flex items-end justify-between gap-4 pointer-events-none z-50"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.6 }}
             >
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <div className={`w-1.5 h-1.5 rounded-full ${
-                    wsStatus === 'connected' ? 'bg-emerald-400' : 'bg-red-400'
-                  } animate-pulse`} />
-                  <span className="text-white/20 text-[10px] uppercase tracking-wider">
-                    {wsStatus === 'connected' ? 'Live' : 'Offline'}
+              {/* LEFT: NIM/E2CC/DFM + Overseer + Agents + Live + time */}
+              {!commandMode ? (
+                <div className="pointer-events-auto flex flex-col items-start gap-2 shrink-0">
+                  <div className="flex items-center gap-2 px-2 py-1 rounded bg-white/5 border border-white/10">
+                    {nimHealth?.fourcastnet?.status === 'healthy' && (
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" title="Stress tests use FourCastNet NIM on GPU">GPU mode</span>
+                    )}
+                    <span className="text-[10px] text-white/50" title="FourCastNet NIM on GPU">NIM:</span>
+                    <span className={`text-[10px] ${nimHealth?.fourcastnet?.status === 'healthy' ? 'text-emerald-400' : 'text-amber-500/80'}`}>{nimHealth?.fourcastnet?.status === 'healthy' ? '✓ FourCastNet' : (nimHealth ? '✗' : '…')}</span>
+                    <span className="text-white/20">|</span>
+                    <span className="text-[10px] text-white/50" title="Earth-2 Command Center">E2CC:</span>
+                    <span className={`text-[10px] ${omniverseStatus?.e2cc_configured ? 'text-emerald-400' : 'text-amber-500/80'}`}>{omniverseStatus ? (omniverseStatus.e2cc_configured ? '✓' : 'not deployed') : '…'}</span>
+                    <span className="text-white/20">|</span>
+                    <span className="text-[10px] text-white/50">DFM:</span>
+                    <span className={`text-[10px] ${dfmStatus?.use_data_federation_pipelines ? 'text-emerald-400' : 'text-white/40'}`}>{dfmStatus ? (dfmStatus.use_data_federation_pipelines ? 'on' : 'off') : '…'}</span>
+                    <button type="button" onClick={handleTestWeatherNim} disabled={weatherTestLoading || nimHealth?.fourcastnet?.status !== 'healthy'} className="ml-1 px-2 py-0.5 rounded text-[10px] bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 disabled:opacity-50 disabled:cursor-not-allowed" title="Run weather_forecast pipeline (FourCastNet NIM on GPU)">
+                      {weatherTestLoading ? '…' : 'Test weather (NIM)'}
+                    </button>
+                    {weatherTestResult && <span className="text-[10px] text-emerald-400/90 max-w-[140px] truncate" title={weatherTestResult}>{weatherTestResult}</span>}
+                  </div>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <SystemOverseerWidget compact />
+                    <span className="text-white/15">·</span>
+                    <AgentMonitoringWidget compact />
+                    <span className="text-white/15">·</span>
+                    <div className="flex items-center gap-2">
+                      <div className={`w-1.5 h-1.5 rounded-full ${
+                        wsStatus === 'connected' ? 'bg-emerald-500/50' : 'bg-red-500/50'
+                      } animate-pulse`} />
+                      <span className="text-white/20 text-[10px] uppercase tracking-wider">
+                        {wsStatus === 'connected' ? 'Live' : 'Offline'}
+                      </span>
+                    </div>
+                    <span className="text-white/15">·</span>
+                    <span className="text-white/15 text-[10px]">{new Date().toLocaleTimeString()}</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="w-64 shrink-0" aria-hidden="true" />
+              )}
+
+              {/* CENTER: Scenario Timeline (when stress test active) — strictly between left and right */}
+              <div className="flex-1 min-w-0 flex justify-center items-end pointer-events-auto">
+                <AnimatePresence>
+                  {activeScenario && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 20 }}
+                      className="mb-4 px-6 py-3 bg-black/50 backdrop-blur-md rounded-xl border border-white/10"
+                    >
+                      <div className="flex items-center gap-8">
+                        {['T0', 'T+1Y', 'T+2Y', 'T+3Y', 'T+5Y'].map((marker, i) => {
+                          const isActive = i === timelinePeriodIndex
+                          return (
+                            <div key={marker} className="flex flex-col items-center">
+                              <div
+                                className={`w-3 h-3 rounded-full mb-1 transition-all ${
+                                  isActive ? 'bg-amber-400 ring-2 ring-amber-400/30' : 'bg-white/20 hover:bg-white/40'
+                                }`}
+                              />
+                              <span className={`text-[10px] ${isActive ? 'text-amber-400' : 'text-white/30'}`}>
+                                {marker}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                      <div className="relative mt-1 -mb-1">
+                        <div className="absolute top-0 left-0 right-0 h-0.5 bg-white/10" style={{ marginLeft: '6px', marginRight: '6px', top: '-18px' }} />
+                        <motion.div
+                          className="absolute top-0 left-0 h-0.5 bg-gradient-to-r from-amber-300/40 to-transparent"
+                          style={{ marginLeft: '6px', top: '-18px' }}
+                          initial={false}
+                          animate={{ width: `${((timelinePeriodIndex + 1) / 5) * 100}%` }}
+                          transition={{ duration: 0.5 }}
+                        />
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {/* RIGHT: Keyboard shortcuts */}
+              <div className="pointer-events-none shrink-0">
+                <div className="flex gap-3 px-4 py-2.5 bg-black/60 backdrop-blur-md rounded-lg border border-white/10 pointer-events-auto">
+                  <div className="flex items-center gap-1.5">
+                    <Keycap>1-8</Keycap>
+                    <span className="text-white/50 text-[10px]">Jump</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Keycap>Z</Keycap>
+                    <span className="text-white/50 text-[10px]">Zones</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Keycap>S</Keycap>
+                    <span className="text-white/50 text-[10px]">Stress</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Keycap>D</Keycap>
+                    <span className="text-white/50 text-[10px]">Twin</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Keycap>A</Keycap>
+                    <span className="text-white/50 text-[10px]">Agents</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Keycap>R</Keycap>
+                    <span className="text-white/40 text-[10px]">Reset</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Keycap>ESC</Keycap>
+                    <span className="text-white/40 text-[10px]">Back</span>
+                  </div>
+                  <span className="pointer-events-auto">
+                    <Link
+                      to="/nvidia-services"
+                      className="flex items-center gap-1.5 text-white/40 hover:text-emerald-400/80 text-[10px] transition-colors"
+                      title="NVIDIA Services status (live from GET /api/v1/health/nvidia)"
+                    >
+                      <ServerStackIcon className="w-3.5 h-3.5" />
+                      <span>NVIDIA</span>
+                    </Link>
+                  </span>
+                  <span className="pointer-events-auto" title={omniverseStatus?.e2cc_use_port_forward ? 'Open E2CC. If tab is empty, on Mac: brev port-forward saaaliance → 8010, 8010' : 'Open Earth-2 Command Center'}>
+                    <button
+                      onClick={() => handleOmniverseOpen()}
+                      className="flex items-center gap-1.5 text-white/40 hover:text-amber-400/80 text-[10px] transition-colors"
+                    >
+                      <span>Omniverse</span>
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    </button>
                   </span>
                 </div>
-                <div className="text-white/10 text-[10px]">
-                  {new Date().toLocaleTimeString()}
-                </div>
               </div>
             </motion.div>
 
-            {/* BOTTOM CENTER - Timeline & Quick Actions */}
+            {/* RIGHT SIDE - Recent Activity (real data: risk alerts + platform events) */}
             <motion.div 
-              className="absolute bottom-8 left-1/2 -translate-x-1/2 pointer-events-auto"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, delay: 0.8 }}
-            >
-              {/* Scenario Timeline (when stress test active) */}
-              <AnimatePresence>
-                {activeScenario && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 20 }}
-                    className="mb-4 px-6 py-3 bg-black/50 backdrop-blur-md rounded-xl border border-white/10"
-                  >
-                    <div className="flex items-center gap-8">
-                      {/* Timeline markers */}
-                      {['T0', 'T+1Y', 'T+2Y', 'T+3Y', 'T+5Y'].map((marker, i) => (
-                        <div key={marker} className="flex flex-col items-center">
-                          <div 
-                            className={`w-3 h-3 rounded-full mb-1 transition-all ${
-                              i === 0 
-                                ? 'bg-amber-400 ring-2 ring-amber-400/30' 
-                                : 'bg-white/20 hover:bg-white/40'
-                            }`}
-                          />
-                          <span className={`text-[10px] ${
-                            i === 0 ? 'text-amber-400' : 'text-white/30'
-                          }`}>
-                            {marker}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                    {/* Progress line */}
-                    <div className="relative mt-1 -mb-1">
-                      <div className="absolute top-0 left-0 right-0 h-0.5 bg-white/10" 
-                           style={{ marginLeft: '6px', marginRight: '6px', top: '-18px' }} />
-                      <motion.div 
-                        className="absolute top-0 left-0 h-0.5 bg-gradient-to-r from-amber-300/40 to-transparent"
-                        style={{ marginLeft: '6px', top: '-18px' }}
-                        initial={{ width: 0 }}
-                        animate={{ width: '20%' }}
-                        transition={{ duration: 1, delay: 0.5 }}
-                      />
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-              
-            </motion.div>
-            
-            {/* BOTTOM RIGHT - Keyboard shortcuts */}
-            <motion.div 
-              className="absolute bottom-8 right-8 pointer-events-none"
-              style={{ right: '2rem', marginRight: '0' }}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, delay: 0.9 }}
-            >
-              <div className="flex gap-3 px-4 py-2.5 bg-black/60 backdrop-blur-md rounded-lg border border-white/10">
-                  <div className="flex items-center gap-1.5">
-                    <kbd className="px-2 py-1 bg-amber-500/10 border border-amber-500/20 rounded text-[10px] text-amber-300/80 font-medium">Z</kbd>
-                    <span className="text-white/50 text-xs">Zones</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <kbd className="px-2 py-1 bg-amber-500/10 border border-amber-500/20 rounded text-[10px] text-amber-300/80 font-medium">S</kbd>
-                    <span className="text-white/50 text-xs">Stress</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <kbd className="px-2 py-1 bg-amber-500/10 border border-amber-500/20 rounded text-[10px] text-amber-300/80 font-medium">D</kbd>
-                    <span className="text-white/50 text-xs">Twin</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <kbd className="px-2 py-1 bg-amber-500/10 border border-amber-500/20 rounded text-[10px] text-amber-300/80 font-medium">R</kbd>
-                    <span className="text-white/40 text-xs">Reset</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <kbd className="px-2 py-1 bg-amber-500/10 border border-amber-500/20 rounded text-[10px] text-amber-300/70 font-medium">ESC</kbd>
-                    <span className="text-white/40 text-xs">Back</span>
-                  </div>
-              </div>
-            </motion.div>
-
-            {/* RIGHT SIDE - Recent Alerts (above keyboard shortcuts) */}
-            <motion.div 
-              className="absolute bottom-24 right-8 pointer-events-none"
+              className="absolute bottom-24 right-8 pointer-events-none min-w-[180px]"
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.8, delay: 0.6 }}
             >
               <div className="text-right">
                 <div className="text-white/30 text-[9px] uppercase tracking-wider mb-2">Recent Activity</div>
-                <AnimatePresence mode="popLayout">
-                  {recentAlerts.slice(0, 3).map((alert, i) => (
-                    <motion.div
-                      key={`${alert.hotspot_id}-${alert.timestamp}`}
-                      initial={{ opacity: 0, x: 20 }}
-                      animate={{ opacity: 1 - i * 0.25, x: 0 }}
-                      exit={{ opacity: 0, x: 20 }}
-                      className="flex items-center gap-2 text-[11px] mb-1.5 justify-end"
-                    >
-                      <span className="text-white/50 capitalize">{alert.hotspot_id}</span>
-                      <span className="text-white/70 font-mono">
-                        {(alert.risk_score * 100).toFixed(0)}%
-                      </span>
-                      <span className={`font-medium ${alert.risk_score > alert.previous_score ? 'text-red-400' : 'text-emerald-400'}`}>
-                        {alert.risk_score > alert.previous_score ? '↑' : '↓'}
-                      </span>
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
+                {(recentAlerts.length > 0 || recentEvents.length > 0) ? (
+                  <div className="space-y-1.5">
+                    <AnimatePresence mode="popLayout">
+                      {recentAlerts.slice(0, 2).map((alert, i) => (
+                        <motion.div
+                          key={`alert-${alert.hotspot_id}-${alert.timestamp}`}
+                          initial={{ opacity: 0, x: 20 }}
+                          animate={{ opacity: 1 - i * 0.2, x: 0 }}
+                          exit={{ opacity: 0, x: 20 }}
+                          className="flex items-center gap-2 text-[11px] justify-end"
+                        >
+                          <span className="text-white/50 capitalize truncate max-w-[80px]">{alert.hotspot_id}</span>
+                          <span className="text-white/70 font-mono">{(alert.risk_score * 100).toFixed(0)}%</span>
+                          <span className={`font-medium ${alert.risk_score > alert.previous_score ? 'text-red-400' : 'text-emerald-400'}`}>
+                            {alert.risk_score > alert.previous_score ? '↑' : '↓'}
+                          </span>
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
+                    {recentEvents.slice(0, 3).map((ev) => (
+                      <motion.div
+                        key={ev.event_id}
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        className="flex items-center gap-2 text-[11px] justify-end"
+                      >
+                        <span className="text-white/50 truncate max-w-[100px]" title={ev.event_type}>
+                          {ev.data?.name || ev.event_type.replace(/_/g, ' ').replace(/\./g, ': ')}
+                        </span>
+                        <span className="text-white/40 text-[10px]">
+                          {formatRecentTime(ev.timestamp)}
+                        </span>
+                      </motion.div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-white/40 italic">No recent activity</p>
+                )}
               </div>
             </motion.div>
 
@@ -3955,7 +4766,7 @@ export default function CommandCenter() {
                       </div>
                     </div>
                     
-                    {/* Risk factors – каждый раскрывается и показывает сценарии реестра по этому фактору */}
+                    {/* Risk factors — each expands to show registry scenarios for that factor */}
                     <div className="mb-8">
                       <div className="text-white/30 text-[10px] uppercase tracking-wider mb-4">
                         Risk Factors
@@ -4061,11 +4872,33 @@ export default function CommandCenter() {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
                         </svg>
                       </button>
+                      <button
+                        onClick={() => {
+                          const params = new URLSearchParams()
+                          if (focusedHotspot?.id) params.set('region', focusedHotspot.id)
+                          if (selectedStressTest?.id) params.set('scenario', selectedStressTest.id)
+                          const coords = focusedHotspot ? findCityCoordinates(focusedHotspot.id) : null
+                          if (coords) {
+                            params.set('lat', String(coords.lat))
+                            params.set('lon', String(coords.lng))
+                          }
+                          handleOmniverseOpen(params)
+                        }}
+                        className="w-full py-2.5 px-4 bg-white/5 border border-white/20 rounded-lg
+                          text-white/70 text-sm hover:bg-white/10 hover:text-white transition-all
+                          flex items-center justify-between font-medium"
+                      >
+                        <span>Open in Omniverse</span>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                      </button>
                     </div>
                   </div>
                 </motion.div>
               )}
             </AnimatePresence>
+            <AIAssistant />
           </>
         )}
       </AnimatePresence>
@@ -4099,30 +4932,49 @@ export default function CommandCenter() {
               <div className="max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                 <div className="grid grid-cols-2 gap-2">
                   {availableZones.sort((a, b) => b.risk - a.risk).map((zone, idx) => (
-                    <button
+                    <div
                       key={zone.id}
-                      onClick={() => {
-                        handleHotspotFocus(zone.id)
-                        setShowZoneNav(false)
-                      }}
-                      className="flex items-center gap-3 p-3 bg-amber-500/5 hover:bg-amber-500/10 rounded-lg transition-all text-left group"
+                      className="flex items-center gap-2 p-2 bg-amber-500/5 hover:bg-amber-500/10 rounded-lg transition-all text-left group"
                     >
-                      <span className="text-white/30 text-xs font-mono w-5">{idx + 1}</span>
-                      <div className="flex-1">
-                        <div className="text-white text-sm">{zone.name}</div>
-                        <div className="text-xs text-white/60">
-                          Risk: {(zone.risk * 100).toFixed(0)}%
+                      <button
+                        onClick={() => {
+                          handleHotspotFocus(zone.id)
+                          setFlyToHotspotId(zone.id)
+                          setShowZoneNav(false)
+                        }}
+                        className="flex items-center gap-3 flex-1 min-w-0"
+                        title="Focus zone"
+                      >
+                        <span className="text-white/30 text-xs font-mono w-5 flex-shrink-0">{idx + 1}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-white text-sm truncate">{zone.name}</div>
+                          <div className="text-xs text-white/60">
+                            Risk: {(zone.risk * 100).toFixed(0)}%
+                          </div>
                         </div>
-                      </div>
-                      <div className={`w-2 h-2 rounded-full ${getRiskDotColor(zone.risk)}`} />
-                    </button>
+                        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${getRiskDotColor(zone.risk)}`} />
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          handleHotspotFocus(zone.id)
+                          setDependencyZoneId((prev) => (prev === zone.id ? null : zone.id))
+                          setShowZoneNav(false)
+                        }}
+                        className="p-2 rounded-md border border-white/10 bg-black/20 text-white/60 hover:text-white hover:bg-white/10 transition-colors flex-shrink-0"
+                        title="Show dependency links for this zone"
+                      >
+                        <LinkIcon className="w-4 h-4" />
+                      </button>
+                    </div>
                   ))}
                 </div>
               </div>
               
-              <div className="mt-4 pt-4 border-t border-white/10 flex justify-center gap-4 text-white/30 text-xs">
-                <span><kbd className="px-1.5 py-0.5 bg-amber-500/10 border border-amber-500/20 rounded">ESC</kbd> Close</span>
-                <span><kbd className="px-1.5 py-0.5 bg-amber-500/10 border border-amber-500/20 rounded">R</kbd> Reset View</span>
+              <div className="mt-4 pt-4 border-t border-white/10 flex justify-center gap-4 text-white/30 text-[11px]">
+                <span className="flex items-center gap-2"><Keycap>1-8</Keycap> Quick Jump</span>
+                <span className="flex items-center gap-2"><Keycap>ESC</Keycap> Close</span>
+                <span className="flex items-center gap-2"><Keycap>R</Keycap> Reset View</span>
               </div>
             </div>
           </motion.div>
@@ -4165,78 +5017,24 @@ export default function CommandCenter() {
           setSelectedZoneAsset(asset)
           setDigitalTwinPickerMode(false)
         }}
-        assetId={focusedHotspot?.id}
-        dynamicAsset={selectedZoneAsset}
+        assetId={focusAssetIdFromUrl || focusedHotspot?.id}
+        dynamicAsset={(selectedZoneAsset || focusAssetFromUrl) ?? undefined}
         eventId={selectedDigitalTwinEvent}
         eventName={selectedDigitalTwinEventName}
         eventCategory={selectedDigitalTwinEventCategory}
         timeHorizon={selectedDigitalTwinTimeHorizon}
+        showFloodLayer={showFloodLayer}
+        showWindLayer={showWindLayer}
+        showMetroFloodLayer={showMetroFloodLayer}
+        floodDepthOverride={floodDepthOverride}
+        showHeatLayer={showHeatLayer}
+        showHeavyRainLayer={showHeavyRainLayer}
+        showDroughtLayer={showDroughtLayer}
+        showUvLayer={showUvLayer}
+        zoneTotalExposure={selectedZoneAsset && selectedZone ? selectedZone.total_exposure : undefined}
       />
 
-      {/* ============================================ */}
-      {/* ZONE DETAIL PANEL */}
-      {/* ============================================ */}
-      <AnimatePresence>
-        {selectedZone && activeScenario && (
-          <motion.div
-            className="absolute top-24 right-8 z-50 pointer-events-auto"
-            initial={{ opacity: 0, x: 50 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 50 }}
-            transition={{ duration: 0.3 }}
-          >
-            <ZoneDetailPanel
-              zone={{
-                id: selectedZone.id,
-                name: selectedZone.name || 'Risk Zone',
-                level: selectedZone.zone_level,
-                stressTestName: activeScenario.type,
-                metrics: {
-                  totalExposure: selectedZone.total_exposure || 10,
-                  expectedLoss: (selectedZone.total_exposure || 10) * selectedZone.risk_score * 0.3,
-                  recoveryMonths: Math.ceil(12 + selectedZone.risk_score * 24),
-                  affectedCount: selectedZone.assets?.length || selectedZone.affected_assets_count || 0,
-                  riskScore: selectedZone.risk_score,
-                },
-                // Use real assets from zone
-                entities: (selectedZone.assets || []).map(asset => ({
-                  id: asset.id,
-                  name: asset.name,
-                  type: asset.type,
-                  exposure: asset.exposure,
-                  impactSeverity: asset.impactSeverity,
-                  location: selectedZone.name || 'Zone',
-                })),
-              }}
-              onClose={() => { userDeselectedZoneRef.current = true; setSelectedZone(null); }}
-              onViewReport={() => {
-                console.log('View report for zone:', selectedZone.id)
-              }}
-              onViewActionPlans={() => setShowActionPlans(true)}
-              onEntityClick={(entity) => {
-                console.log('Entity clicked:', entity.name, '- opening Digital Twin with OSM Buildings')
-                // Find the full asset data from zone
-                const fullAsset = selectedZone?.assets?.find(a => a.id === entity.id)
-                if (fullAsset) {
-                  setSelectedZoneAsset(fullAsset)
-                } else {
-                  // Create synthetic asset from entity
-                  setSelectedZoneAsset({
-                    id: entity.id,
-                    name: entity.name,
-                    type: entity.type as ZoneAsset['type'],
-                    latitude: selectedZone?.center_latitude || 50,
-                    longitude: selectedZone?.center_longitude || 8,
-                    exposure: entity.exposure,
-                    impactSeverity: entity.impactSeverity,
-                  })
-                }
-                setShowDigitalTwin(true)
-              }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Zone detail is now inside UnifiedStressTestPanel when a zone is selected */}
 
       {/* ============================================ */}
       {/* ACTION PLANS MODAL */}
@@ -4246,7 +5044,15 @@ export default function CommandCenter() {
         onClose={() => setShowActionPlans(false)}
         stressTestName={selectedStressTest?.name || activeScenario?.type || 'Stress Test'}
         zoneName={selectedZone?.name || focusedHotspot?.name}
-        actionPlans={demoActionPlans}
+        template={actionPlanTemplate}
+        onOpenDetailedPlans={() => {
+          setShowActionPlans(false)
+          navigate('/action-plans')
+        }}
+        onOpenStressPlanner={() => {
+          setShowActionPlans(false)
+          navigate('/stress-planner')
+        }}
       />
       
       {/* ============================================ */}
@@ -4269,7 +5075,9 @@ export default function CommandCenter() {
               className="fixed inset-0 z-50 flex items-center justify-center p-8 pointer-events-none"
             >
               <div 
-                className="bg-[#0a0f18] border border-white/10 rounded-xl p-6 max-w-md w-full pointer-events-auto shadow-2xl"
+                ref={stressTestModalRef}
+                tabIndex={-1}
+                className="bg-[#0a0f18] border border-white/10 rounded-xl p-6 max-w-md w-full pointer-events-auto shadow-2xl outline-none"
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="flex items-center justify-between mb-4">
@@ -4287,25 +5095,29 @@ export default function CommandCenter() {
                     </svg>
                   </button>
                 </div>
-                <StressTestSelector
-                  onScenarioSelect={(scenario) => {
-                    if (scenario) {
-                      setSelectedStressTest({
-                        id: scenario.id,
-                        name: scenario.name,
-                        type: scenario.type,
-                        severity: scenario.severity,
-                        probability: scenario.probability,
-                      })
-                      activateScenario(scenario.name, scenario.severity)
-                      setShowStressTestSelector(false)
-                      console.log('✅ Stress Test selected:', scenario.name, `(${scenario.type}, ${(scenario.severity * 100).toFixed(0)}%)`)
-                    } else {
-                      setSelectedStressTest(null)
-                      deactivateScenario()
-                    }
+                <UnifiedStressTestSelector
+                  selectedScenarioId={selectedStressTest?.id ?? null}
+                  onSelect={(scenario) => {
+                    userDeselectedZoneRef.current = false
+                    setSelectedStressTest({
+                      id: scenario.id,
+                      name: scenario.name,
+                      type: scenario.type,
+                      severity: scenario.severity,
+                      probability: scenario.probability,
+                    })
+                    activateScenario(scenario.name, scenario.severity)
+                    setShowStressTestSelector(false)
+                    console.log(
+                      '✅ Stress Test selected:',
+                      scenario.name,
+                      `(${scenario.type}, ${(scenario.severity * 100).toFixed(0)}%)`
+                    )
                   }}
-                  selectedScenario={selectedStressTest?.id || null}
+                  onClear={() => {
+                    setSelectedStressTest(null)
+                    deactivateScenario()
+                  }}
                 />
               </div>
             </motion.div>
@@ -4321,6 +5133,9 @@ export default function CommandCenter() {
           console.log('Action: Stress Test - Opening selector')
           setShowStressTestSelector(true)
         }}
+        onCommandMode={() => {
+          toggleCommandMode()
+        }}
         onDigitalTwin={() => {
           console.log('Action: Digital Twin')
           if (selectedZoneAsset || focusedHotspot) {
@@ -4333,7 +5148,8 @@ export default function CommandCenter() {
                   type: 'city',
                   latitude: coords.lat,
                   longitude: coords.lng,
-                  impactSeverity: focusedHotspot.intensity,
+                  exposure: coords.exposure ?? 10,
+                  impactSeverity: focusedHotspot.intensity ?? coords.risk ?? 0.5,
                 })
               }
             }
@@ -4350,6 +5166,23 @@ export default function CommandCenter() {
           setShowDigitalTwin(false)
           setShowZoneNav(false)
           setResetViewTrigger(prev => prev + 1) // Trigger globe reset
+        }}
+        onAgents={async () => {
+          console.log('Action: Agents Monitoring - Starting agents')
+          try {
+            // Start agents when hotkey is pressed
+            const res = await fetch('/api/v1/agents/monitoring/start', { method: 'POST' })
+            if (res.ok) {
+              // Navigate to agents page after starting
+              navigate('/agents')
+            } else {
+              // Still navigate even if start fails
+              navigate('/agents')
+            }
+          } catch (e) {
+            // Navigate anyway
+            navigate('/agents')
+          }
         }}
         onEscape={() => {
           console.log('Action: Escape')
@@ -4391,21 +5224,25 @@ export default function CommandCenter() {
 
 function KeyboardHandler({ 
   onStressTest, 
+  onCommandMode,
   onDigitalTwin,
   onResetView, 
   onEscape,
   onZoneNav,
   onZoneSelectByNumber,
+  onAgents,
 }: { 
   onStressTest: () => void
+  onCommandMode: () => void
   onDigitalTwin: () => void
   onResetView: () => void
   onEscape: () => void
   onZoneNav: () => void
   onZoneSelectByNumber?: (num: number) => void
+  onAgents: () => void
 }) {
-  const ref = useRef({ onStressTest, onDigitalTwin, onResetView, onEscape, onZoneNav, onZoneSelectByNumber })
-  ref.current = { onStressTest, onDigitalTwin, onResetView, onEscape, onZoneNav, onZoneSelectByNumber }
+  const ref = useRef({ onStressTest, onCommandMode, onDigitalTwin, onResetView, onEscape, onZoneNav, onZoneSelectByNumber, onAgents })
+  ref.current = { onStressTest, onCommandMode, onDigitalTwin, onResetView, onEscape, onZoneNav, onZoneSelectByNumber, onAgents }
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -4447,6 +5284,11 @@ function KeyboardHandler({
           e.stopPropagation()
           ref.current.onResetView()
           break
+        case 'a':
+          e.preventDefault()
+          e.stopPropagation()
+          ref.current.onAgents()
+          break
         case 'z':
         case 'n':
           e.preventDefault()
@@ -4472,9 +5314,10 @@ function KeyboardHandler({
       }
     }
     
-    document.addEventListener('keydown', handleKeyDown, true)
-    return () => document.removeEventListener('keydown', handleKeyDown, true)
+    // Use capture on window so we get the key before Cesium canvas or other handlers
+    window.addEventListener('keydown', handleKeyDown, true)
+    return () => window.removeEventListener('keydown', handleKeyDown, true)
   }, [])
-  
+
   return null
 }

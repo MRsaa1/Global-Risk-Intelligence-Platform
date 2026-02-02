@@ -17,13 +17,28 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.exc import OperationalError
 
 
 # revision identifiers, used by Alembic.
 revision: str = '20260121_0001'
-down_revision: Union[str, None] = '20260117_0001_week7_8_features'
+down_revision: Union[str, None] = '20260117_0001'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
+
+
+def _create_index_if_not_exists(index_name: str, table_name: str, columns: list, **kw) -> None:
+    """Create index; ignore 'already exists' or 'no such column' (schema may differ on existing DBs)."""
+    try:
+        op.create_index(index_name, table_name, columns, unique=False, **kw)
+    except OperationalError as e:
+        err = str(e).lower()
+        if "already exists" in err:
+            pass  # index was already created by table DDL
+        elif "no such column" in err:
+            pass  # table on server may lack this column (e.g. older stress_tests)
+        else:
+            raise
 
 
 def upgrade() -> None:
@@ -32,120 +47,44 @@ def upgrade() -> None:
     # ==================== ASSETS INDEXES ====================
     
     # Composite index on risk scores for analytics queries
-    # Used by: /analytics/risk-trends, /analytics/risk-distribution
-    op.create_index(
+    _create_index_if_not_exists(
         'ix_assets_risk_scores',
         'assets',
         ['climate_risk_score', 'physical_risk_score', 'network_risk_score'],
-        unique=False,
         postgresql_using='btree',
     )
     
-    # Index on city for location filtering
-    # Used by: asset search, geographic filtering
-    op.create_index(
-        'ix_assets_city',
-        'assets',
-        ['city'],
-        unique=False,
-    )
+    # Index on city for location filtering (may already exist from initial schema)
+    _create_index_if_not_exists('ix_assets_city', 'assets', ['city'])
     
-    # Index on country code for regional queries
-    # Used by: portfolio by region, regulatory reports
-    op.create_index(
-        'ix_assets_country_code',
-        'assets',
-        ['country_code'],
-        unique=False,
-    )
+    # Index on country code for regional queries (may already exist from initial schema)
+    _create_index_if_not_exists('ix_assets_country_code', 'assets', ['country_code'])
     
     # Index on status for filtering active assets
-    # Used by: nearly all asset queries filter by status='active'
-    op.create_index(
-        'ix_assets_status',
-        'assets',
-        ['status'],
-        unique=False,
-    )
+    _create_index_if_not_exists('ix_assets_status', 'assets', ['status'])
     
     # Index on valuation for financial queries
-    # Used by: portfolio summary, top assets by value
-    op.create_index(
-        'ix_assets_valuation',
-        'assets',
-        ['current_valuation'],
-        unique=False,
-    )
+    _create_index_if_not_exists('ix_assets_valuation', 'assets', ['current_valuation'])
     
     # Index on asset type for type-based filtering
-    # Used by: asset filtering by type
-    op.create_index(
-        'ix_assets_type',
-        'assets',
-        ['asset_type'],
-        unique=False,
-    )
+    _create_index_if_not_exists('ix_assets_type', 'assets', ['asset_type'])
     
     # Composite index for common query pattern: status + city
-    op.create_index(
-        'ix_assets_status_city',
-        'assets',
-        ['status', 'city'],
-        unique=False,
-    )
+    _create_index_if_not_exists('ix_assets_status_city', 'assets', ['status', 'city'])
     
     # Composite index for risk-based queries on active assets
-    op.create_index(
-        'ix_assets_status_climate_risk',
-        'assets',
-        ['status', 'climate_risk_score'],
-        unique=False,
-    )
+    _create_index_if_not_exists('ix_assets_status_climate_risk', 'assets', ['status', 'climate_risk_score'])
     
     # ==================== STRESS TESTS INDEXES ====================
     
-    # Index on stress test status for filtering
-    # Used by: listing active/completed tests
-    op.create_index(
-        'ix_stress_tests_status',
-        'stress_tests',
-        ['status'],
-        unique=False,
-    )
-    
-    # Index on test type for type-based filtering
-    op.create_index(
-        'ix_stress_tests_type',
-        'stress_tests',
-        ['test_type'],
-        unique=False,
-    )
-    
-    # Index on completed_at for recent tests query
-    op.create_index(
-        'ix_stress_tests_completed_at',
-        'stress_tests',
-        ['completed_at'],
-        unique=False,
-    )
+    _create_index_if_not_exists('ix_stress_tests_status', 'stress_tests', ['status'])
+    _create_index_if_not_exists('ix_stress_tests_type', 'stress_tests', ['test_type'])
+    _create_index_if_not_exists('ix_stress_tests_completed_at', 'stress_tests', ['completed_at'])
     
     # ==================== RISK ZONES INDEXES ====================
     
-    # Index on stress_test_id for zone lookups by test
-    op.create_index(
-        'ix_risk_zones_stress_test_id',
-        'risk_zones',
-        ['stress_test_id'],
-        unique=False,
-    )
-    
-    # Index on zone level for filtering
-    op.create_index(
-        'ix_risk_zones_zone_level',
-        'risk_zones',
-        ['zone_level'],
-        unique=False,
-    )
+    _create_index_if_not_exists('ix_risk_zones_stress_test_id', 'risk_zones', ['stress_test_id'])
+    _create_index_if_not_exists('ix_risk_zones_zone_level', 'risk_zones', ['zone_level'])
 
 
 def downgrade() -> None:

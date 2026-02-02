@@ -8,7 +8,7 @@
  * - Zoom and pan
  * - Animated transitions
  */
-import { useMemo, useRef, useState, useCallback } from 'react'
+import { useMemo, useRef, useState, useCallback, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import * as d3 from 'd3'
 import { chartColors, seriesColors } from '../../lib/chartColors'
@@ -50,9 +50,13 @@ interface TimeSeriesChartProps {
   animationDuration?: number
   title?: string
   yAxisLabel?: string
+  yAxisLabelRight?: string
   valueFormat?: 'number' | 'currency' | 'percent'
   thresholds?: ThresholdLine[]
   annotations?: ChartAnnotation[]
+  /** Secondary Y-axis multiplier: converts left axis value to right axis value (e.g. risk% → €M) */
+  secondaryYMultiplier?: number
+  secondaryYFormat?: 'number' | 'currency' | 'percent'
 }
 
 // Default series colors
@@ -68,21 +72,26 @@ export default function TimeSeriesChart({
   animationDuration = 800,
   title,
   yAxisLabel,
+  yAxisLabelRight,
   valueFormat = 'number',
   thresholds = [],
   annotations = [],
+  secondaryYMultiplier,
+  secondaryYFormat = 'currency',
 }: TimeSeriesChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const chartContainerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const [hoveredSeries, setHoveredSeries] = useState<string | null>(null)
   const tooltip = useTooltip()
   
-  // Dimensions
-  const margin = { top: 20, right: 20, bottom: 40, left: 50 }
+  // Dimensions - increase right margin if secondary Y axis is shown
+  const hasSecondaryY = secondaryYMultiplier !== undefined && secondaryYMultiplier > 0
+  const margin = { top: 20, right: hasSecondaryY ? 60 : 20, bottom: 40, left: 50 }
   const [width, setWidth] = useState(600)
   const innerWidth = width - margin.left - margin.right
   const innerHeight = height - margin.top - margin.bottom
-  
+
   // Process data
   const processedData = useMemo(() => {
     return series
@@ -99,9 +108,19 @@ export default function TimeSeriesChart({
       }))
       .filter(s => s.data.length > 0)
   }, [series])
+
+  // ResizeObserver: use useEffect so we never return a function from a callback ref (React warning).
+  // Re-run when data appears (div mounts) or disappears (cleanup).
+  useEffect(() => {
+    const node = chartContainerRef.current
+    if (!node) return
+    const ro = new ResizeObserver((entries) => setWidth(entries[0].contentRect.width))
+    ro.observe(node)
+    return () => ro.disconnect()
+  }, [processedData.length])
   
   // Scales
-  const { xScale, yScale } = useMemo(() => {
+  const { xScale, yScale, yScaleRight } = useMemo(() => {
     const allDates = processedData.flatMap(s => s.data.map(d => d.date))
     const allValues = processedData.flatMap(s => s.data.map(d => d.value))
     
@@ -109,13 +128,36 @@ export default function TimeSeriesChart({
       .domain(d3.extent(allDates) as [Date, Date])
       .range([0, innerWidth])
     
+    const maxY = (d3.max(allValues) || 100) * 1.1
     const yScale = d3.scaleLinear()
-      .domain([0, (d3.max(allValues) || 100) * 1.1])
+      .domain([0, maxY])
       .range([innerHeight, 0])
       .nice()
     
-    return { xScale, yScale }
-  }, [processedData, innerWidth, innerHeight])
+    // Secondary Y scale (right side) - for financial impact €
+    const yScaleRight = hasSecondaryY
+      ? d3.scaleLinear()
+          .domain([0, maxY * (secondaryYMultiplier || 1)])
+          .range([innerHeight, 0])
+          .nice()
+      : null
+    
+    return { xScale, yScale, yScaleRight }
+  }, [processedData, innerWidth, innerHeight, hasSecondaryY, secondaryYMultiplier])
+  
+  // Format secondary Y axis value
+  const formatSecondaryValue = useCallback((value: number) => {
+    switch (secondaryYFormat) {
+      case 'currency':
+        if (value >= 1_000) return `€${(value / 1000).toFixed(0)}B`
+        if (value >= 1) return `€${value.toFixed(0)}M`
+        return `€${(value * 1000).toFixed(0)}K`
+      case 'percent':
+        return `${(value * 100).toFixed(1)}%`
+      default:
+        return value.toFixed(1)
+    }
+  }, [secondaryYFormat])
   
   // Line generator
   const lineGenerator = useMemo(() => {
@@ -211,16 +253,6 @@ export default function TimeSeriesChart({
     )
   }, [xScale, innerWidth, innerHeight, margin, processedData, tooltip, valueFormat])
   
-  // Resize observer
-  const containerCallback = useCallback((node: HTMLDivElement | null) => {
-    if (!node) return
-    const resizeObserver = new ResizeObserver(entries => {
-      setWidth(entries[0].contentRect.width)
-    })
-    resizeObserver.observe(node)
-    return () => resizeObserver.disconnect()
-  }, [])
-  
   return (
     <motion.div
       ref={containerRef}
@@ -243,7 +275,7 @@ export default function TimeSeriesChart({
             <h3 className="text-white/80 text-sm font-medium mb-3">{title}</h3>
           )}
           
-          <div ref={containerCallback} className="w-full">
+          <div ref={chartContainerRef} className="w-full">
         <svg
           ref={svgRef}
           width={width}
@@ -332,7 +364,7 @@ export default function TimeSeriesChart({
               ))}
             </g>
             
-            {/* Y Axis */}
+            {/* Y Axis (Left) */}
             <g>
               <line y1={0} y2={innerHeight} stroke={chartColors.background.border} />
               {yScale.ticks(5).map((tick, i) => (
@@ -360,6 +392,37 @@ export default function TimeSeriesChart({
                 </text>
               )}
             </g>
+            
+            {/* Secondary Y Axis (Right) - Expected Loss € */}
+            {hasSecondaryY && yScaleRight && (
+              <g transform={`translate(${innerWidth},0)`}>
+                <line y1={0} y2={innerHeight} stroke={chartColors.background.border} />
+                {yScaleRight.ticks(5).map((tick, i) => (
+                  <g key={i} transform={`translate(0,${yScaleRight(tick)})`}>
+                    <line x2={6} stroke={chartColors.background.border} />
+                    <text
+                      x={10}
+                      dy="0.32em"
+                      textAnchor="start"
+                      fill="#f59e0b"
+                      fontSize={10}
+                    >
+                      {formatSecondaryValue(tick)}
+                    </text>
+                  </g>
+                ))}
+                {yAxisLabelRight && (
+                  <text
+                    transform={`translate(50,${innerHeight / 2}) rotate(90)`}
+                    textAnchor="middle"
+                    fill="#f59e0b"
+                    fontSize={11}
+                  >
+                    {yAxisLabelRight}
+                  </text>
+                )}
+              </g>
+            )}
             
             {/* Areas */}
             {showArea && processedData.map((s, i) => {

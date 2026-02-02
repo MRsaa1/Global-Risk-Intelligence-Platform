@@ -1,0 +1,41 @@
+{
+  "latitude": 40.71,
+  "longitude": -74.01,
+  "days": 1,
+  "daily": [
+    {
+      "date": "2026-01-31",
+      "wind_speed_kmh": 120.0,
+      "category": 1,
+      "category_label": "Category 1"
+    }
+  ],
+  "max_wind_kmh": 120.0,
+  "max_category": 1,
+  "max_category_label": "Category 1",
+  "polygon": [
+    [
+      -74.04,
+      40.68
+    ],
+    [
+      -73.98,
+      40.68
+    ],
+    [
+      -73.98,
+      40.74
+    ],
+    [
+      -74.04,
+      40.74
+    ],
+    [
+      -74.04,
+      40.68
+    ]
+  ],
+  "source": "wrf",
+  "scenario_id": "wrf_nyc_001",
+  "valid_time": "2026-01-31T23:15:36.147782Z"
+}

@@ -55,11 +55,16 @@ function formatEventName(event: PlatformEvent): string {
     [EventTypes.STRESS_TEST_STARTED]: 'Stress test started',
     [EventTypes.STRESS_TEST_COMPLETED]: 'Stress test completed',
     [EventTypes.STRESS_TEST_FAILED]: 'Stress test failed',
+    [EventTypes.STRESS_TEST_PROGRESS]: 'Stress test progress',
+    [EventTypes.STRESS_TEST_DELETED]: 'Stress test deleted',
     [EventTypes.ZONE_SELECTED]: 'Zone selected',
     [EventTypes.ZONE_DESELECTED]: 'Zone deselected',
+    [EventTypes.ZONE_RISK_UPDATED]: 'Zone risk updated',
+    [EventTypes.RISK_ZONE_CREATED]: 'Risk zone created',
     [EventTypes.TWIN_OPENED]: 'Digital Twin opened',
     [EventTypes.TWIN_CLOSED]: 'Digital Twin closed',
     [EventTypes.PORTFOLIO_UPDATED]: 'Portfolio updated',
+    [EventTypes.ASSET_RISK_UPDATED]: 'Asset risk updated',
     [EventTypes.ALERT_GENERATED]: 'Alert generated',
   }
   

@@ -1,0 +1,70 @@
+{
+  "version": "1.0",
+  "entities": {
+    "HEALTHCARE": {
+      "display_name": "Healthcare Provider",
+      "auto_detected_by": {
+        "keywords": ["klinik", "hospital", "clinic", "medical", "care", "health", "pharma", "uniklinik", "universitätsklinik", "krankenhaus", "medizin"],
+        "industry_codes": []
+      },
+      "risk_zones": ["Intensive Care Unit (ICU)", "Emergency Department", "Operating Theaters", "Medical Supply Storage", "Patient Wards", "Diagnostic Center"]
+    },
+    "FINANCIAL": {
+      "display_name": "Financial Institution",
+      "auto_detected_by": {
+        "keywords": ["bank", "versicherung", "insurance", "invest", "capital", "finance", "credit", "asset", "wealth", "treasury"],
+        "industry_codes": []
+      },
+      "risk_zones": ["Trading Floor", "Core Banking Systems", "Data Center", "Vault/Treasury", "Branch Network", "Customer Service"]
+    },
+    "ENTERPRISE": {
+      "display_name": "Manufacturing / Enterprise",
+      "auto_detected_by": {
+        "keywords": ["gmbh", "ag", "corp", "inc", "manufacturing", "production", "factory", "industrial", "logistics", "warehouse"],
+        "industry_codes": []
+      },
+      "risk_zones": ["Production Line", "Supply Chain Hub", "R&D Facilities", "Warehouse", "Sales Operations", "IT Infrastructure"]
+    },
+    "INFRASTRUCTURE": {
+      "display_name": "Critical Infrastructure",
+      "auto_detected_by": {
+        "keywords": ["power", "energy", "water", "transport", "airport", "port", "grid", "utility", "electric", "gas", "rail"],
+        "industry_codes": []
+      },
+      "risk_zones": ["Power Generation", "Control Center", "Distribution Network", "Backup Systems", "Maintenance Facilities", "Administrative Zone"]
+    },
+    "AIRPORT": {
+      "display_name": "Airport",
+      "extends": "INFRASTRUCTURE",
+      "auto_detected_by": {
+        "keywords": ["airport", "flughafen", "aeroport"],
+        "industry_codes": []
+      },
+      "risk_zones": ["Terminal 1", "Terminal 2", "Terminal 3", "Control Center (ATC)", "Power Generation", "Ground Operations (e.g. Fraport AG)"]
+    },
+    "GOVERNMENT": {
+      "display_name": "Government Body",
+      "auto_detected_by": {
+        "keywords": ["ministry", "government", "municipal", "city hall", "rathaus", "administration", "public sector"],
+        "industry_codes": []
+      },
+      "risk_zones": ["Central Administration", "Public Services", "Critical Records", "Security Operations", "Field Offices", "Support Facilities"]
+    },
+    "REAL_ESTATE": {
+      "display_name": "Real Estate",
+      "auto_detected_by": {
+        "keywords": ["immobilien", "real estate", "property", "development", "construction", "building", "realty"],
+        "industry_codes": []
+      },
+      "risk_zones": ["Core Asset Portfolio", "Development Sites", "Property Management", "Tenant Operations", "Maintenance", "Administrative Offices"]
+    },
+    "DEFENSE": {
+      "display_name": "Defense / Military",
+      "auto_detected_by": {
+        "keywords": ["defense", "military", "security", "bundeswehr", "nato", "armed"],
+        "industry_codes": []
+      },
+      "risk_zones": ["Command Center", "Strategic Assets", "Communications Hub", "Supply Depot", "Training Facilities", "Support Infrastructure"]
+    }
+  }
+}

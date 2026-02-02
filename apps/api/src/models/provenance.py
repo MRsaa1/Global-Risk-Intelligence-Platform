@@ -24,6 +24,23 @@ class VerificationStatus(str, enum.Enum):
     EXPIRED = "expired"
 
 
+class VerificationType(str, enum.Enum):
+    """Type of verification performed."""
+    MEASUREMENT = "measurement"
+    DAMAGE_CLAIM = "damage_claim"
+    BEFORE_AFTER = "before_after"
+    SENSOR = "sensor"
+    MANUAL = "manual"
+
+
+class ComparisonResult(str, enum.Enum):
+    """Result of comparison verification."""
+    MATCH = "match"
+    MISMATCH = "mismatch"
+    INCONCLUSIVE = "inconclusive"
+    PARTIAL_MATCH = "partial_match"
+
+
 class DataProvenance(Base):
     """
     Cryptographic proof of data origin and integrity.
@@ -64,14 +81,28 @@ class DataProvenance(Base):
     data_hash: Mapped[str] = mapped_column(String(64), index=True)
     signature: Mapped[Optional[str]] = mapped_column(Text)
     signature_algorithm: Mapped[Optional[str]] = mapped_column(String(50))
+    geometry_hash: Mapped[Optional[str]] = mapped_column(
+        String(64),
+        comment="Hash of geometry data for 3D comparison",
+    )
     
     # Verification
     status: Mapped[str] = mapped_column(
         String(20),
         default=VerificationStatus.PENDING.value,
     )
+    verification_type: Mapped[Optional[str]] = mapped_column(
+        String(50),
+        comment="Type: measurement, damage_claim, before_after",
+    )
     verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     verified_by: Mapped[Optional[str]] = mapped_column(String(255))
+    
+    # Fraud Detection Link
+    linked_claim_id: Mapped[Optional[str]] = mapped_column(
+        String(36),
+        comment="Link to damage claim for fraud detection",
+    )
     
     # Audit
     created_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
@@ -105,11 +136,21 @@ class VerificationRecord(Base):
     
     # Result
     result: Mapped[str] = mapped_column(String(50))
+    comparison_result: Mapped[Optional[str]] = mapped_column(
+        String(50),
+        comment="Comparison result: match, mismatch, inconclusive, partial_match",
+    )
     confidence_score: Mapped[Optional[float]] = mapped_column(Float)
     notes: Mapped[Optional[str]] = mapped_column(Text)
     
     # Evidence
     evidence: Mapped[Optional[str]] = mapped_column(Text)  # JSON as text
+    
+    # Geometry comparison details
+    geometry_diff_summary: Mapped[Optional[str]] = mapped_column(
+        Text,
+        comment="JSON summary of geometry differences",
+    )
     
     # Timestamp
     verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime)

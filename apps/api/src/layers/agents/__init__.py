@@ -10,5 +10,6 @@ AI agents for monitoring, prediction, and recommendation:
 from .sentinel import SentinelAgent
 from .analyst import AnalystAgent
 from .advisor import AdvisorAgent
+from .reporter import ReporterAgent, reporter_agent
 
-__all__ = ["SentinelAgent", "AnalystAgent", "AdvisorAgent"]
+__all__ = ["SentinelAgent", "AnalystAgent", "AdvisorAgent", "ReporterAgent", "reporter_agent"]

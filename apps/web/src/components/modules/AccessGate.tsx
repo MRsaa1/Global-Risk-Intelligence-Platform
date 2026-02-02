@@ -4,6 +4,7 @@
 import { ReactNode, useEffect, useState } from 'react'
 import { LockClosedIcon } from '@heroicons/react/24/outline'
 import { ModuleAccessLevel } from '../../lib/modules'
+import { authService } from '../../lib/auth'
 
 interface AccessGateProps {
   accessLevel: ModuleAccessLevel
@@ -25,7 +26,16 @@ export default function AccessGate({ accessLevel, children, fallback }: AccessGa
   })
 
   useEffect(() => {
-    fetch('/api/v1/auth/me', { credentials: 'include' })
+    // Skip /auth/me when there is no token to avoid 401 spam in console
+    const token = authService.getToken()
+    if (!token) {
+      setUserAccess({ authenticated: false, securityClearance: false, metaAccess: false })
+      return
+    }
+    fetch('/api/v1/auth/me', {
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    })
       .then((res) => {
         if (res.ok) {
           return res.json().then((data) => ({

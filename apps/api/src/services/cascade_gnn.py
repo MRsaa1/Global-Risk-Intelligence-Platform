@@ -633,6 +633,72 @@ class CascadeGNNService:
                 return "operational"
             return "climate"
 
+        # City-specific node names (no tpl_* placeholders) for supply chain / operational
+        _CITY_NODES: Dict[str, Dict[str, List[Tuple]]] = {
+            "San Francisco": {
+                "operational": [
+                    ("Port_of_Oakland", "Port of Oakland", NodeType.INFRASTRUCTURE, 45e6, 70, "Logistics", "San Francisco"),
+                    ("SF_Distribution_Center", "SF Distribution Center", NodeType.ASSET, 90e6, 65, "Logistics", "San Francisco"),
+                    ("Central_Warehouse", "Central Warehouse", NodeType.ASSET, 55e6, 60, "Logistics", "San Francisco"),
+                    ("I80_Corridor", "I-80 Corridor", NodeType.INFRASTRUCTURE, 70e6, 75, "Infrastructure", "San Francisco"),
+                    ("Produce_Market", "Produce Market", NodeType.ASSET, 35e6, 68, "Logistics", "San Francisco"),
+                ],
+                "climate": [
+                    ("PG&E_Grid", "PG&E Grid", NodeType.INFRASTRUCTURE, 70e6, 75, "Infrastructure", "San Francisco"),
+                    ("BART_System", "BART System", NodeType.INFRASTRUCTURE, 60e6, 70, "Logistics", "San Francisco"),
+                    ("SFPUC_Water", "SFPUC Water", NodeType.INFRASTRUCTURE, 50e6, 65, "Infrastructure", "San Francisco"),
+                    ("Port_of_Oakland", "Port of Oakland", NodeType.INFRASTRUCTURE, 45e6, 70, "Logistics", "San Francisco"),
+                    ("SFO_Airport", "SFO Airport", NodeType.INFRASTRUCTURE, 80e6, 72, "Logistics", "San Francisco"),
+                ],
+            },
+            "Frankfurt": {
+                "operational": [
+                    ("FRA_Airport_Cargo", "FRA Airport Cargo", NodeType.INFRASTRUCTURE, 60e6, 72, "Logistics", "Frankfurt"),
+                    ("Rhine_Main_Port", "Rhine-Main Port", NodeType.INFRASTRUCTURE, 45e6, 70, "Logistics", "Frankfurt"),
+                    ("Autobahn_Hub", "Autobahn Hub", NodeType.INFRASTRUCTURE, 55e6, 68, "Logistics", "Frankfurt"),
+                    ("DB_Freight", "DB Freight", NodeType.ASSET, 70e6, 65, "Logistics", "Frankfurt"),
+                    ("Central_Warehouse", "Central Warehouse", NodeType.ASSET, 50e6, 62, "Logistics", "Frankfurt"),
+                ],
+                "financial": [
+                    ("ECB", "ECB", NodeType.ASSET, 100e6, 95, "Finance", "Frankfurt"),
+                    ("Deutsche_Bank", "Deutsche Bank", NodeType.ASSET, 90e6, 90, "Finance", "Frankfurt"),
+                    ("Fraport", "Fraport AG", NodeType.ASSET, 70e6, 80, "Logistics", "Frankfurt"),
+                    ("Main_River_Port", "Main River Port", NodeType.INFRASTRUCTURE, 40e6, 70, "Logistics", "Frankfurt"),
+                    ("DZ_Bank", "DZ Bank", NodeType.ASSET, 75e6, 78, "Finance", "Frankfurt"),
+                ],
+            },
+        }
+        _CITY_EDGES: Dict[str, Dict[str, List[Tuple]]] = {
+            "San Francisco": {
+                "operational": [
+                    ("Port_of_Oakland", "SF_Distribution_Center", EdgeType.SUPPLY, 0.85),
+                    ("I80_Corridor", "SF_Distribution_Center", EdgeType.SUPPLY, 0.82),
+                    ("Central_Warehouse", "Produce_Market", EdgeType.SUPPLY, 0.78),
+                    ("Port_of_Oakland", "Central_Warehouse", EdgeType.SUPPLY, 0.8),
+                    ("SF_Distribution_Center", "Produce_Market", EdgeType.SUPPLY, 0.75),
+                ],
+                "climate": [
+                    ("PG&E_Grid", "BART_System", EdgeType.OPERATIONAL, 0.9),
+                    ("PG&E_Grid", "SFPUC_Water", EdgeType.OPERATIONAL, 0.75),
+                    ("BART_System", "SFO_Airport", EdgeType.OPERATIONAL, 0.7),
+                    ("Port_of_Oakland", "SF_Distribution_Center", EdgeType.SUPPLY, 0.82),
+                ],
+            },
+            "Frankfurt": {
+                "operational": [
+                    ("FRA_Airport_Cargo", "Central_Warehouse", EdgeType.SUPPLY, 0.85),
+                    ("Rhine_Main_Port", "DB_Freight", EdgeType.SUPPLY, 0.82),
+                    ("Autobahn_Hub", "Central_Warehouse", EdgeType.SUPPLY, 0.8),
+                    ("DB_Freight", "Central_Warehouse", EdgeType.SUPPLY, 0.78),
+                ],
+                "financial": [
+                    ("ECB", "Deutsche_Bank", EdgeType.FINANCIAL, 0.88),
+                    ("Deutsche_Bank", "DZ_Bank", EdgeType.FINANCIAL, 0.82),
+                    ("Fraport", "FRA_Airport_Cargo", EdgeType.OPERATIONAL, 0.9),
+                ],
+            },
+        }
+
         def _infra_type_to_sector(t: str) -> str:
             if not t:
                 return "Infrastructure"
@@ -716,6 +782,21 @@ class CascadeGNNService:
         self.nx_graph = None
         self.pyg_data = None
 
+        # Prefer city-specific nodes (Port of Oakland, SF Distribution Center) over tpl_*
+        city_key = next((k for k in _CITY_NODES if k.lower() in (city_id or "").lower()), None)
+        if city_key and sc_type in _CITY_NODES.get(city_key, {}):
+            c_nodes = _CITY_NODES[city_key][sc_type]
+            c_edges = _CITY_EDGES.get(city_key, {}).get(sc_type, [])
+            for t in c_nodes:
+                nid, name, ntyp, val, risk, sec, reg = t
+                self.add_node(GraphNode(id=nid, node_type=ntyp, name=name, value=val, risk_score=risk, sector=sec, region=reg))
+            for e in c_edges:
+                src, tgt, etyp, w = e
+                if src in self.nodes and tgt in self.nodes:
+                    self.edges.append(GraphEdge(source_id=src, target_id=tgt, edge_type=etyp, weight=w))
+            self.build_graph()
+            return
+        # Fallback: zone_visualization + template
         from src.services.zone_visualization import zone_visualization_service
 
         infra = zone_visualization_service.get_infrastructure_targets(city_id)

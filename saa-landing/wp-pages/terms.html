@@ -1,0 +1,534 @@
+<!-- Paste into Elementor HTML widget (it supports <style>). -->
+<!-- Terms of Use restored from the legacy landing modal, as a direct public URL page. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+  .saa-wp-bleed{
+    position:relative;
+    left:50%;
+    margin-left:-50vw;
+    width:100vw;
+    max-width:100vw;
+    background:#000;
+    overflow:hidden;
+  }
+
+  .saa-wp{
+    --bg-void:#000000;
+    --bg-deep:#0a0908;
+    --bg-surface:#0f0e0a;
+    --bg-elevated:#141310;
+    --bg-card:#1a1815;
+
+    --text-primary:#e4e4e7;
+    --text-secondary:#9a9a9a;
+    --text-muted:#6b6b6b;
+
+    --accent-primary:#C9A962;
+    --accent-primary-hover:#D4AF37;
+    --accent-primary-glow:rgba(201,169,98,0.3);
+
+    --border-subtle:rgba(255,255,255,0.06);
+    --border-light:rgba(255,255,255,0.1);
+
+    --font-sans:'Space Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    --font-display:'Space Grotesk',-apple-system,BlinkMacSystemFont,sans-serif;
+    --font-mono:'JetBrains Mono','SF Mono','Consolas',monospace;
+
+    --text-xs:11px;
+    --text-sm:12px;
+    --text-base:14px;
+    --text-lg:16px;
+    --text-xl:18px;
+    --text-2xl:24px;
+    --text-3xl:32px;
+
+    color:var(--text-primary);
+    font-family:var(--font-sans) !important;
+    line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+    text-rendering:optimizeLegibility;
+    font-weight:400;
+    letter-spacing:-0.01em !important;
+    font-feature-settings:'cv02','cv03','cv04','cv11';
+    font-optical-sizing:auto;
+  }
+
+  .saa-wp *{box-sizing:border-box}
+  .saa-wp a{color:var(--accent-primary);text-decoration:none}
+  .saa-wp a:hover{color:var(--accent-primary-hover);text-decoration:underline}
+
+  /* Ensure Elementor/theme typography doesn't override the premium stack */
+  .saa-wp .content,
+  .saa-wp .content *{
+    font-family:var(--font-sans) !important;
+    font-feature-settings:inherit !important;
+    font-optical-sizing:inherit !important;
+    letter-spacing:inherit !important;
+  }
+  .saa-wp .mono,
+  .saa-wp .mono *{
+    font-family:var(--font-mono) !important;
+    letter-spacing:0.02em;
+  }
+
+  .saa-wp .bg{
+    position:absolute;
+    inset:-50%;
+    background:
+      radial-gradient(ellipse at 30% 20%, rgba(201, 169, 98, 0.05) 0%, transparent 50%),
+      radial-gradient(ellipse at 70% 80%, rgba(201, 169, 98, 0.03) 0%, transparent 50%);
+    animation:saaGradientMove 20s ease-in-out infinite;
+    pointer-events:none;
+    z-index:0;
+  }
+  @keyframes saaGradientMove{
+    0%,100%{transform:translate(0,0) scale(1)}
+    33%{transform:translate(2%,2%) scale(1.05)}
+    66%{transform:translate(-2%,-2%) scale(0.95)}
+  }
+
+  .saa-wp .content{
+    position:relative;
+    z-index:1;
+    max-width:1200px;
+    margin:0 auto;
+    padding:48px 24px 72px;
+  }
+
+  .saa-wp .topbar{
+    position:sticky;
+    top:0;
+    z-index:2;
+    background:rgba(10,9,8,0.85);
+    backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--border-subtle);
+  }
+  .saa-wp .topbar-inner{
+    max-width:1200px;
+    margin:0 auto;
+    padding:16px 24px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+  }
+  .saa-wp .brand{display:flex;align-items:center;gap:12px;text-decoration:none}
+  .saa-wp .brand-mark{
+    width:36px;height:36px;border:1px solid var(--accent-primary);border-radius:8px;
+    display:flex;align-items:center;justify-content:center;
+    font-family:var(--font-mono) !important;font-size:12px;font-weight:600;color:var(--accent-primary);
+  }
+  .saa-wp .brand-text{color:var(--text-primary);font-size:13px;font-weight:500}
+  .saa-wp .nav{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+  .saa-wp .nav a{
+    font-size:13px;color:var(--text-secondary);
+    padding:8px 10px;border-radius:8px;border:1px solid transparent;
+  }
+  .saa-wp .nav a:hover{color:var(--text-primary);border-color:var(--border-light);text-decoration:none}
+
+  .saa-wp .eyebrow{
+    font-size:var(--text-xs);
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+    color:var(--text-muted);
+    font-family:var(--font-mono) !important;
+  }
+  .saa-wp h1{
+    margin:12px 0 10px;
+    font-size:var(--text-3xl);
+    font-weight:700;
+    letter-spacing:-0.02em;
+    line-height:1.15;
+    font-family:var(--font-display) !important;
+    background:linear-gradient(135deg, var(--text-primary) 0%, var(--accent-primary) 50%, var(--text-primary) 100%);
+    background-size:200% auto;
+    -webkit-background-clip:text;
+    -webkit-text-fill-color:transparent;
+    background-clip:text;
+    animation:saaTitleShift 8s ease infinite;
+  }
+  @keyframes saaTitleShift{0%,100%{background-position:0% center}50%{background-position:200% center}}
+
+  .saa-wp .legal-updated{
+    margin:6px 0 0;
+    color:var(--text-muted);
+    font-size:12px;
+    font-family:var(--font-mono) !important;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+  }
+
+  .saa-wp .hr{height:1px;background:var(--border-subtle);margin:20px 0}
+
+  /* Legal content — unified font and size (same as Privacy Policy) */
+  .saa-wp .legal-content{
+    margin-top:16px;
+    font-family:var(--font-sans) !important;
+    font-size:14px !important;
+    font-weight:400 !important;
+    letter-spacing:-0.01em !important;
+    line-height:1.6 !important;
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+    text-rendering:optimizeLegibility;
+    font-feature-settings:'cv02','cv03','cv04','cv11';
+    font-optical-sizing:auto;
+  }
+  .saa-wp .legal-content p,
+  .saa-wp .legal-content p *,
+  .saa-wp .legal-content li,
+  .saa-wp .legal-content ul,
+  .saa-wp .legal-content .legal-contact,
+  .saa-wp .legal-content .legal-contact p{
+    font-family:var(--font-sans) !important;
+    font-size:14px !important;
+    font-weight:400 !important;
+    letter-spacing:-0.01em !important;
+    line-height:1.6 !important;
+  }
+  .saa-wp .legal-content strong{font-weight:600 !important;font-size:14px !important;font-family:var(--font-sans) !important}
+  .saa-wp .legal-section{
+    background:var(--bg-elevated);
+    border:1px solid var(--border-subtle);
+    border-radius:12px;
+    padding:16px;
+    margin:0 0 14px;
+  }
+  .saa-wp .legal-section h3{
+    margin:0 0 10px;
+    font-size:16px;
+    font-weight:650;
+    letter-spacing:-0.02em;
+    color:var(--text-primary);
+    font-family:var(--font-display) !important;
+  }
+  .saa-wp .legal-section h4{
+    margin:14px 0 6px;
+    font-size:12px;
+    font-family:var(--font-mono) !important;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    color:var(--text-muted);
+  }
+  .saa-wp .legal-section p,
+  .saa-wp .legal-section p *{
+    margin:10px 0;
+    color:var(--text-secondary) !important;
+    font-size:var(--text-base) !important;
+    font-weight:400 !important;
+    letter-spacing:-0.01em !important;
+  }
+  .saa-wp .legal-section strong{color:var(--text-primary)}
+  .saa-wp .legal-section ul{margin:12px 0 0 18px;color:var(--text-secondary);line-height:1.8}
+  .saa-wp .legal-section li{margin:0 0 8px}
+
+  .saa-wp .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+  .saa-wp .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:10px;
+    padding:10px 14px;border-radius:10px;border:1px solid var(--border-light);
+    background:transparent;color:var(--text-primary);font-size:13px;font-weight:500;
+    cursor:pointer;transition:all .2s ease;
+  }
+  .saa-wp .btn:hover{border-color:var(--accent-primary);color:var(--accent-primary);text-decoration:none}
+  .saa-wp .btn.primary{background:var(--accent-primary);border-color:var(--accent-primary);color:#000}
+  .saa-wp .btn.primary:hover{background:var(--accent-primary-hover);border-color:var(--accent-primary-hover);color:#000}
+  .saa-wp .page-footer{ margin-top:24px;padding-top:20px;border-top:1px solid var(--border-subtle);display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:20px }
+  .saa-wp .page-footer-copy{ color:var(--text-muted);font-size:12px }
+  .saa-wp .page-footer-legal{ display:flex;align-items:center;gap:8px;flex-wrap:wrap }
+  .saa-wp .page-footer-legal a{ color:var(--text-muted);font-size:12px;text-decoration:none }
+  .saa-wp .page-footer-legal a:hover{ color:var(--text-secondary) }
+  .saa-wp .page-footer-badge img{ height:32px;width:auto;display:block }
+  .saa-wp .page-footer-badge:hover img{ opacity:0.9 }
+</style>
+
+<div class="saa-wp-bleed">
+  <div class="saa-wp">
+    <div class="bg" aria-hidden="true"></div>
+
+    <div class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="/" aria-label="SAA Alliance home">
+          <div class="brand-mark">SAA</div>
+          <div class="brand-text">Scientific Analytics Alliance</div>
+        </a>
+        <nav class="nav" aria-label="SAA navigation">
+          <a href="/about/">About</a>
+          <a href="/platform/">Platform</a>
+          <a href="/how-it-works/">How it works</a>
+          <a href="/team/">Team</a>
+          <a href="/contact/">Contact</a>
+        </nav>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="eyebrow">Scientific Analytics Alliance</div>
+      <h1>Terms of Use</h1>
+      <div class="legal-updated">Last Updated: January 2025</div>
+
+      <div class="legal-content">
+        <div class="legal-section">
+          <h3>1. Acceptance of Terms</h3>
+          <p>Welcome to Scientific Analytics Alliance ("SAA", "we", "us", or "our"). These Terms of Use ("Terms") govern your access to and use of our websites, platforms, applications, and services (collectively, the "Services").</p>
+          <p>By accessing or using our Services, you agree to be bound by these Terms and our Privacy Policy. If you do not agree to these Terms, you may not access or use our Services.</p>
+          <p>If you are using our Services on behalf of an organization, you represent and warrant that you have the authority to bind that organization to these Terms, and "you" refers to both you individually and that organization.</p>
+        </div>
+
+        <div class="legal-section">
+          <h3>2. Service Description</h3>
+          <p>Scientific Analytics Alliance provides an integrated ecosystem of enterprise-grade analytics platforms designed for institutional investors, financial institutions, and organizations. Our Services include:</p>
+          <ul>
+            <li><strong>Physical-Financial Risk Platform:</strong> Digital twins, cascade analysis, and climate stress testing</li>
+            <li><strong>ARIN Platform:</strong> Autonomous Risk Intelligence Network with AI-powered monitoring</li>
+            <li><strong>Risk Analyzer:</strong> Portfolio risk management with VaR calculations and stress testing</li>
+            <li><strong>Investment Dashboard:</strong> Stock analysis and portfolio tracking</li>
+            <li><strong>Digital Assets Analytics:</strong> Blockchain and cryptocurrency analytics</li>
+            <li><strong>News Analytics:</strong> AI-powered news aggregation and sentiment analysis</li>
+            <li><strong>Prediction Market:</strong> Crowd wisdom aggregation and forecasting</li>
+          </ul>
+          <p>We reserve the right to modify, suspend, or discontinue any aspect of our Services at any time without prior notice.</p>
+        </div>
+
+        <div class="legal-section">
+          <h3>3. User Accounts</h3>
+
+          <h4>3.1 Account Registration</h4>
+          <p>To access certain features of our Services, you may be required to create an account. When registering, you agree to:</p>
+          <ul>
+            <li>Provide accurate, current, and complete information</li>
+            <li>Maintain and promptly update your account information</li>
+            <li>Maintain the security and confidentiality of your login credentials</li>
+            <li>Accept responsibility for all activities under your account</li>
+            <li>Notify us immediately of any unauthorized access or security breach</li>
+          </ul>
+
+          <h4>3.2 Account Restrictions</h4>
+          <p>You may not:</p>
+          <ul>
+            <li>Create multiple accounts for the same person or entity</li>
+            <li>Share your account credentials with third parties</li>
+            <li>Transfer your account to another person without our consent</li>
+            <li>Use another person's account without authorization</li>
+          </ul>
+        </div>
+
+        <div class="legal-section">
+          <h3>4. Acceptable Use Policy</h3>
+          <p>You agree to use our Services only for lawful purposes and in accordance with these Terms. You agree NOT to:</p>
+
+          <h4>4.1 Prohibited Activities</h4>
+          <ul>
+            <li>Violate any applicable laws, regulations, or third-party rights</li>
+            <li>Use the Services for any fraudulent, deceptive, or illegal purpose</li>
+            <li>Attempt to gain unauthorized access to any systems, networks, or data</li>
+            <li>Interfere with or disrupt the integrity or performance of the Services</li>
+            <li>Introduce viruses, malware, or other malicious code</li>
+            <li>Scrape, crawl, or use automated means to access the Services without permission</li>
+            <li>Reverse engineer, decompile, or disassemble any aspect of the Services</li>
+            <li>Use the Services to transmit spam, chain letters, or unsolicited communications</li>
+            <li>Impersonate any person or entity or misrepresent your affiliation</li>
+            <li>Use the Services in any manner that could damage, disable, or impair them</li>
+          </ul>
+
+          <h4>4.2 Data and Content Restrictions</h4>
+          <ul>
+            <li>Do not upload, post, or transmit content that is unlawful, harmful, threatening, abusive, defamatory, or otherwise objectionable</li>
+            <li>Do not share confidential or proprietary information of third parties without authorization</li>
+            <li>Do not use the Services to collect personal information about others without consent</li>
+          </ul>
+        </div>
+
+        <div class="legal-section">
+          <h3>5. Intellectual Property Rights</h3>
+
+          <h4>5.1 Our Intellectual Property</h4>
+          <p>The Services and all content, features, and functionality (including but not limited to software, algorithms, text, graphics, logos, icons, images, audio, video, and data compilations) are owned by SAA or our licensors and are protected by international copyright, trademark, patent, trade secret, and other intellectual property laws.</p>
+
+          <h4>5.2 Limited License</h4>
+          <p>Subject to these Terms, we grant you a limited, non-exclusive, non-transferable, revocable license to access and use the Services for your internal business purposes. This license does not include:</p>
+          <ul>
+            <li>The right to resell, sublicense, or redistribute the Services</li>
+            <li>The right to modify, adapt, or create derivative works</li>
+            <li>The right to use our trademarks, logos, or branding without written consent</li>
+          </ul>
+
+          <h4>5.3 Feedback</h4>
+          <p>If you provide us with feedback, suggestions, or ideas regarding the Services, you grant us a perpetual, irrevocable, worldwide, royalty-free license to use such feedback for any purpose without obligation to you.</p>
+        </div>
+
+        <div class="legal-section">
+          <h3>6. User Content</h3>
+          <p>You retain ownership of any data, information, or content you submit through the Services ("User Content"). By submitting User Content, you grant us a license to use, process, store, and display such content solely for the purpose of providing the Services.</p>
+          <p>You represent and warrant that:</p>
+          <ul>
+            <li>You own or have the necessary rights to your User Content</li>
+            <li>Your User Content does not infringe any third-party rights</li>
+            <li>Your User Content complies with applicable laws and these Terms</li>
+          </ul>
+        </div>
+
+        <div class="legal-section">
+          <h3>7. Payment Terms</h3>
+
+          <h4>7.1 Fees and Billing</h4>
+          <p>Certain features of our Services may require payment. You agree to pay all applicable fees as described on our website or in your service agreement. All fees are:</p>
+          <ul>
+            <li>Due in advance unless otherwise agreed</li>
+            <li>Non-refundable unless otherwise stated</li>
+            <li>Subject to applicable taxes</li>
+          </ul>
+
+          <h4>7.2 Price Changes</h4>
+          <p>We reserve the right to modify our pricing at any time. Price changes will be communicated in advance and will not affect the current billing period.</p>
+
+          <h4>7.3 Payment Failures</h4>
+          <p>If payment fails, we may suspend or terminate access to paid features until payment is received.</p>
+        </div>
+
+        <div class="legal-section">
+          <h3>8. Service Availability and Support</h3>
+
+          <h4>8.1 Availability</h4>
+          <p>We strive to maintain high availability of our Services but do not guarantee uninterrupted access. Services may be temporarily unavailable due to:</p>
+          <ul>
+            <li>Scheduled maintenance (with advance notice when possible)</li>
+            <li>Emergency maintenance or security updates</li>
+            <li>Factors beyond our reasonable control</li>
+          </ul>
+
+          <h4>8.2 Support</h4>
+          <p>Support is provided according to your service level and subscription tier. Enterprise clients may have access to dedicated support channels and SLAs.</p>
+        </div>
+
+        <div class="legal-section">
+          <h3>9. Disclaimers</h3>
+          <p><strong>THE SERVICES ARE PROVIDED "AS IS" AND "AS AVAILABLE" WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED.</strong></p>
+          <p>To the fullest extent permitted by law, we disclaim all warranties, including but not limited to:</p>
+          <ul>
+            <li>Implied warranties of merchantability, fitness for a particular purpose, and non-infringement</li>
+            <li>Warranties regarding the accuracy, reliability, or completeness of any content or data</li>
+            <li>Warranties that the Services will be uninterrupted, secure, or error-free</li>
+          </ul>
+          <p><strong>INVESTMENT DISCLAIMER:</strong> The information provided through our Services is for informational purposes only and does not constitute investment advice, financial advice, trading advice, or any other advice. You should consult with qualified professionals before making any investment decisions. Past performance is not indicative of future results.</p>
+        </div>
+
+        <div class="legal-section">
+          <h3>10. Limitation of Liability</h3>
+          <p><strong>TO THE MAXIMUM EXTENT PERMITTED BY LAW, SAA AND ITS OFFICERS, DIRECTORS, EMPLOYEES, AGENTS, AND AFFILIATES SHALL NOT BE LIABLE FOR:</strong></p>
+          <ul>
+            <li>Any indirect, incidental, special, consequential, or punitive damages</li>
+            <li>Any loss of profits, revenue, data, or business opportunities</li>
+            <li>Any damages arising from your use or inability to use the Services</li>
+            <li>Any damages arising from reliance on any content or data provided through the Services</li>
+          </ul>
+          <p>Our total liability for any claims arising from these Terms or your use of the Services shall not exceed the greater of: (a) the amount you paid to us in the 12 months preceding the claim, or (b) $100 USD.</p>
+          <p>Some jurisdictions do not allow the exclusion of certain warranties or limitations of liability. In such jurisdictions, our liability shall be limited to the maximum extent permitted by law.</p>
+        </div>
+
+        <div class="legal-section">
+          <h3>11. Indemnification</h3>
+          <p>You agree to indemnify, defend, and hold harmless SAA and its officers, directors, employees, agents, and affiliates from and against any claims, liabilities, damages, losses, costs, or expenses (including reasonable attorneys' fees) arising from:</p>
+          <ul>
+            <li>Your use of the Services</li>
+            <li>Your violation of these Terms</li>
+            <li>Your violation of any third-party rights</li>
+            <li>Your User Content</li>
+            <li>Any misrepresentation by you</li>
+          </ul>
+        </div>
+
+        <div class="legal-section">
+          <h3>12. Termination</h3>
+
+          <h4>12.1 Termination by You</h4>
+          <p>You may terminate your account at any time by contacting us or using the account settings. Upon termination, your right to access the Services will cease immediately.</p>
+
+          <h4>12.2 Termination by Us</h4>
+          <p>We may suspend or terminate your access to the Services at any time, with or without cause, including if we believe you have violated these Terms. We may also terminate the Services entirely at our discretion.</p>
+
+          <h4>12.3 Effect of Termination</h4>
+          <p>Upon termination:</p>
+          <ul>
+            <li>Your license to use the Services immediately terminates</li>
+            <li>We may delete your account and User Content</li>
+            <li>Sections of these Terms that by their nature should survive will survive termination</li>
+          </ul>
+        </div>
+
+        <div class="legal-section">
+          <h3>13. Governing Law and Dispute Resolution</h3>
+
+          <h4>13.1 Governing Law</h4>
+          <p>These Terms shall be governed by and construed in accordance with the laws applicable in the jurisdiction where SAA is registered, without regard to conflict of law principles.</p>
+
+          <h4>13.2 Dispute Resolution</h4>
+          <p>Any dispute arising from these Terms or your use of the Services shall be resolved as follows:</p>
+          <ul>
+            <li><strong>Informal Resolution:</strong> We encourage you to contact us first to resolve any dispute informally</li>
+            <li><strong>Arbitration:</strong> If informal resolution fails, disputes may be submitted to binding arbitration</li>
+            <li><strong>Class Action Waiver:</strong> You agree to resolve disputes on an individual basis and waive any right to participate in class actions</li>
+          </ul>
+
+          <h4>13.3 Exceptions</h4>
+          <p>Notwithstanding the above, either party may seek injunctive or other equitable relief in any court of competent jurisdiction to protect intellectual property rights.</p>
+        </div>
+
+        <div class="legal-section">
+          <h3>14. Changes to Terms</h3>
+          <p>We reserve the right to modify these Terms at any time. We will notify you of material changes by:</p>
+          <ul>
+            <li>Posting the updated Terms on our website</li>
+            <li>Updating the "Last Updated" date</li>
+            <li>Providing notice through email or the Services for significant changes</li>
+          </ul>
+          <p>Your continued use of the Services after changes become effective constitutes acceptance of the revised Terms. If you do not agree to the changes, you must stop using the Services.</p>
+        </div>
+
+        <div class="legal-section">
+          <h3>15. General Provisions</h3>
+          <ul>
+            <li><strong>Entire Agreement:</strong> These Terms, together with the Privacy Policy and any service-specific agreements, constitute the entire agreement between you and SAA</li>
+            <li><strong>Severability:</strong> If any provision of these Terms is found unenforceable, the remaining provisions shall continue in effect</li>
+            <li><strong>Waiver:</strong> Our failure to enforce any right or provision shall not constitute a waiver of such right or provision</li>
+            <li><strong>Assignment:</strong> You may not assign these Terms without our prior written consent. We may assign our rights and obligations freely</li>
+            <li><strong>Force Majeure:</strong> We shall not be liable for any failure to perform due to causes beyond our reasonable control</li>
+          </ul>
+        </div>
+
+        <div class="legal-section">
+          <h3>16. Contact Information</h3>
+          <div class="legal-contact">
+            <h4>Legal Inquiries</h4>
+            <p><strong>Scientific Analytics Alliance</strong></p>
+            <p>Email: legal@saa-alliance.com</p>
+            <p>Website: https://saa-alliance.com</p>
+            <p>For general support inquiries, please contact support@saa-alliance.com</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="hr"></div>
+      <div class="btns">
+        <a class="btn primary" href="/contact/">Contact</a>
+        <a class="btn" href="/privacy-policy/">Privacy Policy</a>
+      </div>
+
+      <footer class="page-footer" role="contentinfo">
+        <span class="page-footer-copy">© 2025 Scientific Analytics Alliance • Premium Research & Wealth Intelligence</span>
+        <div class="page-footer-legal">
+          <a href="/privacy-policy/">Privacy Policy</a>
+          <span class="muted" style="font-size:12px">•</span>
+          <a href="/terms/">Terms of Use</a>
+        </div>
+        <a href="https://www.nvidia.com/en-us/startups/" target="_blank" rel="noopener" class="page-footer-badge" aria-label="NVIDIA Inception Program">
+          <img src="https://saa-alliance.com/wp-content/uploads/2026/01/nvidia-inception-program-badge-rgb-1c-blk-for-screen.png" alt="NVIDIA Inception Program Member" loading="lazy" decoding="async">
+        </a>
+      </footer>
+    </div>
+  </div>
+</div>
+

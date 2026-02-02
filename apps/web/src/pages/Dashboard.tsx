@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -12,14 +13,18 @@ import {
   BeakerIcon,
   BoltIcon,
   SignalIcon,
+  BriefcaseIcon,
+  CurrencyDollarIcon,
+  ShieldExclamationIcon,
+  LinkIcon,
 } from '@heroicons/react/24/outline'
 import AlertPanel from '../components/AlertPanel'
 import ClimateWidget from '../components/ClimateWidget'
 import RecentActivityPanel from '../components/dashboard/RecentActivityPanel'
-// New chart components
+import SystemOverseerWidget from '../components/dashboard/SystemOverseerWidget'
+// Chart components (institutional-grade, no 3D)
 import TimeSeriesChart from '../components/charts/TimeSeriesChart'
 import PieChart from '../components/charts/PieChart'
-import BarChart3D from '../components/charts/BarChart3D'
 import ComparisonChart from '../components/charts/ComparisonChart'
 import ChartControls, { TimeRange } from '../components/charts/ChartControls'
 import { chartColors } from '../lib/chartColors'
@@ -58,7 +63,53 @@ interface PlatformStatus {
   last_sync: string
 }
 
-// Stats are now derived from platform store (synced with Command Center)
+// ============================================
+// INSTITUTIONAL KPIs (Board-level, € denominated)
+// ============================================
+
+// Format billions for display
+function formatBillionsEur(value: number): string {
+  if (value >= 1000) return `€${(value / 1000).toFixed(1)}T`
+  if (value >= 1) return `€${value.toFixed(0)}M`
+  return `€${(value * 1000).toFixed(0)}K`
+}
+
+// Determine risk posture level
+function getRiskPosture(weightedRisk: number): { level: string; color: string; arrow: string } {
+  if (weightedRisk > 0.75) return { level: 'CRITICAL', color: 'text-red-400', arrow: '↑↑' }
+  if (weightedRisk > 0.6) return { level: 'ELEVATED', color: 'text-orange-400', arrow: '↑' }
+  if (weightedRisk > 0.4) return { level: 'MODERATE', color: 'text-amber-400', arrow: '→' }
+  return { level: 'STABLE', color: 'text-emerald-400', arrow: '↓' }
+}
+
+// Institutional KPIs - derived from platform store (synced with Command Center)
+function useInstitutionalKPIs() {
+  const portfolio = usePortfolio()
+  
+  return useMemo(() => {
+    // Calculate institutional metrics
+    const capitalAtRisk = portfolio.atRisk || 420 // €M
+    const stressLossP95 = Math.round(capitalAtRisk * 0.75) // P95 = ~75% of CaR
+    const riskVelocity = portfolio.weightedRisk > 0.6 ? 22 : portfolio.weightedRisk > 0.4 ? 8 : -5 // % MoM
+    const mitigatedRatio = portfolio.weightedRisk < 0.5 ? 0.68 : portfolio.weightedRisk < 0.7 ? 0.45 : 0.28
+    
+    return {
+      capitalAtRisk,
+      capitalAtRiskChange: '+€65M WoW',
+      stressLossP95,
+      stressLossP95Pct: '+11%',
+      riskVelocity,
+      riskVelocityLabel: riskVelocity > 0 ? `+${riskVelocity}%` : `${riskVelocity}%`,
+      mitigatedRatio,
+      mitigatedPct: `${Math.round(mitigatedRatio * 100)}%`,
+      unmitigatedPct: `${Math.round((1 - mitigatedRatio) * 100)}%`,
+      posture: getRiskPosture(portfolio.weightedRisk),
+      totalExposure: portfolio.totalExposure || 4200, // €M
+    }
+  }, [portfolio])
+}
+
+// Legacy stats for backwards compatibility (hidden from C-level view)
 function useStats() {
   const portfolio = usePortfolio()
   
@@ -439,13 +490,13 @@ export default function Dashboard() {
   const riskTrendChartRef = useRef<HTMLDivElement>(null)
   
   // Platform store - synced with Command Center
-  const stats = useStats()
+  const institutionalKPIs = useInstitutionalKPIs()
   const activeStressTest = useActiveStressTest()
   const recentEvents = useRecentEvents(5)
   const { wsStatus } = usePlatformStore()
   
-  // Platform WebSocket - receives events from Command Center
-  usePlatformWebSocket(['dashboard', 'stress_tests', 'alerts'])
+  // Platform WebSocket - receives events from Command Center (including command_center for zones/twins)
+  usePlatformWebSocket(['dashboard', 'stress_tests', 'alerts', 'command_center'])
   
   // Fetch platform layers from API
   const { data: platformData, isLoading, error } = useQuery({
@@ -504,43 +555,50 @@ export default function Dashboard() {
     setIsRefreshingTrends(false)
   }
   
-  // Sample annotations for the risk trend chart
+  // Financial impact annotations for the risk trend chart (institutional style)
   const riskTrendAnnotations = useMemo(() => {
     const now = new Date()
     const days = getDaysFromTimeRange(riskTrendTimeRange)
     
-    // Generate sample annotations based on time range
+    // Generate auto-annotations with financial impact
     const annotations: Array<{ date: Date; label: string; type: 'stress-test' | 'alert' | 'event' }> = []
     
+    if (days >= 5) {
+      const stressTestDate = new Date(now)
+      stressTestDate.setDate(stressTestDate.getDate() - 3)
+      annotations.push({
+        date: stressTestDate,
+        label: 'Flood risk ↑ → €32M exposure',
+        type: 'alert',
+      })
+    }
+    
     if (days >= 7) {
-      // Add a stress test from 5 days ago
       const stressTestDate = new Date(now)
       stressTestDate.setDate(stressTestDate.getDate() - 5)
       annotations.push({
         date: stressTestDate,
-        label: 'Climate Stress Test',
+        label: 'Network risk spike → Supplier X',
         type: 'stress-test',
       })
     }
     
     if (days >= 14) {
-      // Add an alert from 12 days ago
       const alertDate = new Date(now)
       alertDate.setDate(alertDate.getDate() - 12)
       annotations.push({
         date: alertDate,
-        label: 'High Risk Alert: Frankfurt Tower',
+        label: 'Heat stress → €48M at risk',
         type: 'alert',
       })
     }
     
     if (days >= 21) {
-      // Add a system event from 18 days ago
       const eventDate = new Date(now)
       eventDate.setDate(eventDate.getDate() - 18)
       annotations.push({
         date: eventDate,
-        label: 'Model Update Deployed',
+        label: 'Mitigation deployed → €12M saved',
         type: 'event',
       })
     }
@@ -559,6 +617,11 @@ export default function Dashboard() {
     if (!riskDistributionResponse?.distribution) {
       return getRiskDistributionData() // Fallback
     }
+    const total = riskDistributionResponse.total_assets ?? 0
+    const allZero = riskDistributionResponse.distribution.every((d) => (d.value ?? 0) === 0)
+    if (total === 0 || allZero) {
+      return getRiskDistributionData() // Fallback when DB has no assets
+    }
     return riskDistributionResponse.distribution
   }, [riskDistributionResponse])
   
@@ -571,8 +634,8 @@ export default function Dashboard() {
   })
   
   const topRiskAssetsData = useMemo(() => {
-    if (!topRiskAssetsResponse?.assets) {
-      return getTopRiskAssetsData() // Fallback
+    if (!topRiskAssetsResponse?.assets?.length) {
+      return getTopRiskAssetsData() // Fallback when DB has no assets
     }
     return topRiskAssetsResponse.assets
   }, [topRiskAssetsResponse])
@@ -606,25 +669,28 @@ export default function Dashboard() {
   
   return (
     <div className="h-full overflow-auto p-8">
-      {/* Header */}
+      {/* ============================================ */}
+      {/* EXECUTIVE RISK SNAPSHOT (Above the Fold) */}
+      {/* ============================================ */}
+      
+      {/* Global Risk Posture Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="mb-8"
+        className="mb-6"
       >
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-display font-bold gradient-text">
-              Physical-Financial Risk Platform
+            <h1 className="text-2xl font-display font-bold text-white/90 tracking-wide">
+              PHYSICAL-FINANCIAL RISK COMMAND CENTER
             </h1>
-            <p className="text-dark-muted mt-2">
-              The Operating System for the Physical Economy
+            <p className="text-white/40 text-sm mt-1">
+              Strategic Intelligence for the Physical Economy
             </p>
           </div>
           
-          {/* Live sync indicator */}
+          {/* Live sync + status indicators */}
           <div className="flex items-center gap-4">
-            {/* Active Stress Test indicator */}
             {activeStressTest && (
               <motion.div 
                 initial={{ opacity: 0, scale: 0.9 }}
@@ -635,73 +701,213 @@ export default function Dashboard() {
                 <span className="text-xs text-amber-300">
                   {activeStressTest.name}
                   {activeStressTest.progress !== undefined && (
-                    <span className="ml-2 text-amber-400/70">
-                      {activeStressTest.progress}%
-                    </span>
+                    <span className="ml-2 text-amber-400/70">{activeStressTest.progress}%</span>
                   )}
                 </span>
               </motion.div>
             )}
-            
-            {/* WebSocket status */}
             <div className="flex items-center gap-1.5 text-xs">
-              <SignalIcon className={`w-4 h-4 ${
-                wsStatus === 'connected' ? 'text-emerald-400' : 
-                wsStatus === 'connecting' ? 'text-amber-400 animate-pulse' : 
-                'text-white/30'
-              }`} />
-              <span className={`${
-                wsStatus === 'connected' ? 'text-emerald-400' : 
-                wsStatus === 'connecting' ? 'text-amber-400' : 
-                'text-white/30'
-              }`}>
-                {wsStatus === 'connected' ? 'Live' : 
-                 wsStatus === 'connecting' ? 'Connecting...' : 
-                 'Offline'}
+              <SignalIcon className={`w-4 h-4 ${wsStatus === 'connected' ? 'text-emerald-400' : wsStatus === 'connecting' ? 'text-amber-400 animate-pulse' : 'text-white/30'}`} />
+              <span className={wsStatus === 'connected' ? 'text-emerald-400' : wsStatus === 'connecting' ? 'text-amber-400' : 'text-white/30'}>
+                {wsStatus === 'connected' ? 'Live' : wsStatus === 'connecting' ? 'Connecting...' : 'Offline'}
               </span>
             </div>
           </div>
         </div>
       </motion.div>
 
-      {/* Stats Grid */}
+      {/* GLOBAL RISK POSTURE - Hero Line */}
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+        className="glass rounded-2xl p-5 border border-white/10 mb-6"
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="text-white/40 text-xs uppercase tracking-widest">Global Risk Posture</div>
+            <div className={`text-2xl font-bold tracking-wide ${institutionalKPIs.posture.color}`}>
+              {institutionalKPIs.posture.level} {institutionalKPIs.posture.arrow}
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="text-white/40 text-[10px] uppercase tracking-wider mb-1">Capital at Risk (30d)</div>
+            <div className="text-white text-xl font-light">
+              €{institutionalKPIs.capitalAtRisk}M 
+              <span className="text-red-400/80 text-sm ml-2">{institutionalKPIs.capitalAtRiskChange}</span>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* 4 INSTITUTIONAL KPIs (Board-level) */}
       <motion.div
         variants={container}
         initial="hidden"
         animate="show"
-        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8"
+        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8"
       >
-        {stats.map((stat) => (
-          <motion.div
-            key={stat.name}
-            variants={item}
-            className="glass rounded-2xl p-6 border border-white/5"
-          >
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-white/50 text-xs">{stat.name}</p>
-                <p className="text-2xl font-display font-bold mt-2 text-white/90">{stat.value}</p>
-                <p className={`text-xs mt-2 ${stat.change.startsWith('+') ? 'text-white/50' : 'text-white/40'}`}>
-                  {stat.change} from last month
-                </p>
-              </div>
-              <div className={`p-2.5 rounded-xl ${stat.color === 'primary' ? 'bg-primary-500/10 border border-primary-500/20' : stat.color === 'accent' ? 'bg-accent-500/10 border border-accent-500/20' : 'bg-white/5 border border-white/10'}`}>
-                <stat.icon className={`w-5 h-5 ${stat.color === 'primary' ? 'text-primary-400' : stat.color === 'accent' ? 'text-accent-400' : 'text-white/60'}`} />
-              </div>
-            </div>
-          </motion.div>
-        ))}
+        {/* Capital at Risk (VaR/CaR) */}
+        <motion.div variants={item} className="glass rounded-xl p-5 border border-white/5">
+          <div className="text-white/40 text-[10px] uppercase tracking-widest mb-2">Capital at Risk</div>
+          <div className="text-white text-2xl font-light">€{institutionalKPIs.capitalAtRisk}M</div>
+          <div className="text-red-400/70 text-xs mt-1">{institutionalKPIs.capitalAtRiskChange}</div>
+          <div className="text-white/30 text-[10px] mt-2">30-day VaR equivalent</div>
+        </motion.div>
+        
+        {/* Stress Loss (P95) */}
+        <motion.div variants={item} className="glass rounded-xl p-5 border border-white/5">
+          <div className="text-white/40 text-[10px] uppercase tracking-widest mb-2">Stress Loss (P95)</div>
+          <div className="text-white text-2xl font-light">€{institutionalKPIs.stressLossP95}M</div>
+          <div className="text-orange-400/70 text-xs mt-1">{institutionalKPIs.stressLossP95Pct}</div>
+          <div className="text-white/30 text-[10px] mt-2">Severe scenario loss</div>
+        </motion.div>
+        
+        {/* Risk Velocity */}
+        <motion.div variants={item} className="glass rounded-xl p-5 border border-white/5">
+          <div className="text-white/40 text-[10px] uppercase tracking-widest mb-2">Risk Velocity</div>
+          <div className={`text-2xl font-light ${institutionalKPIs.riskVelocity > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+            {institutionalKPIs.riskVelocityLabel}
+          </div>
+          <div className="text-white/50 text-xs mt-1">vs last month</div>
+          <div className="text-white/30 text-[10px] mt-2">Rate of risk change</div>
+        </motion.div>
+        
+        {/* Mitigated vs Unmitigated */}
+        <motion.div variants={item} className="glass rounded-xl p-5 border border-white/5">
+          <div className="text-white/40 text-[10px] uppercase tracking-widest mb-2">Risk Coverage</div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-emerald-400 text-2xl font-light">{institutionalKPIs.mitigatedPct}</span>
+            <span className="text-white/30 text-sm">mitigated</span>
+          </div>
+          <div className="text-red-400/60 text-xs mt-1">{institutionalKPIs.unmitigatedPct} unmitigated</div>
+          <div className="mt-2 h-1.5 bg-white/10 rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full"
+              style={{ width: institutionalKPIs.mitigatedPct }}
+            />
+          </div>
+        </motion.div>
       </motion.div>
 
-      {/* Three Column Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* SENTINEL Real-time Alerts */}
+      {/* Quick Actions - 3D + AI Fintech Strategy */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.35 }}
+        className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8"
+      >
+        <Link to="/projects" className="block group">
+          <div className="glass rounded-2xl p-5 border border-amber-500/20 hover:border-amber-500/50 transition-all hover:bg-amber-500/5">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <BriefcaseIcon className="w-5 h-5 text-amber-400" />
+                  <p className="text-sm font-semibold text-white/90">Project Finance</p>
+                </div>
+                <p className="text-xs text-white/50">IRR/NPV, Phases, CAPEX/OPEX</p>
+              </div>
+              <ArrowTrendingUpIcon className="w-6 h-6 text-amber-400/50 group-hover:text-amber-400 transition-colors" />
+            </div>
+          </div>
+        </Link>
+        <Link to="/portfolios" className="block group">
+          <div className="glass rounded-2xl p-5 border border-emerald-500/20 hover:border-emerald-500/50 transition-all hover:bg-emerald-500/5">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <CurrencyDollarIcon className="w-5 h-5 text-emerald-400" />
+                  <p className="text-sm font-semibold text-white/90">Portfolios & REIT</p>
+                </div>
+                <p className="text-xs text-white/50">NAV, FFO, Yield, Stress Tests</p>
+              </div>
+              <ArrowTrendingUpIcon className="w-6 h-6 text-emerald-400/50 group-hover:text-emerald-400 transition-colors" />
+            </div>
+          </div>
+        </Link>
+        <Link to="/fraud" className="block group">
+          <div className="glass rounded-2xl p-5 border border-red-500/20 hover:border-red-500/50 transition-all hover:bg-red-500/5">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <ShieldExclamationIcon className="w-5 h-5 text-red-400" />
+                  <p className="text-sm font-semibold text-white/90">Fraud Detection</p>
+                </div>
+                <p className="text-xs text-white/50">Claims, 3D Compare, Verification</p>
+              </div>
+              <ArrowTrendingUpIcon className="w-6 h-6 text-red-400/50 group-hover:text-red-400 transition-colors" />
+            </div>
+          </div>
+        </Link>
+        <Link to="/action-plans" className="block group">
+          <div className="glass rounded-2xl p-5 border border-amber-500/20 hover:border-amber-500/50 transition-all hover:bg-amber-500/5">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <BeakerIcon className="w-5 h-5 text-amber-400" />
+                  <p className="text-sm font-semibold text-white/90">STRESS TEST ACTION PLAN</p>
+                </div>
+                <p className="text-xs text-white/50">Template: 5 sectors, phases, metrics, step-by-step</p>
+              </div>
+              <ArrowTrendingUpIcon className="w-6 h-6 text-amber-400/50 group-hover:text-amber-400 transition-colors" />
+            </div>
+          </div>
+        </Link>
+        <Link to="/stress-planner" className="block group">
+          <div className="glass rounded-2xl p-5 border border-amber-500/20 hover:border-amber-500/50 transition-all hover:bg-amber-500/5">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <BeakerIcon className="w-5 h-5 text-amber-400" />
+                  <p className="text-sm font-semibold text-white/90">Stress Planner</p>
+                </div>
+                <p className="text-xs text-white/50">All scenario types, Monte Carlo, real API</p>
+              </div>
+              <ArrowTrendingUpIcon className="w-6 h-6 text-amber-400/50 group-hover:text-amber-400 transition-colors" />
+            </div>
+          </div>
+        </Link>
+        {/* Institutional Modes */}
+        <Link to="/board-mode" className="block group">
+          <div className="glass rounded-2xl p-5 border border-purple-500/20 hover:border-purple-500/50 transition-all hover:bg-purple-500/5">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <CubeTransparentIcon className="w-5 h-5 text-purple-400" />
+                  <p className="text-sm font-semibold text-white/90">Board Mode</p>
+                </div>
+                <p className="text-xs text-white/50">5-slide executive presentation</p>
+              </div>
+              <ArrowTrendingUpIcon className="w-6 h-6 text-purple-400/50 group-hover:text-purple-400 transition-colors" />
+            </div>
+          </div>
+        </Link>
+        <Link to="/regulator-mode" className="block group">
+          <div className="glass rounded-2xl p-5 border border-slate-500/20 hover:border-slate-500/50 transition-all hover:bg-slate-500/5">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <CheckCircleIcon className="w-5 h-5 text-slate-400" />
+                  <p className="text-sm font-semibold text-white/90">Regulator Mode</p>
+                </div>
+                <p className="text-xs text-white/50">ECB / DORA / ISO 22301 view</p>
+              </div>
+              <ArrowTrendingUpIcon className="w-6 h-6 text-slate-400/50 group-hover:text-slate-400 transition-colors" />
+            </div>
+          </div>
+        </Link>
+      </motion.div>
+
+      {/* Four Column Layout: Alerts, Climate, Risk Distribution, System Overseer */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* SENTINEL Real-time Alerts - height matches Climate Risk Monitor */}
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.4 }}
+          className="h-full flex flex-col min-h-0"
         >
-          <AlertPanel maxAlerts={5} compact={true} />
+          <AlertPanel maxAlerts={5} compact={true} fillHeight />
         </motion.div>
 
         {/* Climate Risk Monitor - LIVE DATA */}
@@ -709,18 +915,31 @@ export default function Dashboard() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.45 }}
+          className="h-full min-h-0"
         >
           <ClimateWidget />
         </motion.div>
 
-        {/* Risk Distribution - Enhanced with PieChart */}
+        {/* Risk Distribution — by risk level across all active assets (not portfolio-scoped) */}
         <motion.div
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5 }}
           className="glass rounded-2xl p-6 border border-white/5"
         >
-          <h2 className="text-sm font-display font-semibold mb-4 text-white/80">Asset Risk Distribution</h2>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-sm font-display font-semibold text-white/80">Asset Risk Distribution</h2>
+              <p className="text-[10px] text-white/40 mt-0.5">All active assets in system</p>
+            </div>
+            <Link 
+              to="/risk-zones-analysis"
+              className="p-1.5 rounded-lg hover:bg-white/5 transition-colors"
+              title="View Zone Dependencies Analysis"
+            >
+              <LinkIcon className="w-4 h-4 text-cyan-400/60 hover:text-cyan-400" />
+            </Link>
+          </div>
           <PieChart
             data={riskDistributionData}
             size={200}
@@ -731,7 +950,17 @@ export default function Dashboard() {
             title=""
           />
         </motion.div>
+
+        {/* System Overseer - health, executive summary, system alerts */}
+        <motion.div
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.5 }}
+        >
+          <SystemOverseerWidget />
+        </motion.div>
       </div>
+
 
       {/* NEW: Advanced Analytics Section */}
       <motion.div
@@ -755,7 +984,7 @@ export default function Dashboard() {
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-3">
                 <h3 className="text-white/80 text-sm font-medium">
-                  Risk Trends ({riskTrendTimeRange === '1D' ? '24 Hours' : 
+                  Risk Trends & Financial Impact ({riskTrendTimeRange === '1D' ? '24 Hours' : 
                                riskTrendTimeRange === '1W' ? '7 Days' : 
                                riskTrendTimeRange === '1M' ? '30 Days' : 
                                riskTrendTimeRange === '3M' ? '90 Days' : 
@@ -827,7 +1056,10 @@ export default function Dashboard() {
               showArea={true}
               showStatistics={true}
               yAxisLabel="Risk Score"
+              yAxisLabelRight="Expected Loss"
               valueFormat="number"
+              secondaryYMultiplier={5.2}
+              secondaryYFormat="currency"
               thresholds={[
                 { value: 60, label: 'WARNING', color: '#f59e0b', style: 'dashed' },
                 { value: 80, label: 'CRITICAL', color: '#ef4444', style: 'dashed' },
@@ -836,18 +1068,77 @@ export default function Dashboard() {
             />
           </div>
           
-          {/* Top Risk Assets - 3D Bar Chart */}
-          <div className="glass rounded-2xl p-6 border border-white/5 pb-4">
-            <BarChart3D
-              data={topRiskAssetsData}
-              height={400}
-              showGrid={true}
-              showLabels={true}
-              showValues={true}
-              title="Top Risk Assets"
-              valueFormat="number"
-              colorByRisk={true}
-            />
+          {/* Top Risk Assets - Ranked Decision Table (Institutional) */}
+          <div className="glass rounded-2xl p-6 border border-white/5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-white/80 text-sm font-medium">TOP RISK ASSETS</h3>
+              <span className="text-amber-400 text-lg font-light">€221M ↗</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-white/10">
+                    <th className="text-left text-white/40 text-[10px] uppercase tracking-wider py-2 px-2">Rank</th>
+                    <th className="text-left text-white/40 text-[10px] uppercase tracking-wider py-2 px-2">Assets</th>
+                    <th className="text-left text-white/40 text-[10px] uppercase tracking-wider py-2 px-2">Risk/Vet</th>
+                    <th className="text-right text-white/40 text-[10px] uppercase tracking-wider py-2 px-2">Exposure</th>
+                    <th className="text-left text-white/40 text-[10px] uppercase tracking-wider py-2 px-2">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topRiskAssetsData.slice(0, 5).map((asset, idx) => {
+                    const riskLevel = asset.risk > 0.8 ? 'critical' : asset.risk > 0.6 ? 'high' : 'medium'
+                    const riskDriver = asset.risk > 0.85 ? 'Flood' : asset.risk > 0.75 ? 'Heat' : asset.risk > 0.65 ? 'Network' : 'Heat'
+                    const owner = asset.risk > 0.8 ? 'Infra' : asset.risk > 0.7 ? 'Ops' : 'Risk'
+                    const action = asset.risk > 0.85 ? 'Relocate' : asset.risk > 0.75 ? 'Capex' : asset.risk > 0.65 ? 'Backup' : 'Monitor'
+                    const expectedLoss = Math.round(asset.value * 0.52)
+                    
+                    return (
+                      <tr key={asset.label} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                        <td className="py-3 px-2">
+                          <span className={`inline-flex items-center justify-center w-6 h-6 rounded text-xs font-medium ${
+                            riskLevel === 'critical' ? 'bg-red-500/20 text-red-400' :
+                            riskLevel === 'high' ? 'bg-orange-500/20 text-orange-400' :
+                            'bg-amber-500/20 text-amber-400'
+                          }`}>
+                            {idx + 1}
+                          </span>
+                        </td>
+                        <td className="py-3 px-2">
+                          <div className="text-white/90 font-medium">{asset.label}</div>
+                          <div className="text-white/40 text-[10px]">{riskDriver}</div>
+                        </td>
+                        <td className="py-3 px-2">
+                          <span className={`text-xs ${
+                            riskLevel === 'critical' ? 'text-red-400' :
+                            riskLevel === 'high' ? 'text-orange-400' :
+                            'text-amber-400'
+                          }`}>
+                            {riskDriver}
+                          </span>
+                        </td>
+                        <td className="py-3 px-2 text-right">
+                          <span className="text-white/90">€{expectedLoss}M</span>
+                        </td>
+                        <td className="py-3 px-2">
+                          <span className="inline-flex items-center px-2 py-1 rounded text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                            {action}
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-xs">
+              <div className="text-white/40">
+                TOTAL COST: <span className="text-white/80">€221M</span> <span className="text-white/30">last 7 days</span>
+              </div>
+              <button className="px-3 py-1.5 bg-amber-500 text-black text-xs font-medium rounded hover:bg-amber-400 transition-colors">
+                APPROVE
+              </button>
+            </div>
           </div>
         </div>
         

@@ -6,7 +6,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://saa-alliance.com">
 <link rel="preload" as="image" href="https://saa-alliance.com/wp-content/uploads/2026/01/nvidia-inception-program-badge-rgb-1c-blk-for-screen.png" fetchpriority="low">
-<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
 
 <!-- Мгновенный чёрный фон чтобы избежать мерцания -->
 <style>
@@ -50,8 +50,8 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
   --border-light: rgba(255, 255, 255, 0.1);
   
   /* Typography Scale - Premium Fonts */
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-display: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-sans: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-display: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: 'JetBrains Mono', 'SF Mono', 'Consolas', monospace;
   --text-xs: 11px;
   --text-sm: 12px;
@@ -230,6 +230,9 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
   transition: width 0.2s ease;
   position: relative;
   overflow: hidden;
+  /* CSS-only fallback progress (in case JS never starts) */
+  animation: loadingProgress 3s ease-in-out forwards;
+  animation-delay: 0.5s;
 }
 
 .saa-landing .loading-bar-fill::after {
@@ -246,9 +249,6 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
 @keyframes loading-shimmer {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(100%); }
-  /* CSS fallback animation if JS doesn't work - runs only once, not infinite */
-  animation: loadingProgress 3s ease-in-out forwards;
-  animation-delay: 0.5s;
 }
 
 /* CSS fallback animation for loading bar - runs once, then stops */
@@ -328,10 +328,22 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
 }
 
 .saa-landing .welcome-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: rgba(10, 9, 8, 0.85);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.saa-landing .welcome-header-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px 24px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 30px;
+  width: 100%;
 }
 
 .saa-landing .welcome-header-left {
@@ -344,18 +356,18 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border: 1px solid var(--accent-primary);
-  border-radius: 10px;
+  border-radius: 8px;
   font-family: var(--font-mono);
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--accent-primary);
 }
 
 .saa-landing .welcome-logo-text {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--text-primary);
 }
@@ -363,31 +375,35 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
 .saa-landing .welcome-header-nav {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .saa-landing .welcome-nav-link {
-  padding: 8px 16px;
+  padding: 8px 10px;
   font-size: 13px;
   color: var(--text-secondary);
   text-decoration: none;
-  transition: color 0.2s ease;
+  transition: color 0.2s ease, border-color 0.2s ease;
   background: transparent;
-  border: none;
+  border: 1px solid transparent;
+  border-radius: 8px;
   cursor: pointer;
   font-family: inherit;
 }
 
 .saa-landing .welcome-nav-link:hover {
   color: var(--text-primary);
+  border-color: var(--border-light);
 }
 
 .saa-landing .welcome-nav-btn {
-  padding: 8px 16px;
+  padding: 8px 14px;
   font-size: 13px;
   font-weight: 500;
   text-decoration: none;
-  border-radius: 6px;
+  border-radius: 8px;
   transition: all 0.2s ease;
   background: transparent;
   border: none;
@@ -421,7 +437,7 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
   align-items: center;
   justify-content: center;
   text-align: center;
-  max-width: 800px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 40px;
   position: relative;
@@ -429,24 +445,34 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
   border-radius: 20px;
   will-change: transform;
   transition: transform 0.1s ease-out;
+  font-family: var(--font-sans);
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  font-optical-sizing: auto;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 .saa-landing .welcome-title {
-  font-family: var(--font-sans);
+  font-family: var(--font-display);
   font-size: 32px;
   font-weight: 700;
   letter-spacing: -0.02em;
   line-height: 1.2;
   color: var(--text-primary);
   margin-bottom: 12px;
+  font-feature-settings: inherit;
 }
 
 .saa-landing .welcome-tagline {
+  font-family: var(--font-sans);
   font-size: 16px;
   color: var(--text-secondary);
   margin-bottom: 24px;
   font-weight: 400;
-  letter-spacing: 0.02em;
+  letter-spacing: -0.01em;
+  font-feature-settings: inherit;
 }
 
 .saa-landing .welcome-metrics {
@@ -733,26 +759,27 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
 
 .saa-landing .welcome-footer {
   display: none;
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
   gap: 20px;
+  padding-top: 20px;
+  margin-top: 40px;
+  border-top: 1px solid var(--border-subtle);
 }
 
 .saa-landing .welcome-screen.visible .welcome-footer {
   display: flex;
 }
 
-.saa-landing .nvidia-inception-badge img {
-  height: 50px;
-  opacity: 0.8;
-  transition: opacity 0.3s ease;
+.saa-landing .welcome-footer .nvidia-inception-badge {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
 }
 
-.saa-landing .nvidia-inception-badge:hover img {
-  opacity: 1;
-}
-
-.saa-landing .welcome-copyright {
+.saa-landing .welcome-footer-copy {
   font-size: 12px;
   color: var(--text-muted);
 }
@@ -761,8 +788,24 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 12px;
-  font-size: 11px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+
+.saa-landing .welcome-legal-sep {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.saa-landing .nvidia-inception-badge img {
+  height: 32px;
+  width: auto;
+  opacity: 0.9;
+  transition: opacity 0.3s ease;
+}
+
+.saa-landing .nvidia-inception-badge:hover img {
+  opacity: 1;
 }
 
 .saa-landing .welcome-legal a,
@@ -823,13 +866,17 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
 }
 
 .saa-landing .header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   height: var(--header-height);
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 24px;
   border-bottom: 1px solid var(--border-subtle);
-  background: var(--bg-deep);
+  background: rgba(10, 9, 8, 0.85);
+  backdrop-filter: blur(10px);
 }
 
 .saa-landing .header-left {
@@ -857,11 +904,11 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
   justify-content: center;
   border: 1px solid var(--accent-primary);
   border-radius: 8px;
-  font-family: var(--font-sans);
-  font-size: 11px;
-  font-weight: 700;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
   color: var(--accent-primary);
-  letter-spacing: 0.05em;
+  letter-spacing: 0;
 }
 
 .saa-landing .logo-text {
@@ -3307,7 +3354,7 @@ html {
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
 <div class="saa-landing" style="background:#000;min-height:100vh;">
   <!-- LOADING SCREEN -->
@@ -3340,16 +3387,21 @@ html {
   <!-- WELCOME SCREEN -->
   <div id="saaWelcomeScreen" class="screen welcome-screen" style="display: none !important;">
     <header class="welcome-header">
-      <div class="welcome-header-left">
-        <div class="welcome-logo-mark">SAA</div>
-        <span class="welcome-logo-text">Scientific Analytics Alliance</span>
+      <div class="welcome-header-inner">
+        <div class="welcome-header-left">
+          <div class="welcome-logo-mark">SAA</div>
+          <span class="welcome-logo-text">Scientific Analytics Alliance</span>
+        </div>
+        <nav class="welcome-header-nav" role="navigation" aria-label="Main navigation">
+          <button type="button" class="welcome-nav-link" onclick="window.location.href='/about/';" data-track="nav_click" data-track-nav="about">About</button>
+          <button type="button" class="welcome-nav-link" onclick="window.location.href='/platform/';" data-track="nav_click" data-track-nav="platform">Platform</button>
+          <button type="button" class="welcome-nav-link" onclick="window.location.href='/how-it-works/';" data-track="nav_click" data-track-nav="how_it_works">How it works</button>
+          <button type="button" class="welcome-nav-link" onclick="window.location.href='/team/';" data-track="nav_click" data-track-nav="team">Team</button>
+          <button type="button" class="welcome-nav-link" onclick="window.location.href='/contact/';" data-track="nav_click" data-track-nav="contact">Contact</button>
+          <button type="button" class="welcome-nav-btn ghost" onclick="window.saaShowSignIn();" data-track="cta_click" data-track-cta="sign_in">Sign In</button>
+          <button type="button" class="welcome-nav-btn primary" onclick="window.saaShowGetAccess();" data-track="cta_click" data-track-cta="get_access">Get Access</button>
+        </nav>
       </div>
-      <nav class="welcome-header-nav" role="navigation" aria-label="Main navigation">
-        <button type="button" class="welcome-nav-link" onclick="window.saaShowAbout();" data-track="nav_click" data-track-nav="about">About</button>
-        <button type="button" class="welcome-nav-link" onclick="window.saaShowContact();" data-track="nav_click" data-track-nav="contact">Contact</button>
-        <button type="button" class="welcome-nav-btn ghost" onclick="window.saaShowSignIn();" data-track="cta_click" data-track-cta="sign_in">Sign In</button>
-        <button type="button" class="welcome-nav-btn primary" onclick="window.saaShowGetAccess();" data-track="cta_click" data-track-cta="get_access">Get Access</button>
-      </nav>
     </header>
 
     <div class="welcome-content">
@@ -3430,15 +3482,15 @@ html {
       </div>
       
       <div class="welcome-footer">
-        <a href="https://www.nvidia.com/en-us/startups/" target="_blank" rel="noopener" class="nvidia-inception-badge">
-          <img src="https://saa-alliance.com/wp-content/uploads/2026/01/nvidia-inception-program-badge-rgb-1c-blk-for-screen.png" alt="NVIDIA Inception Program Member Badge" loading="lazy" decoding="async">
-        </a>
-        <p class="welcome-copyright">© 2025 Scientific Analytics Alliance • Premium Research & Wealth Intelligence</p>
+        <span class="welcome-footer-copy">© 2025 Scientific Analytics Alliance • Premium Research & Wealth Intelligence</span>
         <div class="welcome-legal">
-          <button type="button" class="legal-link" onclick="window.saaShowPrivacyPolicy && window.saaShowPrivacyPolicy();">Privacy Policy</button>
-          <span>•</span>
-          <button type="button" class="legal-link" onclick="window.saaShowTerms && window.saaShowTerms();">Terms of Use</button>
+          <button type="button" class="legal-link" onclick="window.location.href='/privacy-policy/';">Privacy Policy</button>
+          <span class="welcome-legal-sep">•</span>
+          <button type="button" class="legal-link" onclick="window.location.href='/terms/';">Terms of Use</button>
         </div>
+        <a href="https://www.nvidia.com/en-us/startups/" target="_blank" rel="noopener" class="nvidia-inception-badge" aria-label="NVIDIA Inception Program">
+          <img src="https://saa-alliance.com/wp-content/uploads/2026/01/nvidia-inception-program-badge-rgb-1c-blk-for-screen.png" alt="NVIDIA Inception Program Member" loading="lazy" decoding="async">
+        </a>
       </div>
     </div>
   </div>
@@ -3466,11 +3518,13 @@ html {
           </button>
         </div>
         <div class="header-nav-links" style="display: flex; gap: 12px; align-items: center;">
-          <button type="button" class="welcome-nav-link" onclick="window.saaShowAbout();">About</button>
-          <button type="button" class="welcome-nav-link" onclick="window.saaShowContact();">Contact</button>
-          <button type="button" class="welcome-nav-link" onclick="window.saaShowFAQ();">FAQ</button>
+          <button type="button" class="welcome-nav-link" onclick="window.location.href='/about/';">About</button>
+          <button type="button" class="welcome-nav-link" onclick="window.location.href='/how-it-works/';">How it works</button>
+          <button type="button" class="welcome-nav-link" onclick="window.location.href='/team/';">Team</button>
+          <button type="button" class="welcome-nav-link" onclick="window.location.href='/contact/';">Contact</button>
+          <button type="button" class="welcome-nav-link" onclick="window.location.href='/faq/';">FAQ</button>
         </div>
-        <button class="header-support-btn" onclick="window.saaShowContact();" title="Support" aria-label="Contact support">
+        <button class="header-support-btn" onclick="window.location.href='/contact/';" title="Support" aria-label="Contact support">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
             <path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
           </svg>
@@ -3531,7 +3585,7 @@ html {
             </div>
           </div>
           <div class="category-items" id="trading-items">
-            <div class="service-item" data-service-id="prediction" onclick="event.stopPropagation(); if(typeof window.saaOpenService === 'function') { window.saaOpenService('prediction'); } else { console.error('saaOpenService not defined'); }">
+            <div class="service-item" data-service-id="prediction" onclick="window.location.href='/platform-prediction-market/';">
               <div class="service-item-header">
                 <div class="service-icon">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -3553,10 +3607,10 @@ html {
                 </div>
               </div>
               <div class="service-item-actions">
-                <button class="service-item-btn" onclick="event.stopPropagation(); if(typeof window.saaOpenService === 'function') { window.saaOpenService('prediction'); }">View Details</button>
+                <button class="service-item-btn" onclick="event.stopPropagation(); window.location.href='/platform-prediction-market/';">View Details</button>
               </div>
             </div>
-            <div class="service-item" data-service-id="dashboard" onclick="event.stopPropagation(); if(typeof window.saaOpenService === 'function') { window.saaOpenService('dashboard'); } else { console.error('saaOpenService not defined'); }">
+            <div class="service-item" data-service-id="dashboard" onclick="window.location.href='/platform-investment-dashboard/';">
               <div class="service-item-header">
                 <div class="service-icon">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -3577,11 +3631,11 @@ html {
                 </div>
               </div>
               <div class="service-item-actions">
-                <button class="service-item-btn" onclick="event.stopPropagation(); saaOpenService('dashboard')">View Details</button>
+                <button class="service-item-btn" onclick="event.stopPropagation(); window.location.href='/platform-investment-dashboard/';">View Details</button>
                 <button class="service-item-btn primary" onclick="event.stopPropagation(); window.open('https://invest.saa-alliance.com/', '_blank')">Launch</button>
               </div>
             </div>
-            <div class="service-item" data-service-id="crypto" onclick="event.stopPropagation(); if(typeof window.saaOpenService === 'function') { window.saaOpenService('crypto'); } else { console.error('saaOpenService not defined'); }">
+            <div class="service-item" data-service-id="crypto" onclick="window.location.href='/platform-digital-assets-analytics/';">
               <div class="service-item-header">
                 <div class="service-icon">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -3602,7 +3656,7 @@ html {
                 </div>
               </div>
               <div class="service-item-actions">
-                <button class="service-item-btn" onclick="event.stopPropagation(); if(typeof window.saaOpenService === 'function') { window.saaOpenService('crypto'); }">View Details</button>
+                <button class="service-item-btn" onclick="event.stopPropagation(); window.location.href='/platform-digital-assets-analytics/';">View Details</button>
                 <button class="service-item-btn primary" onclick="event.stopPropagation(); window.open('https://crypto.saa-alliance.com/', '_blank')">Launch</button>
               </div>
             </div>
@@ -3624,7 +3678,7 @@ html {
             </div>
           </div>
           <div class="category-items" id="risk-items">
-            <div class="service-item" data-service-id="risk" onclick="saaOpenService('risk')">
+            <div class="service-item" data-service-id="risk" onclick="window.location.href='/platform-risk-analyzer/';">
               <div class="service-item-header">
                 <div class="service-icon">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -3645,11 +3699,11 @@ html {
                 </div>
               </div>
               <div class="service-item-actions">
-                <button class="service-item-btn" onclick="event.stopPropagation(); saaOpenService('risk')">View Details</button>
+                <button class="service-item-btn" onclick="event.stopPropagation(); window.location.href='/platform-risk-analyzer/';">View Details</button>
                 <button class="service-item-btn primary" onclick="event.stopPropagation(); window.open('https://analyzer.saa-alliance.com/', '_blank')">Launch</button>
               </div>
             </div>
-            <div class="service-item" data-service-id="arin" onclick="event.stopPropagation(); if(typeof window.saaOpenService === 'function') { window.saaOpenService('arin'); } else { console.error('saaOpenService not defined'); }">
+            <div class="service-item" data-service-id="arin" onclick="window.location.href='/platform-arin/';">
               <div class="service-item-header">
                 <div class="service-icon">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -3670,11 +3724,11 @@ html {
                 </div>
               </div>
               <div class="service-item-actions">
-                <button class="service-item-btn" onclick="event.stopPropagation(); if(typeof window.saaOpenService === 'function') { window.saaOpenService('arin'); }">View Details</button>
+                <button class="service-item-btn" onclick="event.stopPropagation(); window.location.href='/platform-arin/';">View Details</button>
                 <button class="service-item-btn primary" onclick="event.stopPropagation(); window.open('https://arin.saa-alliance.com/dashboard', '_blank')">Launch</button>
               </div>
             </div>
-            <div class="service-item" data-service-id="news" onclick="saaOpenService('news')">
+            <div class="service-item" data-service-id="news" onclick="window.location.href='/platform-news-analytics/';">
               <div class="service-item-header">
                 <div class="service-icon">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -3695,7 +3749,7 @@ html {
                 </div>
               </div>
               <div class="service-item-actions">
-                <button class="service-item-btn" onclick="event.stopPropagation(); saaOpenService('news')">View Details</button>
+                <button class="service-item-btn" onclick="event.stopPropagation(); window.location.href='/platform-news-analytics/';">View Details</button>
                 <button class="service-item-btn primary" onclick="event.stopPropagation(); window.open('https://news.saa-alliance.com/dashboard?lang=en', '_blank')">Launch</button>
               </div>
             </div>
@@ -3717,7 +3771,7 @@ html {
             </div>
           </div>
           <div class="category-items" id="analytics-items">
-            <div class="service-item featured" data-service-id="pfrp" onclick="event.stopPropagation(); if(typeof window.saaOpenService === 'function') { window.saaOpenService('pfrp'); } else { console.error('saaOpenService not defined'); }">
+            <div class="service-item featured" data-service-id="pfrp" onclick="window.location.href='/platform-physical-financial-risk-platform/';">
               <div class="service-item-header">
                 <div class="service-icon">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -3738,7 +3792,7 @@ html {
                 </div>
               </div>
               <div class="service-item-actions">
-                <button class="service-item-btn" onclick="event.stopPropagation(); if(typeof window.saaOpenService === 'function') { window.saaOpenService('pfrp'); }">View Details</button>
+                <button class="service-item-btn" onclick="event.stopPropagation(); window.location.href='/platform-physical-financial-risk-platform/';">View Details</button>
                 <button class="service-item-btn primary" onclick="event.stopPropagation(); window.open('https://risk.saa-alliance.com', '_blank')">Launch</button>
               </div>
             </div>
@@ -3818,9 +3872,9 @@ html {
       <div class="footer-content">
         <span class="footer-copyright">© 2025 Scientific Analytics Alliance • Premium Research & Wealth Intelligence</span>
         <div class="footer-legal">
-          <button type="button" class="legal-link" onclick="window.saaShowPrivacyPolicy && window.saaShowPrivacyPolicy();">Privacy Policy</button>
+          <button type="button" class="legal-link" onclick="window.location.href='/privacy-policy/';">Privacy Policy</button>
           <span>•</span>
-          <button type="button" class="legal-link" onclick="window.saaShowTerms && window.saaShowTerms();">Terms of Use</button>
+          <button type="button" class="legal-link" onclick="window.location.href='/terms/';">Terms of Use</button>
         </div>
         <a href="https://www.nvidia.com/en-us/startups/" target="_blank" rel="noopener" class="footer-nvidia-badge">
           <img src="https://saa-alliance.com/wp-content/uploads/2026/01/nvidia-inception-program-badge-rgb-1c-blk-for-screen.png" alt="NVIDIA Inception Program Member Badge" loading="lazy" decoding="async">
@@ -3963,6 +4017,56 @@ html {
         <p><strong>Access & Operations:</strong></p>
         <p>All platforms operate in production and development modes. Public access is provided for analytical demonstration and evaluation purposes. Execution and write operations are restricted to authorized users. Real-time data feeds, API access, and custom integrations available for enterprise clients.</p>
       </div>
+    </div>
+  </div>
+
+  <!-- HOW IT WORKS MODAL -->
+  <div id="saaHowItWorksModal" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-label="How it works">
+    <div class="modal-backdrop" onclick="window.saaCloseHowItWorks();" aria-hidden="true"></div>
+    <div class="modal-content about-modal">
+      <button class="modal-close-btn" onclick="window.saaCloseHowItWorks();" aria-label="Close How it works modal">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 6L6 18M6 6l12 12"/>
+        </svg>
+      </button>
+      <h2>How it works</h2>
+      <p>High-level walkthrough of SAA platforms. (Placeholder — we’ll fill in next.)</p>
+      <ul>
+        <li><strong>Discover</strong>: choose a platform and module</li>
+        <li><strong>Analyze</strong>: run analytics, scenarios, stress tests</li>
+        <li><strong>Monitor</strong>: track live signals and alerts</li>
+        <li><strong>Act</strong>: decisions, reporting, next steps</li>
+      </ul>
+      <button class="legal-close-btn" onclick="window.saaCloseHowItWorks();">Close</button>
+    </div>
+  </div>
+
+  <!-- TEAM MODAL -->
+  <div id="saaTeamModal" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-label="Team">
+    <div class="modal-backdrop" onclick="window.saaCloseTeam();" aria-hidden="true"></div>
+    <div class="modal-content about-modal">
+      <button class="modal-close-btn" onclick="window.saaCloseTeam();" aria-label="Close Team modal">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 6L6 18M6 6l12 12"/>
+        </svg>
+      </button>
+      <h2>Team</h2>
+      <p>Core team and advisors. (Placeholder — we’ll fill in next.)</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:16px;">
+        <div style="background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:12px;padding:16px;">
+          <div style="font-weight:600;color:var(--text-primary);">Founder</div>
+          <div style="color:var(--text-secondary);margin-top:4px;">Oleksii Slieptsov</div>
+        </div>
+        <div style="background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:12px;padding:16px;">
+          <div style="font-weight:600;color:var(--text-primary);">Engineering</div>
+          <div style="color:var(--text-secondary);margin-top:4px;">Core Platform Team</div>
+        </div>
+        <div style="background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:12px;padding:16px;">
+          <div style="font-weight:600;color:var(--text-primary);">Advisors</div>
+          <div style="color:var(--text-secondary);margin-top:4px;">Institutional & AI/Climate experts</div>
+        </div>
+      </div>
+      <button class="legal-close-btn" onclick="window.saaCloseTeam();">Close</button>
     </div>
   </div>
 
@@ -5234,6 +5338,42 @@ html {
     document.getElementById('saaAboutModal').style.display = 'none';
   };
 
+  // How it works Modal Functions
+  window.saaShowHowItWorks = function() {
+    const modal = document.getElementById('saaHowItWorksModal');
+    if (modal) {
+      modal.style.display = 'flex';
+      if (typeof window.saaTrackEvent === 'function') {
+        window.saaTrackEvent('modal_view', { modal: 'how_it_works' });
+      }
+    }
+  };
+
+  window.saaCloseHowItWorks = function() {
+    const modal = document.getElementById('saaHowItWorksModal');
+    if (modal) {
+      modal.style.display = 'none';
+    }
+  };
+
+  // Team Modal Functions
+  window.saaShowTeam = function() {
+    const modal = document.getElementById('saaTeamModal');
+    if (modal) {
+      modal.style.display = 'flex';
+      if (typeof window.saaTrackEvent === 'function') {
+        window.saaTrackEvent('modal_view', { modal: 'team' });
+      }
+    }
+  };
+
+  window.saaCloseTeam = function() {
+    const modal = document.getElementById('saaTeamModal');
+    if (modal) {
+      modal.style.display = 'none';
+    }
+  };
+
   window.saaShowFAQ = function() {
     const modal = document.getElementById('saaFAQModal');
     if (modal) {
@@ -5412,6 +5552,12 @@ html {
     if (e.key === 'Escape') {
       saaCloseServiceModal();
       saaCloseAbout();
+      if (typeof window.saaCloseHowItWorks === 'function') {
+        window.saaCloseHowItWorks();
+      }
+      if (typeof window.saaCloseTeam === 'function') {
+        window.saaCloseTeam();
+      }
       saaCloseContact();
       saaCloseSignIn();
       saaCloseGetAccess();
@@ -5766,6 +5912,8 @@ html {
       const modals = [
         { id: 'saaServiceModal', close: window.saaCloseServiceModal },
         { id: 'saaAboutModal', close: window.saaCloseAbout },
+        { id: 'saaHowItWorksModal', close: window.saaCloseHowItWorks },
+        { id: 'saaTeamModal', close: window.saaCloseTeam },
         { id: 'saaContactModal', close: window.saaCloseContact },
         { id: 'saaSignInModal', close: window.saaCloseSignIn },
         { id: 'saaGetAccessModal', close: window.saaCloseGetAccess },
@@ -5827,6 +5975,18 @@ html {
     setTimeout(() => trapFocus('saaAboutModal'), 100);
   };
   
+  const originalShowHowItWorks = window.saaShowHowItWorks;
+  window.saaShowHowItWorks = function() {
+    if (typeof originalShowHowItWorks === 'function') originalShowHowItWorks();
+    setTimeout(() => trapFocus('saaHowItWorksModal'), 100);
+  };
+
+  const originalShowTeam = window.saaShowTeam;
+  window.saaShowTeam = function() {
+    if (typeof originalShowTeam === 'function') originalShowTeam();
+    setTimeout(() => trapFocus('saaTeamModal'), 100);
+  };
+
   const originalShowContact = window.saaShowContact;
   window.saaShowContact = function() {
     if (typeof originalShowContact === 'function') originalShowContact();
