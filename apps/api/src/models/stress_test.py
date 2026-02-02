@@ -43,6 +43,13 @@ class StressTestType(str, enum.Enum):
     PROTEST = "protest"                  # Массовые демонстрации, забастовки
     UPRISING = "uprising"                # Гражданские конфликты, революции
     CIVIL_UNREST = "civil_unrest"        # Массовые беспорядки, погромы
+    # Climate sub-types for detailed disaster simulation
+    WIND = "wind"                        # Ураганный ветер (категории 1-5)
+    METRO_FLOOD = "metro_flood"          # Затопление метро
+    HEAT = "heat"                        # Тепловой стресс
+    HEAVY_RAIN = "heavy_rain"            # Сильные осадки
+    DROUGHT = "drought"                  # Засуха
+    UV = "uv"                            # УФ-индекс
 
 
 class StressTestStatus(str, enum.Enum):

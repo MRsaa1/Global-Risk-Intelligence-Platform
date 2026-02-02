@@ -32,6 +32,12 @@ class PDFReportRequest(BaseModel):
     zones: List[Dict[str, Any]] = Field(default_factory=list)
     actions: Optional[List[Dict[str, Any]]] = None
     executive_summary: Optional[str] = None
+    cascade_simulations: Optional[List[Dict[str, Any]]] = None
+    region_action_plan: Optional[Dict[str, Any]] = None
+    historical_comparisons: Optional[List[Dict[str, Any]]] = None
+    concluding_summary: Optional[str] = None
+    report_v2: Optional[Dict[str, Any]] = None
+    currency: Optional[str] = None  # USD for US cities, EUR/GBP for EU/UK
 
 
 @router.post("/report/pdf")
@@ -47,20 +53,21 @@ async def generate_pdf_report(request: PDFReportRequest):
     - Methodology
     """
     try:
-        from src.services.pdf_report import generate_pdf_report, HAS_WEASYPRINT
-        
-        if not HAS_WEASYPRINT:
+        from src.services.pdf_report import generate_pdf_report, HAS_PDF, PDF_BACKEND
+        if not HAS_PDF:
             raise HTTPException(
                 status_code=503,
-                detail="PDF generation is not available. WeasyPrint not installed."
+                detail="PDF generation is not available. Install reportlab (recommended for macOS) or install WeasyPrint + system libs. "
+                       "See: https://doc.courtbouillon.org/weasyprint/stable/first_steps.html"
             )
         
-        # Prepare stress test data
+        # Prepare stress test data (currency for PDF: USD/EUR/GBP by city)
         stress_test = {
             "name": request.test_name,
             "region_name": request.city_name,
             "test_type": request.test_type,
             "severity": request.severity,
+            "currency": request.currency,
         }
         
         # Generate PDF
@@ -69,6 +76,11 @@ async def generate_pdf_report(request: PDFReportRequest):
             zones=request.zones,
             actions=request.actions,
             executive_summary=request.executive_summary,
+            cascade_simulations=request.cascade_simulations or [],
+            region_action_plan=request.region_action_plan,
+            historical_comparisons=request.historical_comparisons or [],
+            concluding_summary=request.concluding_summary,
+            report_v2=request.report_v2,
         )
         
         # Create filename
@@ -79,7 +91,8 @@ async def generate_pdf_report(request: PDFReportRequest):
             city=request.city_name,
             test_type=request.test_type,
             zones=len(request.zones),
-            size_kb=len(pdf_bytes) / 1024
+            size_kb=len(pdf_bytes) / 1024,
+            backend=PDF_BACKEND,
         )
         
         return Response(
@@ -94,7 +107,8 @@ async def generate_pdf_report(request: PDFReportRequest):
         logger.error("PDF generation failed - missing dependency", error=str(e))
         raise HTTPException(
             status_code=503,
-            detail="PDF generation is not available. Install weasyprint."
+            detail="PDF generation is not available. Install reportlab (recommended for macOS) or WeasyPrint + system libs. "
+                   "See: https://doc.courtbouillon.org/weasyprint/stable/first_steps.html"
         )
     except Exception as e:
         logger.error("PDF generation failed", error=str(e))

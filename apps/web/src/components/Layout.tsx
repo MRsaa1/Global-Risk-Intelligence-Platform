@@ -10,17 +10,34 @@ import {
   CpuChipIcon,
   Square3Stack3DIcon,
   BuildingOffice2Icon,
+  BriefcaseIcon,
+  BanknotesIcon,
+  ShieldExclamationIcon,
+  SparklesIcon,
+  LinkIcon,
+  ServerStackIcon,
+  DocumentTextIcon,
+  BeakerIcon,
+  ClipboardDocumentListIcon,
 } from '@heroicons/react/24/outline'
 import { authService } from '../lib/auth'
-import AIAssistant from './AIAssistant'
 
 const navigation = [
   { name: 'Command Center', href: '/command', icon: GlobeAltIcon },
   { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
   { name: 'Assets', href: '/assets', icon: BuildingOffice2Icon },
+  { name: 'Projects', href: '/projects', icon: BriefcaseIcon },
+  { name: 'Portfolios', href: '/portfolios', icon: BanknotesIcon },
+  { name: 'Fraud Detection', href: '/fraud', icon: ShieldExclamationIcon },
   { name: 'Strategic Modules', href: '/modules', icon: Square3Stack3DIcon },
   { name: 'Analytics', href: '/analytics', icon: CpuChipIcon },
   { name: 'Risk Flow', href: '/visualizations', icon: ChartBarIcon },
+  { name: 'Risk Zones Analysis', href: '/risk-zones-analysis', icon: LinkIcon },
+  { name: 'Action Plans', href: '/action-plans', icon: DocumentTextIcon },
+  { name: 'Stress Planner', href: '/stress-planner', icon: BeakerIcon },
+  { name: 'BCP Generator', href: '/bcp-generator', icon: ClipboardDocumentListIcon },
+  { name: 'AI Agents', href: '/agents', icon: SparklesIcon },
+  { name: 'NVIDIA Services', href: '/nvidia-services', icon: ServerStackIcon },
   { name: 'Settings', href: '/settings', icon: Cog6ToothIcon },
 ]
 
@@ -31,8 +48,6 @@ export default function Layout() {
   // Command Center uses minimal sidebar
   const isCommandCenter = location.pathname === '/command'
   
-  console.log('🔍 Layout - Rendering, pathname:', location.pathname, 'isCommandCenter:', isCommandCenter)
-
   const handleLogout = async () => {
     await authService.logout()
     navigate('/login')
@@ -98,14 +113,8 @@ export default function Layout() {
 
       {/* Main content */}
       <main className={`flex-1 relative ${isCommandCenter ? 'overflow-hidden' : 'overflow-auto'}`}>
-        {(() => {
-          console.log('🔍 Layout - Rendering Outlet for path:', location.pathname)
-          return <Outlet />
-        })()}
+        <Outlet />
       </main>
-      
-      {/* AI Assistant - only on Command Center */}
-      {isCommandCenter && <AIAssistant />}
     </div>
   )
 }

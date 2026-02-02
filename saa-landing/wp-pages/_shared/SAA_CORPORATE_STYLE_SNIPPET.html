@@ -1,0 +1,95 @@
+<!--
+  SAA Corporate Style (scoped)
+  Paste this <style> block at the TOP of a WordPress page (Custom HTML / Code tab).
+  It's scoped to .saa-corp so it won't affect the rest of the site.
+-->
+<style>
+  .saa-corp{
+    --bg-void:#000000;
+    --bg-deep:#0a0908;
+    --bg-surface:#0f0e0a;
+    --bg-elevated:#141310;
+    --bg-card:#1a1815;
+    --text-primary:#e4e4e7;
+    --text-secondary:#a1a1aa;
+    --text-muted:#71717a;
+    --accent-primary:#C9A962;
+    --accent-primary-hover:#D4AF37;
+    --accent-primary-glow:rgba(201,169,98,.28);
+    --border-subtle:rgba(255,255,255,.06);
+    --border-light:rgba(255,255,255,.10);
+    color:var(--text-primary);
+    font-family:'Space Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    line-height:1.65;
+  }
+  .saa-corp *{box-sizing:border-box}
+  .saa-corp a{color:var(--accent-primary);text-decoration:none}
+  .saa-corp a:hover{color:var(--accent-primary-hover);text-decoration:underline}
+  .saa-corp .mono{font-family:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace}
+  .saa-corp .wrap{
+    background:radial-gradient(ellipse at 25% 15%, rgba(201,169,98,.08), transparent 55%),
+               radial-gradient(ellipse at 75% 85%, rgba(201,169,98,.05), transparent 55%),
+               linear-gradient(180deg, var(--bg-void), var(--bg-deep));
+    border:1px solid var(--border-subtle);
+    border-radius:16px;
+    padding:40px 24px;
+    margin:16px auto;
+    max-width:1100px;
+    box-shadow:0 20px 60px rgba(0,0,0,.45);
+  }
+  .saa-corp .eyebrow{color:var(--text-muted);font-size:12px;letter-spacing:.12em;text-transform:uppercase}
+  .saa-corp h1{margin:10px 0 10px;font-size:40px;line-height:1.12;letter-spacing:-.02em}
+  .saa-corp h2{margin:34px 0 12px;font-size:22px;letter-spacing:-.01em}
+  .saa-corp h3{margin:0 0 8px;font-size:16px;letter-spacing:-.01em}
+  .saa-corp p{margin:10px 0;color:var(--text-secondary)}
+  .saa-corp .lead{font-size:15px;color:var(--text-secondary);max-width:78ch}
+  .saa-corp .grid{display:grid;gap:14px}
+  @media (min-width: 860px){ .saa-corp .grid.cols-2{grid-template-columns:1fr 1fr} }
+  @media (min-width: 980px){ .saa-corp .grid.cols-3{grid-template-columns:1fr 1fr 1fr} }
+  .saa-corp .card{
+    background:linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.00));
+    border:1px solid var(--border-subtle);
+    border-radius:14px;
+    padding:16px;
+  }
+  .saa-corp .card:hover{border-color:var(--border-light);box-shadow:0 10px 30px rgba(0,0,0,.35)}
+  .saa-corp .kpi{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+  .saa-corp .kpi .value{font-size:20px;font-weight:700;color:var(--text-primary)}
+  .saa-corp .kpi .label{font-size:12px;color:var(--text-muted);letter-spacing:.08em;text-transform:uppercase}
+  .saa-corp .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+  .saa-corp .btn{
+    display:inline-flex;align-items:center;gap:10px;
+    padding:10px 14px;border-radius:10px;border:1px solid var(--border-light);
+    background:transparent;color:var(--text-primary);cursor:pointer;
+  }
+  .saa-corp .btn.primary{background:var(--accent-primary);border-color:var(--accent-primary);color:#000}
+  .saa-corp .btn.primary:hover{background:var(--accent-primary-hover);border-color:var(--accent-primary-hover)}
+  .saa-corp .btn:hover{text-decoration:none;transform:translateY(-1px)}
+  .saa-corp .steps{counter-reset:step}
+  .saa-corp .step{display:flex;gap:12px;align-items:flex-start}
+  .saa-corp .step .num{
+    width:28px;height:28px;border-radius:10px;
+    display:flex;align-items:center;justify-content:center;
+    background:rgba(201,169,98,.12);
+    border:1px solid rgba(201,169,98,.22);
+    color:var(--accent-primary);
+    font-weight:700;
+    flex:0 0 auto;
+  }
+  .saa-corp .muted{color:var(--text-muted)}
+  .saa-corp .media{
+    border-radius:12px;border:1px solid var(--border-subtle);
+    background:var(--bg-elevated);
+    overflow:hidden;
+  }
+  .saa-corp .media .ph{
+    width:100%;
+    aspect-ratio:16/9;
+    background:linear-gradient(90deg, rgba(255,255,255,.02), rgba(255,255,255,.06), rgba(255,255,255,.02));
+    background-size:200% 100%;
+    animation:saaShimmer 1.4s infinite;
+  }
+  @keyframes saaShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+  .saa-corp .caption{padding:10px 12px;color:var(--text-muted);font-size:12px}
+</style>
+

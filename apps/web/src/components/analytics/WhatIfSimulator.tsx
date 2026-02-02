@@ -218,6 +218,31 @@ interface WhatIfSimulatorProps {
   baseExposure?: number
 }
 
+type AiqSourceLike =
+  | string
+  | null
+  | undefined
+  | { id?: string; kind?: string; title?: string; url?: string; snippet?: string }
+
+function normalizeAiqSources(input: unknown): Array<{ id?: string; kind?: string; title?: string; url?: string; snippet?: string }> {
+  if (!Array.isArray(input)) return []
+  return input
+    .filter(Boolean)
+    .map((s: AiqSourceLike) => {
+      if (typeof s === 'string') return { id: s, title: s }
+      if (!s || typeof s !== 'object') return { id: String(s), title: String(s) }
+      const src = s as { id?: string; kind?: string; title?: string; url?: string; snippet?: string }
+      return {
+        id: src.id,
+        kind: src.kind,
+        title: src.title || src.id,
+        url: src.url,
+        snippet: src.snippet,
+      }
+    })
+    .filter((s) => Boolean(s.id || s.title))
+}
+
 export default function WhatIfSimulator({ baseExposure = 100_000_000 }: WhatIfSimulatorProps) {
   const [activeTab, setActiveTab] = useState<'scenarios' | 'sensitivity' | 'optimize'>('scenarios')
   const [parameters, setParameters] = useState<Record<string, number>>({
@@ -229,6 +254,12 @@ export default function WhatIfSimulator({ baseExposure = 100_000_000 }: WhatIfSi
     asset_correlation: 0.3,
   })
   const [scenariosCreated, setScenariosCreated] = useState(false)
+  const [aiOpen, setAiOpen] = useState(false)
+  const [aiQuestion, setAiQuestion] = useState('')
+  const [aiAnswer, setAiAnswer] = useState<string | null>(null)
+  const [aiSources, setAiSources] = useState<Array<{ id?: string; kind?: string; title?: string; url?: string; snippet?: string }>>([])
+  const [aiError, setAiError] = useState<string | null>(null)
+  const [aiLoading, setAiLoading] = useState(false)
   
   // Create predefined scenarios
   const createScenariosMutation = useMutation({
@@ -249,6 +280,14 @@ export default function WhatIfSimulator({ baseExposure = 100_000_000 }: WhatIfSi
         body: JSON.stringify({
           scenario_ids: ['scenario_1', 'scenario_2', 'scenario_3', 'scenario_4'],
           base_exposure: baseExposure,
+          parameters: {
+            event_severity: parameters.event_severity,
+            event_probability: parameters.event_probability,
+            portfolio_exposure: parameters.portfolio_exposure,
+            mitigation_level: parameters.mitigation_level,
+            recovery_speed: parameters.recovery_speed,
+            asset_correlation: parameters.asset_correlation,
+          },
         }),
       })
       if (!res.ok) throw new Error('Failed to compare scenarios')
@@ -302,6 +341,16 @@ export default function WhatIfSimulator({ baseExposure = 100_000_000 }: WhatIfSi
       comparisonMutation.mutate()
     }
   }, [scenariosCreated])
+
+  const openAiExplain = () => {
+    setAiError(null)
+    setAiAnswer(null)
+    setAiSources([])
+    setAiOpen(true)
+    setAiQuestion(
+      'Explain the scenario comparison results and recommendations. Which parameters are driving the loss range? Provide 3 concrete next actions.'
+    )
+  }
   
   return (
     <div className="glass rounded-2xl p-6">
@@ -344,6 +393,24 @@ export default function WhatIfSimulator({ baseExposure = 100_000_000 }: WhatIfSi
             exit={{ opacity: 0, y: -10 }}
             className="space-y-4"
           >
+            {/* Conditions: editable parameters */}
+            <div className="p-3 bg-white/5 rounded-xl border border-white/10">
+              <h4 className="text-xs font-medium text-white/60 mb-3">Conditions</h4>
+              <div className="grid grid-cols-2 gap-4">
+                {(['event_severity', 'event_probability', 'portfolio_exposure', 'mitigation_level', 'recovery_speed'] as const).map((k) => {
+                  const config = { event_severity: { min: 0, max: 1, unit: '' }, event_probability: { min: 0, max: 1, unit: '' }, portfolio_exposure: { min: 0.1, max: 2, unit: 'x' }, mitigation_level: { min: 0, max: 1, unit: '' }, recovery_speed: { min: 0.5, max: 2, unit: 'x' } }[k]
+                  const param: Parameter = { name: k, type: 'number', base_value: config.min, current_value: parameters[k], min_value: config.min, max_value: config.max, unit: config.unit, description: '' }
+                  return (
+                    <ParameterSlider
+                      key={k}
+                      param={param}
+                      value={parameters[k]}
+                      onChange={(v) => setParameters((p) => ({ ...p, [k]: v }))}
+                    />
+                  )
+                })}
+              </div>
+            </div>
             {/* Run Button */}
             <button
               onClick={() => comparisonMutation.mutate()}
@@ -401,17 +468,31 @@ export default function WhatIfSimulator({ baseExposure = 100_000_000 }: WhatIfSi
                 </div>
                 
                 {/* Recommendations */}
-                {comparisonMutation.data.recommendations.length > 0 && (
-                  <div className="space-y-2">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-3">
                     <div className="text-xs text-white/40">Recommendations</div>
-                    {comparisonMutation.data.recommendations.map((rec, i) => (
+                    <button
+                      type="button"
+                      onClick={openAiExplain}
+                      className="text-[11px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 border border-white/10 text-white/60 hover:text-white/80 transition-colors"
+                      title="Explain results with AI (citations)"
+                    >
+                      Explain (AI)
+                    </button>
+                  </div>
+                  {comparisonMutation.data.recommendations.length > 0 ? (
+                    comparisonMutation.data.recommendations.map((rec, i) => (
                       <div key={i} className="flex items-start gap-2 text-xs text-white/70">
                         <CheckCircleIcon className="w-4 h-4 text-accent-400 flex-shrink-0" />
                         {rec}
                       </div>
-                    ))}
-                  </div>
-                )}
+                    ))
+                  ) : (
+                    <div className="text-xs text-white/40">
+                      No recommendations returned by the service. You can still use <span className="text-white/60">Explain (AI)</span> to interpret the results.
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </motion.div>
@@ -561,6 +642,114 @@ export default function WhatIfSimulator({ baseExposure = 100_000_000 }: WhatIfSi
                 <div className="w-6 h-6 border-2 border-accent-500 border-t-transparent rounded-full animate-spin" />
               </div>
             )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* AI Explain Modal */}
+      <AnimatePresence>
+        {aiOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+            onClick={() => { setAiOpen(false); setAiLoading(false) }}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 10, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.98 }}
+              className="w-full max-w-2xl rounded-2xl bg-zinc-950/90 border border-white/10 p-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-white/80">AI Explain (What-If)</div>
+                  <div className="text-[11px] text-white/40">Answer includes citations and sources.</div>
+                </div>
+                <button
+                  type="button"
+                  className="text-white/40 hover:text-white/70 text-xs"
+                  onClick={() => setAiOpen(false)}
+                >
+                  Close
+                </button>
+              </div>
+
+              <textarea
+                value={aiQuestion}
+                onChange={(e) => setAiQuestion(e.target.value)}
+                className="mt-3 w-full min-h-[90px] rounded-lg bg-black/40 border border-white/10 p-3 text-sm text-white/80 placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/10"
+                placeholder="Ask about what-if results…"
+              />
+
+              <div className="mt-3 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  disabled={aiLoading || aiQuestion.trim().length < 2}
+                  className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-white/80 text-xs disabled:opacity-50"
+                  onClick={async () => {
+                    setAiLoading(true)
+                    setAiError(null)
+                    setAiAnswer(null)
+                    setAiSources([])
+                    try {
+                      const ctx = {
+                        whatif: {
+                          base_exposure: baseExposure,
+                          parameters,
+                          comparison: comparisonMutation.data ?? null,
+                        },
+                      }
+                      const res = await fetch('/api/v1/aiq/ask', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          question: aiQuestion.trim(),
+                          include_overseer_status: false,
+                          context: ctx,
+                        }),
+                      })
+                      if (!res.ok) throw new Error(`aiq ask ${res.status}`)
+                      const json = await res.json()
+                      setAiAnswer(json?.answer ?? '')
+                      setAiSources(normalizeAiqSources(json?.sources))
+                    } catch (e: any) {
+                      setAiError(e?.message ?? 'Failed to ask')
+                    } finally {
+                      setAiLoading(false)
+                    }
+                  }}
+                >
+                  {aiLoading ? 'Asking…' : 'Ask'}
+                </button>
+              </div>
+
+              {aiError && <div className="mt-3 text-xs text-amber-400">{aiError}</div>}
+
+              {aiAnswer != null && (
+                <div className="mt-3 rounded-lg bg-black/30 border border-white/10 p-3">
+                  <div className="text-[11px] text-white/40 mb-1">Answer</div>
+                  <pre className="whitespace-pre-wrap break-words text-sm text-white/75">{aiAnswer}</pre>
+
+                  {normalizeAiqSources(aiSources).length > 0 && (
+                    <>
+                      <div className="text-[11px] text-white/40 mt-3 mb-1">Sources</div>
+                      <ul className="space-y-1">
+                        {normalizeAiqSources(aiSources).slice(0, 10).map((s, i) => (
+                          <li key={s.id || i} className="text-[11px] text-white/45">
+                            <span className="text-white/30">[{i + 1}]</span>{' '}
+                            <span className="text-white/70">{s.title || s.id}</span>
+                            {s.kind && <span className="text-white/25"> · {s.kind}</span>}
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
+                </div>
+              )}
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

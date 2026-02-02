@@ -29,10 +29,17 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Enable PostGIS extension
-    op.execute('CREATE EXTENSION IF NOT EXISTS postgis')
-    op.execute('CREATE EXTENSION IF NOT EXISTS postgis_topology')
-    
+    conn = op.get_bind()
+    is_pg = conn.dialect.name == 'postgresql'
+    # For SQLite without SpatiaLite, geometry columns use Text (WKT/null)
+    geom_type = Geometry('POINT', srid=4326) if is_pg else sa.Text()
+    geom_poly_type = Geometry('POLYGON', srid=4326) if is_pg else sa.Text()
+
+    # Enable PostGIS extension (PostgreSQL only; SQLite has no extensions)
+    if is_pg:
+        op.execute('CREATE EXTENSION IF NOT EXISTS postgis')
+        op.execute('CREATE EXTENSION IF NOT EXISTS postgis_topology')
+
     # ============================================
     # USERS TABLE
     # ============================================
@@ -70,8 +77,8 @@ def upgrade() -> None:
         sa.Column('latitude', sa.Float()),
         sa.Column('longitude', sa.Float()),
         
-        # PostGIS geometry for spatial queries
-        sa.Column('location', Geometry('POINT', srid=4326)),
+        # PostGIS geometry for spatial queries (SQLite: Text for WKT/null)
+        sa.Column('location', geom_type),
         
         # Physical attributes
         sa.Column('year_built', sa.Integer()),
@@ -102,9 +109,10 @@ def upgrade() -> None:
         sa.Column('updated_at', sa.DateTime(), default=sa.func.now(), onupdate=sa.func.now()),
     )
     
-    # Spatial index for assets
-    op.execute('CREATE INDEX IF NOT EXISTS idx_assets_location ON assets USING GIST (location)')
-    
+    # Spatial index for assets (PostgreSQL GIST only)
+    if is_pg:
+        op.execute('CREATE INDEX IF NOT EXISTS idx_assets_location ON assets USING GIST (location)')
+
     # ============================================
     # HISTORICAL EVENTS TABLE
     # ============================================
@@ -128,9 +136,9 @@ def upgrade() -> None:
         sa.Column('affected_area_km2', sa.Float()),
         sa.Column('geographic_polygon', sa.Text()),
         
-        # PostGIS geometry
-        sa.Column('boundary', Geometry('POLYGON', srid=4326)),
-        sa.Column('center_point', Geometry('POINT', srid=4326)),
+        # PostGIS geometry (SQLite: Text for WKT/null)
+        sa.Column('boundary', geom_poly_type),
+        sa.Column('center_point', geom_type),
         
         # Impact metrics
         sa.Column('severity_actual', sa.Float()),
@@ -183,9 +191,10 @@ def upgrade() -> None:
         sa.Column('created_by', sa.String(36)),
     )
     
-    # Spatial index for historical events
-    op.execute('CREATE INDEX IF NOT EXISTS idx_historical_events_boundary ON historical_events USING GIST (boundary)')
-    
+    # Spatial index for historical events (PostgreSQL GIST only)
+    if is_pg:
+        op.execute('CREATE INDEX IF NOT EXISTS idx_historical_events_boundary ON historical_events USING GIST (boundary)')
+
     # ============================================
     # STRESS TESTS TABLE
     # ============================================
@@ -205,9 +214,9 @@ def upgrade() -> None:
         sa.Column('radius_km', sa.Float(), default=100.0),
         sa.Column('geographic_polygon', sa.Text()),
         
-        # PostGIS geometry
-        sa.Column('boundary', Geometry('POLYGON', srid=4326)),
-        sa.Column('center_point', Geometry('POINT', srid=4326)),
+        # PostGIS geometry (SQLite: Text for WKT/null)
+        sa.Column('boundary', geom_poly_type),
+        sa.Column('center_point', geom_type),
         
         # Region
         sa.Column('region_name', sa.String(255)),
@@ -239,12 +248,14 @@ def upgrade() -> None:
         # Audit
         sa.Column('created_at', sa.DateTime(), default=sa.func.now()),
         sa.Column('updated_at', sa.DateTime(), default=sa.func.now(), onupdate=sa.func.now()),
+        sa.Column('completed_at', sa.DateTime()),
         sa.Column('created_by', sa.String(36)),
     )
-    
-    # Spatial index for stress tests
-    op.execute('CREATE INDEX IF NOT EXISTS idx_stress_tests_boundary ON stress_tests USING GIST (boundary)')
-    
+
+    # Spatial index for stress tests (PostgreSQL GIST only)
+    if is_pg:
+        op.execute('CREATE INDEX IF NOT EXISTS idx_stress_tests_boundary ON stress_tests USING GIST (boundary)')
+
     # ============================================
     # RISK ZONES TABLE (with PostGIS)
     # ============================================
@@ -266,9 +277,9 @@ def upgrade() -> None:
         sa.Column('radius_km', sa.Float()),
         sa.Column('polygon', sa.Text()),  # GeoJSON fallback
         
-        # PostGIS geometry (primary for PostgreSQL)
-        sa.Column('geometry', Geometry('POLYGON', srid=4326)),
-        sa.Column('center_point', Geometry('POINT', srid=4326)),
+        # PostGIS geometry (SQLite: Text for WKT/null)
+        sa.Column('geometry', geom_poly_type),
+        sa.Column('center_point', geom_type),
         
         # Metrics
         sa.Column('risk_score', sa.Float(), default=0.5),
@@ -277,10 +288,11 @@ def upgrade() -> None:
         sa.Column('expected_loss', sa.Float()),
     )
     
-    # Spatial index for risk zones - CRITICAL for performance
-    op.execute('CREATE INDEX IF NOT EXISTS idx_risk_zones_geometry ON risk_zones USING GIST (geometry)')
-    op.execute('CREATE INDEX IF NOT EXISTS idx_risk_zones_center ON risk_zones USING GIST (center_point)')
-    
+    # Spatial index for risk zones (PostgreSQL GIST only)
+    if is_pg:
+        op.execute('CREATE INDEX IF NOT EXISTS idx_risk_zones_geometry ON risk_zones USING GIST (geometry)')
+        op.execute('CREATE INDEX IF NOT EXISTS idx_risk_zones_center ON risk_zones USING GIST (center_point)')
+
     # ============================================
     # ZONE ASSETS TABLE
     # ============================================
@@ -358,68 +370,76 @@ def upgrade() -> None:
         sa.Column('asset_id', sa.String(36),
                   sa.ForeignKey('assets.id', ondelete='CASCADE'),
                   unique=True, nullable=False),
-        
-        sa.Column('model_format', sa.String(50), default='ifc'),
-        sa.Column('model_path', sa.String(500)),
-        sa.Column('model_version', sa.String(50)),
-        
-        sa.Column('last_sync', sa.DateTime()),
-        sa.Column('sync_status', sa.String(50), default='pending'),
-        
-        # Sensor config
-        sa.Column('sensor_config', sa.Text()),
-        sa.Column('sensor_count', sa.Integer(), default=0),
-        
-        # Current state
-        sa.Column('current_state', sa.Text()),
-        
+
+        # State
+        sa.Column('state', sa.String(20), default='initializing'),
+        sa.Column('last_sync_at', sa.DateTime()),
+        sa.Column('sync_source', sa.String(100)),
+
+        # Geometry (stored in MinIO, reference here)
+        sa.Column('geometry_type', sa.String(50)),
+        sa.Column('geometry_path', sa.String(500)),
+        sa.Column('geometry_hash', sa.String(64)),
+        sa.Column('geometry_metadata', sa.Text()),
+
+        # Current Physical State
+        sa.Column('structural_integrity', sa.Float()),
+        sa.Column('condition_score', sa.Float()),
+        sa.Column('remaining_useful_life_years', sa.Float()),
+
+        # Sensor Data
+        sa.Column('sensor_data', sa.Text()),
+        sa.Column('sensor_updated_at', sa.DateTime()),
+
+        # Climate Exposures
+        sa.Column('climate_exposures', sa.Text()),
+        sa.Column('climate_exposures_updated_at', sa.DateTime()),
+
+        # Infrastructure Dependencies
+        sa.Column('infrastructure_dependencies', sa.Text()),
+
+        # Financial Metrics
+        sa.Column('financial_metrics', sa.Text()),
+        sa.Column('financial_updated_at', sa.DateTime()),
+
+        # Simulated Futures
+        sa.Column('future_scenarios', sa.Text()),
+        sa.Column('scenarios_updated_at', sa.DateTime()),
+
         # Audit
         sa.Column('created_at', sa.DateTime(), default=sa.func.now()),
         sa.Column('updated_at', sa.DateTime(), default=sa.func.now(), onupdate=sa.func.now()),
     )
     
     # ============================================
-    # TWIN TIMELINES TABLE
+    # TWIN TIMELINE TABLE (events for digital twins)
     # ============================================
     op.create_table(
-        'twin_timelines',
+        'twin_timeline',
         sa.Column('id', sa.String(36), primary_key=True),
-        sa.Column('twin_id', sa.String(36),
+        sa.Column('digital_twin_id', sa.String(36),
                   sa.ForeignKey('digital_twins.id', ondelete='CASCADE'),
                   nullable=False, index=True),
-        
-        sa.Column('scenario_name', sa.String(255)),
-        sa.Column('scenario_type', sa.String(50)),
-        sa.Column('is_baseline', sa.Boolean(), default=False),
-        
-        sa.Column('start_date', sa.DateTime()),
-        sa.Column('end_date', sa.DateTime()),
-        
-        sa.Column('parameters', sa.Text()),
+
+        # Event
+        sa.Column('event_type', sa.String(50)),
+        sa.Column('event_date', sa.DateTime()),
+        sa.Column('event_title', sa.String(255)),
+        sa.Column('event_description', sa.Text()),
+
+        # Data
+        sa.Column('data', sa.Text()),
+        sa.Column('attachments', sa.Text()),
+
+        # Provenance
+        sa.Column('source', sa.String(100)),
+        sa.Column('verification_hash', sa.String(64)),
+
+        # Audit
         sa.Column('created_at', sa.DateTime(), default=sa.func.now()),
+        sa.Column('created_by', sa.String(36)),
     )
-    
-    # ============================================
-    # TWIN STATES TABLE
-    # ============================================
-    op.create_table(
-        'twin_states',
-        sa.Column('id', sa.String(36), primary_key=True),
-        sa.Column('timeline_id', sa.String(36),
-                  sa.ForeignKey('twin_timelines.id', ondelete='CASCADE'),
-                  nullable=False, index=True),
-        
-        sa.Column('timestamp', sa.DateTime(), nullable=False),
-        sa.Column('state_data', sa.Text()),
-        
-        # Snapshot
-        sa.Column('sensor_readings', sa.Text()),
-        sa.Column('risk_scores', sa.Text()),
-        sa.Column('valuation', sa.Float()),
-        
-        sa.Column('created_at', sa.DateTime(), default=sa.func.now()),
-    )
-    
+
     # ============================================
     # DATA PROVENANCE TABLE
     # ============================================
@@ -480,11 +500,13 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    conn = op.get_bind()
+    is_pg = conn.dialect.name == 'postgresql'
+
     # Drop tables in reverse order (respecting foreign keys)
     op.drop_table('verification_records')
     op.drop_table('data_provenance')
-    op.drop_table('twin_states')
-    op.drop_table('twin_timelines')
+    op.drop_table('twin_timeline')
     op.drop_table('digital_twins')
     op.drop_table('action_plans')
     op.drop_table('stress_test_reports')
@@ -494,7 +516,8 @@ def downgrade() -> None:
     op.drop_table('historical_events')
     op.drop_table('assets')
     op.drop_table('users')
-    
-    # Drop PostGIS extensions
-    op.execute('DROP EXTENSION IF EXISTS postgis_topology')
-    op.execute('DROP EXTENSION IF EXISTS postgis')
+
+    # Drop PostGIS extensions (PostgreSQL only)
+    if is_pg:
+        op.execute('DROP EXTENSION IF EXISTS postgis_topology')
+        op.execute('DROP EXTENSION IF EXISTS postgis')

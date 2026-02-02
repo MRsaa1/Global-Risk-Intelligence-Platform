@@ -6,6 +6,11 @@ Responsibilities:
 - Detect anomalies in sensor data
 - Track infrastructure status
 - Generate alerts when thresholds exceeded
+
+Enhanced with NeMo Agent Toolkit for:
+- Performance tracking
+- Workflow orchestration
+- Health monitoring
 """
 import logging
 from dataclasses import dataclass
@@ -117,6 +122,8 @@ class SentinelAgent:
         """
         Run monitoring cycle and generate alerts.
         
+        Enhanced with NeMo Agent Toolkit for performance tracking.
+        
         Args:
             context: Current state including:
                 - weather_forecast: Current weather data
@@ -127,29 +134,74 @@ class SentinelAgent:
         Returns:
             List of generated alerts
         """
-        alerts = []
+        import time
+        start_time = time.time()
         
-        # Check weather threats
-        weather_alerts = await self._check_weather_threats(context.get("weather_forecast", {}))
-        alerts.extend(weather_alerts)
-        
-        # Check sensor anomalies
-        sensor_alerts = await self._check_sensor_anomalies(context.get("sensors", {}))
-        alerts.extend(sensor_alerts)
-        
-        # Check infrastructure status
-        infra_alerts = await self._check_infrastructure(context.get("infrastructure", {}))
-        alerts.extend(infra_alerts)
-        
-        # Check climate thresholds
-        climate_alerts = await self._check_climate_thresholds(context.get("assets", []))
-        alerts.extend(climate_alerts)
-        
-        # Store active alerts
-        for alert in alerts:
-            self.active_alerts[alert.id] = alert
-        
-        return alerts
+        try:
+            alerts = []
+            
+            # Check weather threats
+            weather_alerts = await self._check_weather_threats(context.get("weather_forecast", {}))
+            alerts.extend(weather_alerts)
+            
+            # Check sensor anomalies
+            sensor_alerts = await self._check_sensor_anomalies(context.get("sensors", {}))
+            alerts.extend(sensor_alerts)
+            
+            # Check infrastructure status
+            infra_alerts = await self._check_infrastructure(context.get("infrastructure", {}))
+            alerts.extend(infra_alerts)
+            
+            # Check climate thresholds (real DB assets)
+            climate_alerts = await self._check_climate_thresholds(context.get("assets", []))
+            alerts.extend(climate_alerts)
+
+            # Check geodata hotspots (high-risk regions from geo service)
+            geodata_alerts = await self._check_geodata_hotspots(context.get("geodata_hotspots", []))
+            alerts.extend(geodata_alerts)
+            
+            # Store active alerts
+            for alert in alerts:
+                self.active_alerts[alert.id] = alert
+            
+            # Track performance
+            await self._track_performance("monitor", start_time, success=True, metadata={"alerts_count": len(alerts)})
+            
+            return alerts
+        except Exception as e:
+            await self._track_performance("monitor", start_time, success=False, error=str(e))
+            raise
+    
+    async def _track_performance(
+        self,
+        method_name: str,
+        start_time: float,
+        success: bool = True,
+        error: Optional[str] = None,
+        metadata: Optional[dict] = None,
+    ):
+        """Track agent performance with NeMo Agent Toolkit."""
+        try:
+            import time
+            from src.services.nemo_agent_toolkit import get_nemo_agent_toolkit
+            toolkit = get_nemo_agent_toolkit()
+            
+            if toolkit.enabled and toolkit.profiling_enabled:
+                latency_ms = (time.time() - start_time) * 1000
+                
+                from src.services.nemo_agent_toolkit import AgentMetric
+                metric = AgentMetric(
+                    agent_name="SENTINEL",
+                    method_name=method_name,
+                    timestamp=datetime.utcnow(),
+                    latency_ms=latency_ms,
+                    success=success,
+                    error=error,
+                    metadata=metadata or {},
+                )
+                toolkit._record_metric(metric)
+        except Exception as e:
+            logger.debug(f"Agent Toolkit tracking failed: {e}")
     
     async def _check_weather_threats(self, weather: dict) -> list[Alert]:
         """Check for weather-related threats."""
@@ -280,6 +332,33 @@ class SentinelAgent:
             )
             alerts.append(alert)
         
+        return alerts
+
+    async def _check_geodata_hotspots(self, hotspots: list[dict]) -> list[Alert]:
+        """Emit alert when there are high-risk regions (from geodata service)."""
+        alerts = []
+        high_risk = [h for h in hotspots if (h.get("risk_score") or 0) >= 0.6]
+        if not high_risk:
+            return alerts
+        names = [h.get("name") or h.get("id") or "Unknown" for h in high_risk[:10]]
+        exposure = sum(h.get("exposure") or 0 for h in high_risk)
+        alert = Alert(
+            id=uuid4(),
+            alert_type=AlertType.CLIMATE_THRESHOLD,
+            severity=AlertSeverity.HIGH if any((h.get("risk_score") or 0) >= 0.75 for h in high_risk) else AlertSeverity.WARNING,
+            title="Elevated Regional Risk",
+            message=f"{len(high_risk)} region(s) with risk ≥ 60%: {', '.join(names)}{'…' if len(high_risk) > 10 else ''}. "
+                    "Review exposure and consider mitigation.",
+            asset_ids=[],
+            exposure=exposure,
+            recommended_actions=[
+                "Run stress test for affected regions",
+                "Review portfolio concentration",
+                "Check insurance and hedging coverage",
+            ],
+            created_at=datetime.utcnow(),
+        )
+        alerts.append(alert)
         return alerts
     
     def get_active_alerts(self, severity: Optional[AlertSeverity] = None) -> list[Alert]:

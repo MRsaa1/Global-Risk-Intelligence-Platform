@@ -6,6 +6,10 @@ Responsibilities:
 - Evaluate options with ROI analysis
 - Prioritize by impact and urgency
 - Support human decision-making
+
+Enhanced with:
+- NVIDIA NeMo Guardrails for safety and compliance
+- NeMo Agent Toolkit for performance tracking
 """
 import logging
 from dataclasses import dataclass
@@ -102,59 +106,184 @@ class AdvisorAgent:
         asset_data: dict,
         alerts: Optional[list] = None,
         analysis: Optional[dict] = None,
+        regulations: Optional[list] = None,
     ) -> list[Recommendation]:
         """
         Generate recommendations for an asset based on current state and alerts.
+        
+        Enhanced with NeMo Guardrails for safety and compliance validation.
         
         Args:
             asset_id: Asset to advise on
             asset_data: Current asset data
             alerts: Active alerts for this asset
             analysis: Analysis results from Analyst agent
+            regulations: Regulatory frameworks to comply with (ECB, Fed, TCFD, CSRD)
             
         Returns:
-            List of prioritized recommendations
+            List of prioritized recommendations (validated by Guardrails)
         """
-        recommendations = []
+        import time
+        start_time = time.time()
         
-        # Check climate risk
-        climate_risk = asset_data.get("climate_risk_score", 0)
-        if climate_risk > 60:
-            rec = await self._generate_climate_adaptation_recommendation(
-                asset_id, asset_data, climate_risk
-            )
-            recommendations.append(rec)
-        
-        # Check physical condition
-        physical_risk = asset_data.get("physical_risk_score", 0)
-        if physical_risk > 50:
-            rec = await self._generate_maintenance_recommendation(
-                asset_id, asset_data, physical_risk
-            )
-            recommendations.append(rec)
-        
-        # Check network risk
-        network_risk = asset_data.get("network_risk_score", 0)
-        if network_risk > 70:
-            rec = await self._generate_resilience_recommendation(
-                asset_id, asset_data, network_risk
-            )
-            recommendations.append(rec)
-        
-        # Process any active alerts
-        if alerts:
-            for alert in alerts:
-                rec = await self._generate_alert_response_recommendation(
-                    asset_id, asset_data, alert
+        try:
+            recommendations = []
+            regulations = regulations or []
+            
+            # Check climate risk
+            climate_risk = asset_data.get("climate_risk_score", 0)
+            if climate_risk > 60:
+                rec = await self._generate_climate_adaptation_recommendation(
+                    asset_id, asset_data, climate_risk
                 )
+                # Validate with Guardrails
+                rec = await self._validate_recommendation(rec, asset_id, asset_data, regulations)
                 if rec:
                     recommendations.append(rec)
-        
-        # Sort by urgency
-        urgency_order = {"immediate": 0, "high": 1, "medium": 2, "low": 3}
-        recommendations.sort(key=lambda r: urgency_order.get(r.urgency, 4))
-        
-        return recommendations
+            
+            # Check physical condition
+            physical_risk = asset_data.get("physical_risk_score", 0)
+            if physical_risk > 50:
+                rec = await self._generate_maintenance_recommendation(
+                    asset_id, asset_data, physical_risk
+                )
+                # Validate with Guardrails
+                rec = await self._validate_recommendation(rec, asset_id, asset_data, regulations)
+                if rec:
+                    recommendations.append(rec)
+            
+            # Check network risk
+            network_risk = asset_data.get("network_risk_score", 0)
+            if network_risk > 70:
+                rec = await self._generate_resilience_recommendation(
+                    asset_id, asset_data, network_risk
+                )
+                # Validate with Guardrails
+                rec = await self._validate_recommendation(rec, asset_id, asset_data, regulations)
+                if rec:
+                    recommendations.append(rec)
+            
+            # Process any active alerts
+            if alerts:
+                for alert in alerts:
+                    rec = await self._generate_alert_response_recommendation(
+                        asset_id, asset_data, alert
+                    )
+                    if rec:
+                        # Validate with Guardrails
+                        rec = await self._validate_recommendation(rec, asset_id, asset_data, regulations)
+                        if rec:
+                            recommendations.append(rec)
+            
+            # Sort by urgency
+            urgency_order = {"immediate": 0, "high": 1, "medium": 2, "low": 3}
+            recommendations.sort(key=lambda r: urgency_order.get(r.urgency, 4))
+            
+            # Track performance
+            await self._track_performance(
+                "generate_recommendations",
+                start_time,
+                success=True,
+                metadata={
+                    "recommendations_count": len(recommendations),
+                    "regulations": regulations,
+                }
+            )
+            
+            return recommendations
+        except Exception as e:
+            await self._track_performance("generate_recommendations", start_time, success=False, error=str(e))
+            raise
+    
+    async def _track_performance(
+        self,
+        method_name: str,
+        start_time: float,
+        success: bool = True,
+        error: Optional[str] = None,
+        metadata: Optional[dict] = None,
+    ):
+        """Track agent performance with NeMo Agent Toolkit."""
+        try:
+            from src.services.nemo_agent_toolkit import get_nemo_agent_toolkit
+            import time
+            toolkit = get_nemo_agent_toolkit()
+            
+            if toolkit.enabled and toolkit.profiling_enabled:
+                latency_ms = (time.time() - start_time) * 1000
+                
+                from src.services.nemo_agent_toolkit import AgentMetric
+                metric = AgentMetric(
+                    agent_name="ADVISOR",
+                    method_name=method_name,
+                    timestamp=datetime.utcnow(),
+                    latency_ms=latency_ms,
+                    success=success,
+                    error=error,
+                    metadata=metadata or {},
+                )
+                toolkit._record_metric(metric)
+        except Exception as e:
+            logger.debug(f"Agent Toolkit tracking failed: {e}")
+    
+    async def _validate_recommendation(
+        self,
+        recommendation: Recommendation,
+        asset_id: str,
+        asset_data: dict,
+        regulations: list
+    ) -> Optional[Recommendation]:
+        """Validate recommendation with NeMo Guardrails."""
+        try:
+            from src.services.nemo_guardrails import get_nemo_guardrails_service
+            guardrails = get_nemo_guardrails_service()
+            
+            # Build response text from recommendation
+            response_text = f"""
+            Recommendation: {recommendation.recommendation_reason}
+            Options: {[opt.name for opt in recommendation.options]}
+            Recommended: {recommendation.recommended_option}
+            """
+            
+            # Validate
+            result = await guardrails.validate(
+                response=response_text,
+                context={
+                    "asset_id": asset_id,
+                    "asset_data": asset_data,
+                    "regulations": regulations,
+                    "recommendation": recommendation
+                },
+                agent_type="ADVISOR"
+            )
+            
+            if not result.passed:
+                logger.warning(
+                    f"Guardrail violations for recommendation {recommendation.id}: "
+                    f"{[v.value for v in result.violations]}"
+                )
+                
+                # If safety violation, return None (reject recommendation)
+                from src.services.nemo_guardrails import GuardrailViolation
+                if any(v == GuardrailViolation.SAFETY for v in result.violations):
+                    logger.error(f"Safety violation - rejecting recommendation {recommendation.id}")
+                    return None
+                
+                # For other violations, add warning to recommendation
+                if result.safe_fallback:
+                    recommendation.recommendation_reason = (
+                        f"{recommendation.recommendation_reason}\n\n"
+                        f"⚠️ Guardrail Warning: {result.safe_fallback}"
+                    )
+            
+            # Add warnings if any
+            if result.warnings:
+                recommendation.recommendation_reason += "\n\nWarnings: " + "; ".join(result.warnings)
+            
+            return recommendation
+        except Exception as e:
+            logger.warning(f"Guardrails validation failed: {e}, allowing recommendation")
+            return recommendation  # Allow if guardrails fail
     
     async def evaluate_options(
         self,

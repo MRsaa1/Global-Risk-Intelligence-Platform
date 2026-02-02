@@ -6,9 +6,12 @@
  * - Zone metrics (exposure, expected loss, recovery time)
  * - List of affected entities by organization type
  * - Quick access to action plans and reports
+ * - Generative AI: Explain zone (why at risk)
  */
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+
+const API_BASE = import.meta.env.VITE_API_URL || ''
 
 // Professional SVG Icons
 const OrgIcons: Record<string, JSX.Element> = {
@@ -90,6 +93,9 @@ interface ZoneDetailPanelProps {
   onViewReport: () => void
   onViewActionPlans: () => void
   onEntityClick: (entity: AffectedEntity) => void
+  /** When provided with eventIdForCascade, shows "Open in Cascade" to navigate to Analytics Cascade tab */
+  onOpenCascade?: () => void
+  eventIdForCascade?: string
 }
 
 // Helper to format currency
@@ -118,10 +124,44 @@ export default function ZoneDetailPanel({
   onClose, 
   onViewReport, 
   onViewActionPlans,
-  onEntityClick 
+  onEntityClick,
+  onOpenCascade,
+  eventIdForCascade,
 }: ZoneDetailPanelProps) {
   const [expandedType, setExpandedType] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'entities' | 'timeline'>('entities')
+  const [zoneExplanation, setZoneExplanation] = useState<string | null>(null)
+  const [explainLoading, setExplainLoading] = useState(false)
+
+  const fetchExplainZone = async () => {
+    if (!zone) return
+    setExplainLoading(true)
+    setZoneExplanation(null)
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/generative/explain-zone`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          zone_data: {
+            label: zone.name,
+            risk_level: zone.level,
+            stress_test_name: zone.stressTestName,
+            metrics: zone.metrics,
+          },
+          question: 'Why is this zone at risk? What are the main factors?',
+        }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setZoneExplanation(data.explanation || null)
+      }
+    } catch {
+      setZoneExplanation('Explanation unavailable.')
+    } finally {
+      setExplainLoading(false)
+    }
+  }
 
   if (!zone) return null
 
@@ -143,10 +183,10 @@ export default function ZoneDetailPanel({
         animate={{ opacity: 1, x: 0, scale: 1 }}
         exit={{ opacity: 0, x: 50, scale: 0.95 }}
         transition={{ duration: 0.3 }}
-        className="w-80 bg-black/80 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl"
+        className="w-80 max-h-[calc(100vh-7rem)] flex flex-col bg-black/80 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl"
       >
-        {/* Header */}
-        <div className={`px-4 py-3 ${colors.border} border-b bg-gradient-to-r from-white/5 to-transparent`}>
+        {/* Header — fixed */}
+        <div className={`shrink-0 px-4 py-3 ${colors.border} border-b bg-gradient-to-r from-white/5 to-transparent`}>
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <div className={`w-2 h-2 rounded-full ${colors.bg} ${zone.level === 'critical' ? 'animate-pulse' : ''}`} />
@@ -168,8 +208,10 @@ export default function ZoneDetailPanel({
           <p className="text-white/40 text-xs mt-0.5">{zone.stressTestName}</p>
         </div>
 
+        {/* Scrollable body: metrics, risk bar, tabs, content */}
+        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10">
         {/* Metrics Grid */}
-        <div className="grid grid-cols-2 gap-px bg-white/5">
+        <div className="grid grid-cols-2 gap-px bg-white/5 shrink-0">
           <div className="p-3 bg-[#030810]">
             <div className="text-white/30 text-[10px] uppercase tracking-wider mb-1">
               Exposure
@@ -222,8 +264,25 @@ export default function ZoneDetailPanel({
           </div>
         </div>
 
+        {/* Explain zone (Generative AI) */}
+        <div className="px-4 py-2 border-b border-white/5">
+          <button
+            type="button"
+            onClick={fetchExplainZone}
+            disabled={explainLoading}
+            className="text-xs px-2 py-1 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500/30 disabled:opacity-50"
+          >
+            {explainLoading ? 'Explaining…' : 'Explain zone'}
+          </button>
+          {zoneExplanation && (
+            <div className="mt-2 p-2 bg-white/5 rounded text-[11px] text-white/80 border border-white/10">
+              {zoneExplanation}
+            </div>
+          )}
+        </div>
+
         {/* Tab Navigation */}
-        <div className="flex border-b border-white/5">
+        <div className="shrink-0 flex border-b border-white/5">
           <button
             onClick={() => setActiveTab('entities')}
             className={`flex-1 px-4 py-2 text-xs transition-all ${
@@ -247,7 +306,7 @@ export default function ZoneDetailPanel({
         </div>
 
         {/* Content */}
-        <div className="max-h-64 overflow-y-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10">
+        <div className="min-h-0">
           {activeTab === 'entities' && (
             <div className="p-3 space-y-1">
               {groupedEntities.map((group) => (
@@ -368,27 +427,39 @@ export default function ZoneDetailPanel({
             </div>
           )}
         </div>
+        </div>
 
-        {/* Action Buttons */}
-        <div className="p-3 border-t border-white/5 flex gap-2">
+        {/* Action Buttons — always visible at bottom */}
+        <div className="shrink-0 p-3 border-t border-white/5 flex flex-wrap gap-2 bg-[#030810]">
           <button
             onClick={onViewReport}
-            className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-all text-xs text-white/70 hover:text-white"
+            className="flex-1 min-w-0 flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-all text-xs text-white/70 hover:text-white"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
             Report
           </button>
           <button
             onClick={onViewActionPlans}
-            className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 transition-all text-xs text-amber-400 hover:text-amber-300"
+            className="flex-1 min-w-0 flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 transition-all text-xs text-amber-400 hover:text-amber-300"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
             Action Plans
           </button>
+          {onOpenCascade && eventIdForCascade && (
+            <button
+              onClick={onOpenCascade}
+              className="flex-1 min-w-0 flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-primary-500/20 hover:bg-primary-500/30 border border-primary-500/30 transition-all text-xs text-primary-300 hover:text-primary-200"
+            >
+              <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+              </svg>
+              Open in Cascade
+            </button>
+          )}
         </div>
       </motion.div>
     </AnimatePresence>

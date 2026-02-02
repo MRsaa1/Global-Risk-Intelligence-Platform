@@ -11,11 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
 from src.core.database import get_db
-from src.core.security import get_current_active_user
+from src.core.security import get_current_active_user, get_current_user_optional
 from src.models.asset import Asset
 from src.models.user import User
 from src.services.nvidia_earth2 import earth2_service, Earth2Model
 from src.services.nvidia_physics_nemo import physics_nemo_service
+from src.services.nvidia_riva import riva_service
 
 router = APIRouter()
 
@@ -545,6 +546,130 @@ async def generate_damage_visualization(
     }
 
 
+# ==================== RIVA (Speech AI: TTS / STT) ====================
+
+class RivaTTSRequest(BaseModel):
+    """Request for Riva text-to-speech (report narration, voice alerts)."""
+    text: str = Field(..., min_length=1, max_length=5000)
+    language: str = Field(default="en", max_length=10)
+
+
+class RivaSTTRequest(BaseModel):
+    """Request for Riva speech-to-text (voice interface)."""
+    audio_base64: str = Field(..., min_length=1)
+    language: str = Field(default="en", max_length=10)
+
+
+@router.get("/riva/health")
+async def check_riva_health():
+    """Check if NVIDIA Riva (Speech AI) is enabled and reachable."""
+    ok = await riva_service.health()
+    return {"enabled": riva_service.is_available(), "reachable": ok}
+
+
+@router.get("/dynamo/health")
+async def check_dynamo_health():
+    """Check if NVIDIA Dynamo (low-latency inference) is enabled and reachable."""
+    from src.services.nvidia_services_status import _check_dynamo_ready
+
+    enabled = getattr(settings, "enable_dynamo", False)
+    url = (getattr(settings, "dynamo_url", "") or "").strip()
+    ok = await _check_dynamo_ready(url) if (enabled and url) else False
+    return {"enabled": enabled and bool(url), "reachable": ok}
+
+
+@router.get("/triton/health")
+async def check_triton_health():
+    """Check if Triton Inference Server is enabled and reachable."""
+    from src.services.nvidia_services_status import _check_triton_ready
+
+    enabled = getattr(settings, "enable_triton", False)
+    url = (getattr(settings, "triton_url", "") or "").strip()
+    ok = await _check_triton_ready(url) if (enabled and url) else False
+    return {"enabled": enabled and bool(url), "reachable": ok}
+
+
+@router.post("/riva/tts")
+async def riva_tts(
+    request: RivaTTSRequest,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """
+    Convert text to speech (TTS) for report narration and voice alerts.
+    Returns audio as base64 (WAV or PCM). Works with or without authentication.
+    """
+    if not riva_service.is_available():
+        raise HTTPException(status_code=503, detail="Riva is disabled or not configured (enable_riva, riva_url)")
+    result = await riva_service.tts(request.text, request.language)
+    if not result:
+        raise HTTPException(status_code=503, detail="Riva TTS unavailable or failed")
+    return {
+        "audio_base64": result.audio_base64,
+        "sample_rate_hz": result.sample_rate_hz,
+        "format": result.format,
+    }
+
+
+@router.post("/riva/stt")
+async def riva_stt(
+    request: RivaSTTRequest,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """
+    Convert speech to text (STT) for voice interface.
+    Expects audio as base64. Works with or without authentication.
+    """
+    if not riva_service.is_available():
+        raise HTTPException(status_code=503, detail="Riva is disabled or not configured (enable_riva, riva_url)")
+    result = await riva_service.stt(request.audio_base64, request.language)
+    if not result:
+        raise HTTPException(status_code=503, detail="Riva STT unavailable or failed")
+    return {"text": result.text, "confidence": result.confidence, "language": result.language}
+
+
+# ==================== OPTIONAL SERVICES (cuOpt, IndeX, WaveWorks) ====================
+
+async def _optional_service_health(enabled: bool, url: str, path: str = "/") -> dict:
+    """Check optional NVIDIA service: returns enabled and reachable."""
+    if not enabled or not (url or "").strip():
+        return {"enabled": False, "reachable": False}
+    import httpx
+    base = url.rstrip("/")
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get(f"{base}{path}")
+            return {"enabled": True, "reachable": r.status_code < 500}
+    except Exception:
+        return {"enabled": True, "reachable": False}
+
+
+@router.get("/cuopt/health")
+async def check_cuopt_health():
+    """NVIDIA cuOpt (routing/optimization) — enabled when enable_cuopt and cuopt_url are set."""
+    return await _optional_service_health(
+        getattr(settings, "enable_cuopt", False),
+        getattr(settings, "cuopt_url", "") or "",
+    )
+
+
+@router.get("/index/health")
+async def check_index_health():
+    """NVIDIA IndeX (volumetric viz) — enabled when enable_index_viz and index_url are set."""
+    return await _optional_service_health(
+        getattr(settings, "enable_index_viz", False),
+        getattr(settings, "index_url", "") or "",
+    )
+
+
+@router.get("/waveworks/health")
+async def check_waveworks_health():
+    """NVIDIA WaveWorks (ocean simulation) — enabled when enable_waveworks and waveworks_url are set."""
+    return await _optional_service_health(
+        getattr(settings, "enable_waveworks", False),
+        getattr(settings, "waveworks_url", "") or "",
+    )
+
+
 # ==================== LLM ENDPOINTS (Agent Intelligence) ====================
 
 class LLMChatRequest(BaseModel):
@@ -794,6 +919,20 @@ Provide:
 IMPORTANT: Write in plain text only. Do NOT use any markdown formatting such as asterisks, bold, headers, or bullet points with dashes.
 Use professional risk management language. Be concise but comprehensive. Write in English."""
 
+    concluding_prompt = f"""Based on this stress test, write a CONCLUDING SUMMARY (closing section) that leaves NO questions unanswered.
+
+Stress Test: {request.event_name}
+Type: {request.event_type}
+Location: {request.city_name}
+Total Expected Loss: €{request.total_loss:,.0f}M | Buildings: {request.total_buildings:,} | Population: {request.total_population:,}
+
+The reader must understand:
+1. WHAT TO DO — Clear, ordered action steps (immediate, short-term, medium-term)
+2. HOW IT WILL AFFECT — Impact on assets, operations, stakeholders, timeline
+3. BOTTOM LINE — One sentence takeaway: what is the key decision or outcome
+
+Write 3–4 short paragraphs. Be explicit. Use plain text only, no markdown. English."""
+
     try:
         summary_response = await llm_service.generate(
             prompt=summary_prompt,
@@ -865,9 +1004,30 @@ Write in English only."""
             
     except Exception as e:
         logger.error(f"LLM actions error: {e}")
-    
+
+    # Generate concluding summary (what to do, how it will affect, bottom line)
+    concluding_summary = None
+    try:
+        concluding_response = await llm_service.generate(
+            prompt=concluding_prompt,
+            model=LLMModel.LLAMA_70B,
+            max_tokens=500,
+            temperature=0.3,
+        )
+        if concluding_response.finish_reason != "mock" and concluding_response.content:
+            import re
+            concluding_summary = concluding_response.content
+            concluding_summary = re.sub(r'\*\*([^*]+)\*\*', r'\1', concluding_summary)
+            concluding_summary = re.sub(r'\*([^*]+)\*', r'\1', concluding_summary)
+            concluding_summary = re.sub(r'^#{1,6}\s*', '', concluding_summary, flags=re.MULTILINE)
+            concluding_summary = re.sub(r'\n{3,}', '\n\n', concluding_summary).strip()
+            logger.info("LLM generated concluding summary")
+    except Exception as e:
+        logger.error(f"LLM concluding summary error: {e}")
+
     return {
         "executive_summary": executive_summary,
+        "concluding_summary": concluding_summary,
         "mitigation_actions": mitigation_actions,
         "llm_model": "meta/llama-3.1-70b-instruct",
         "generated": executive_summary is not None,

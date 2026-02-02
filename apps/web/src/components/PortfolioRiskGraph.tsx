@@ -166,7 +166,7 @@ export default function PortfolioRiskGraph({ isOpen, onClose, scenario = 'defaul
     ctx.fillStyle = 'rgba(0,0,0,0.7)'
     ctx.fillRect(0, 0, 256, 64)
     ctx.fillStyle = 'white'
-    ctx.font = 'bold 20px Inter, sans-serif'
+    ctx.font = 'bold 20px "Space Grotesk", system-ui, sans-serif'
     ctx.textAlign = 'center'
     ctx.fillText(node.name, 128, 38)
     

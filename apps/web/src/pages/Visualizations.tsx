@@ -14,7 +14,7 @@ import { useEffect } from 'react'
 import RiskFlowDiagram from '../components/RiskFlowDiagram'
 import { Link } from 'react-router-dom'
 import { ArrowLeftIcon } from '@heroicons/react/24/outline'
-import { useActiveScenario, useSelectedStressTestId, useRecentEvents } from '../store/platformStore'
+import { useActiveScenario, useSelectedStressTestId, useRecentEvents, usePlatformStore } from '../store/platformStore'
 import { usePlatformWebSocket } from '../hooks/usePlatformWebSocket'
 import api from '../lib/api'
 
@@ -27,6 +27,7 @@ export default function Visualizations() {
   // Get active scenario and selected test from store
   const activeScenario = useActiveScenario()
   const selectedStressTestId = useSelectedStressTestId()
+  const setSelectedStressTestId = usePlatformStore((s) => s.setSelectedStressTestId)
   const recentEvents = useRecentEvents(10)
   
   // Auto-refresh when WebSocket events arrive
@@ -43,18 +44,20 @@ export default function Visualizations() {
     }
   }, [recentEvents, queryClient, selectedStressTestId])
   
-  // Fetch stress tests from API
-  const { data: stressTests, isLoading: testsLoading } = useQuery({
+  // Fetch stress tests from API (retry: false, placeholderData so a failing API does not block render)
+  const { data: stressTests } = useQuery({
     queryKey: ['stress-tests'],
     queryFn: async () => {
       const { data } = await api.get('/stress-tests')
       return data
     },
-    refetchInterval: 30000, // Refresh every 30 seconds
+    refetchInterval: 30000,
+    retry: false,
+    placeholderData: [],
   })
   
-  // Fetch zones for selected stress test
-  const { data: riskZones, isLoading: zonesLoading } = useQuery({
+  // Fetch zones for selected stress test (skip for sample-* ids)
+  const { data: riskZones } = useQuery({
     queryKey: ['stress-test-zones', selectedStressTestId],
     queryFn: async () => {
       if (!selectedStressTestId) return []
@@ -62,16 +65,16 @@ export default function Visualizations() {
       return data.map((zone: any) => ({
         name: zone.name || zone.zone_level,
         risk: zone.risk_score || 0.5,
-        exposure: (zone.expected_loss || zone.total_exposure || 0) / 1_000_000_000, // Convert to billions
+        exposure: (zone.expected_loss || zone.total_exposure || 0) / 1_000_000_000,
         sector: zone.zone_level,
       }))
     },
-    enabled: !!selectedStressTestId,
-    refetchInterval: 10000, // Refresh every 10 seconds when test is active
+    enabled: !!selectedStressTestId && !String(selectedStressTestId).startsWith('sample-'),
+    refetchInterval: 10000,
   })
   
   // Get latest completed stress tests for visualization
-  const completedTests = stressTests?.filter((t: any) => t.status === 'completed').slice(0, 2) || []
+  const completedTests = stressTests?.filter((t: any) => t.status === 'completed').slice(0, 3) || []
   
   // Sample data fallback (only if no real data available)
   const sampleRiskZones = [
@@ -84,10 +87,28 @@ export default function Visualizations() {
     { name: 'Hong Kong', risk: 0.75, exposure: 42.5 },
     { name: 'Sydney', risk: 0.52, exposure: 38.7 },
   ]
+  const debtCrisisZones = [
+    { name: 'Athens', risk: 0.95, exposure: 42 },
+    { name: 'Madrid', risk: 0.88, exposure: 68 },
+    { name: 'Rome', risk: 0.85, exposure: 55 },
+    { name: 'Lisbon', risk: 0.82, exposure: 28 },
+    { name: 'Dublin', risk: 0.72, exposure: 38 },
+    { name: 'Brussels', risk: 0.68, exposure: 48 },
+    { name: 'Berlin', risk: 0.58, exposure: 85 },
+  ]
+  const financialCrisisZones = [
+    { name: 'Wall Street', risk: 0.92, exposure: 85.3 },
+    { name: 'City of London', risk: 0.88, exposure: 72.5 },
+    { name: 'Frankfurt', risk: 0.78, exposure: 45.2 },
+    { name: 'Zurich', risk: 0.65, exposure: 42.5 },
+    { name: 'Singapore', risk: 0.72, exposure: 38.9 },
+    { name: 'Hong Kong', risk: 0.82, exposure: 48.5 },
+  ]
   
-  // Use real data if available, otherwise fallback to sample
+  // Use real data: active scenario + zones, OR selected stress test + zones (so choosing from page works)
   const activeRiskZones = riskZones && riskZones.length > 0 ? riskZones : null
-  const useRealData = !!activeRiskZones && !!activeScenario
+  const useRealData = (!!activeRiskZones && !!activeScenario) || (!!selectedStressTestId && !!(riskZones?.length))
+  const selectedTest = stressTests?.find((t: any) => t.id === selectedStressTestId)
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] p-6">
@@ -134,18 +155,35 @@ export default function Visualizations() {
           {!useRealData && (
             <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3 mb-4">
               <p className="text-yellow-400 text-sm">
-                ⚠️ <strong>Demo mode</strong> - Showing sample data. 
-                {!selectedStressTestId && ' Start a stress test in Command Center to see real-time flows.'}
+                ⚠️ <strong>Demo mode</strong> - Showing sample data. Select a stress test above or start one in Command Center to see real-time flows.
               </p>
             </div>
           )}
           
           {/* Main Risk Flow Diagram - Uses real data if available */}
           <div className="bg-black/40 backdrop-blur-sm rounded-xl border border-white/10 p-4">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
               <h2 className="text-lg font-medium text-white">
-                {useRealData ? 'Active Risk Cascade' : 'Global Risk Cascade'}
+                {useRealData ? 'Active Risk Cascade' : 'Global Risk Cascade · Sample'}
               </h2>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-white/50">Stress test:</label>
+                <select
+                  value={selectedStressTestId || ''}
+                  onChange={(e) => setSelectedStressTestId(e.target.value || null)}
+                  className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-sm text-white"
+                >
+                  <option value="">— None (demo) —</option>
+                  <option value="sample-climate">Climate Shock (sample)</option>
+                  <option value="sample-debt">Sovereign Debt Crisis (sample)</option>
+                  <option value="sample-financial">Financial Crisis (sample)</option>
+                  {(stressTests || []).map((t: any) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} {t.status === 'completed' ? '✓' : t.status === 'running' ? '…' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
               {useRealData && (
                 <span className="text-xs text-green-400 bg-green-500/10 px-2 py-1 rounded">
                   LIVE
@@ -154,28 +192,34 @@ export default function Visualizations() {
             </div>
             {useRealData ? (
               <RiskFlowDiagram 
-                stressTestName={activeScenario?.type || 'Active Stress Test'}
-                riskZones={activeRiskZones || []}
+                stressTestName={activeScenario?.type || selectedTest?.name || 'Stress Test'}
+                riskZones={activeRiskZones || riskZones || []}
                 height={450}
               />
+            ) : selectedStressTestId === 'sample-climate' ? (
+              <RiskFlowDiagram stressTestName="Climate Physical Shock" riskZones={sampleRiskZones} height={450} />
+            ) : selectedStressTestId === 'sample-debt' ? (
+              <RiskFlowDiagram stressTestName="Sovereign Debt Crisis" riskZones={debtCrisisZones} height={450} />
+            ) : selectedStressTestId === 'sample-financial' ? (
+              <RiskFlowDiagram stressTestName="Basel Full Financial Crisis" riskZones={financialCrisisZones} height={450} />
             ) : (
               <RiskFlowDiagram height={450} />
             )}
           </div>
           
-          {/* Stress Test Specific Flows - Uses real completed tests or fallback */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Stress Test Specific Flows - Real completed tests or static sample presets */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {completedTests.length > 0 ? (
-              completedTests.map((test: any, idx: number) => (
+              completedTests.map((test: any) => (
                 <div key={test.id} className="bg-black/40 backdrop-blur-sm rounded-xl border border-white/10 p-4">
                   <h3 className="text-lg font-medium text-white mb-4">{test.name}</h3>
                   <RiskFlowDiagram 
                     stressTestName={test.name}
-                    riskZones={test.zones?.map((z: any) => ({
+                    riskZones={(test.zones?.length ? test.zones.map((z: any) => ({
                       name: z.name || z.zone_level,
                       risk: z.risk_score || 0.5,
-                      exposure: (z.expected_loss || 0) / 1_000_000_000,
-                    })) || sampleRiskZones}
+                      exposure: (z.expected_loss || z.total_exposure || 0) / 1_000_000_000,
+                    })) : null) || sampleRiskZones}
                     height={350}
                   />
                 </div>
@@ -183,7 +227,7 @@ export default function Visualizations() {
             ) : (
               <>
                 <div className="bg-black/40 backdrop-blur-sm rounded-xl border border-white/10 p-4">
-                  <h3 className="text-lg font-medium text-white mb-4">Climate Shock Flow</h3>
+                  <h3 className="text-lg font-medium text-white mb-4">Climate Shock Flow · Sample</h3>
                   <RiskFlowDiagram 
                     stressTestName="Climate Physical Shock"
                     riskZones={sampleRiskZones}
@@ -192,7 +236,7 @@ export default function Visualizations() {
                 </div>
                 
                 <div className="bg-black/40 backdrop-blur-sm rounded-xl border border-white/10 p-4">
-                  <h3 className="text-lg font-medium text-white mb-4">Financial Crisis Flow</h3>
+                  <h3 className="text-lg font-medium text-white mb-4">Financial Crisis Flow · Sample</h3>
                   <RiskFlowDiagram 
                     stressTestName="Basel Full Financial Crisis"
                     riskZones={[
@@ -202,6 +246,23 @@ export default function Visualizations() {
                       { name: 'Zurich', risk: 0.65, exposure: 42.5 },
                       { name: 'Singapore', risk: 0.72, exposure: 38.9 },
                       { name: 'Hong Kong', risk: 0.82, exposure: 48.5 },
+                    ]}
+                    height={350}
+                  />
+                </div>
+                
+                <div className="bg-black/40 backdrop-blur-sm rounded-xl border border-white/10 p-4">
+                  <h3 className="text-lg font-medium text-white mb-4">Debt Crisis Flow · Sample</h3>
+                  <RiskFlowDiagram 
+                    stressTestName="Sovereign Debt Crisis"
+                    riskZones={[
+                      { name: 'Athens', risk: 0.95, exposure: 42 },
+                      { name: 'Madrid', risk: 0.88, exposure: 68 },
+                      { name: 'Rome', risk: 0.85, exposure: 55 },
+                      { name: 'Lisbon', risk: 0.82, exposure: 28 },
+                      { name: 'Dublin', risk: 0.72, exposure: 38 },
+                      { name: 'Brussels', risk: 0.68, exposure: 48 },
+                      { name: 'Berlin', risk: 0.58, exposure: 85 },
                     ]}
                     height={350}
                   />

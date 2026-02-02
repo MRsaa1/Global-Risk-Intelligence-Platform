@@ -66,6 +66,16 @@ class ThermalSimulationResult:
 
 
 @dataclass
+class DegradationResult:
+    """Result of degradation simulation (Phase 1.4)."""
+    remaining_useful_life_years: float
+    failure_probability: float  # 0-1 over the horizon
+    recommended_capex: float
+    recommended_capex_priority: str  # low|medium|high|critical
+    factors: dict
+
+
+@dataclass
 class PhysicsSimulationSummary:
     """Summary of all physics simulations."""
     simulation_id: UUID
@@ -237,6 +247,112 @@ class PhysicsEngine:
             content_damage_ratio=content_damage,
             recovery_time_days=recovery_days,
             estimated_cost=estimated_cost,
+        )
+
+    async def simulate_degradation(
+        self,
+        asset_id: str,
+        horizon_years: int = 10,
+        asset_type: str = "commercial_office",
+        year_built: int = 2010,
+        physical_risk_score: float = 25.0,   # 0-100
+        climate_risk_score: float = 30.0,    # 0-100
+        maintenance_quality: str = "average",  # poor|average|good|excellent
+        replacement_cost: float = 10_000_000,
+    ) -> DegradationResult:
+        """
+        Simulate asset degradation and failure probability over a horizon.
+        
+        This is a simplified portfolio-scale model intended to be fast and explainable.
+        """
+        horizon_years = max(1, min(30, int(horizon_years)))
+        now_year = 2026
+        age_years = max(0, now_year - int(year_built or now_year))
+
+        # Baseline design life by asset type (rough heuristics)
+        base_life_by_type = {
+            "data_center": 25,
+            "logistics": 35,
+            "industrial": 40,
+            "infrastructure_power": 45,
+            "infrastructure_water": 50,
+            "infrastructure_transport": 50,
+            "energy_solar": 30,
+            "energy_wind": 25,
+            "energy_conventional": 35,
+            "commercial_office": 50,
+            "commercial_retail": 45,
+            "residential_single": 60,
+            "residential_multi": 55,
+            "healthcare": 50,
+            "education": 55,
+        }
+        base_life = float(base_life_by_type.get(asset_type, 45))
+
+        # Maintenance quality adjustments
+        maint_factor = {
+            "poor": 1.25,
+            "average": 1.0,
+            "good": 0.85,
+            "excellent": 0.75,
+        }.get(maintenance_quality, 1.0)
+
+        # Risk factor influences (convert 0-100 to 0-1)
+        phys = max(0.0, min(1.0, float(physical_risk_score) / 100.0))
+        clim = max(0.0, min(1.0, float(climate_risk_score) / 100.0))
+
+        # Effective aging acceleration
+        risk_accel = 1.0 + 0.9 * phys + 0.4 * clim
+        effective_age = age_years * risk_accel * maint_factor
+
+        remaining_life = max(0.0, base_life - effective_age)
+
+        # Failure probability over the horizon: hazard model with age/risk
+        # Base annual hazard starts small and increases with effective age and risk.
+        base_hazard = 0.01  # 1% per year baseline
+        age_pressure = min(3.0, (effective_age / max(1.0, base_life)) * 2.5)
+        risk_pressure = 1.0 + 1.8 * phys + 0.6 * clim
+        annual_hazard = base_hazard * (1.0 + age_pressure) * risk_pressure
+        annual_hazard = max(0.002, min(0.35, annual_hazard))
+
+        # Convert annual hazard to cumulative probability over horizon: 1 - exp(-λt)
+        failure_prob = 1.0 - math.exp(-annual_hazard * horizon_years)
+        failure_prob = max(0.0, min(1.0, failure_prob))
+
+        # CAPEX recommendation: driven by failure probability and remaining life
+        # Scale: 0-25% of replacement cost
+        replacement_cost = float(replacement_cost or 0.0)
+        capex_ratio = min(0.25, 0.05 + 0.20 * failure_prob + (0.10 if remaining_life < 10 else 0.0))
+        recommended_capex = max(0.0, replacement_cost * capex_ratio)
+
+        # Priority buckets
+        if failure_prob >= 0.6 or remaining_life < 5:
+            priority = "critical"
+        elif failure_prob >= 0.35 or remaining_life < 10:
+            priority = "high"
+        elif failure_prob >= 0.18 or remaining_life < 15:
+            priority = "medium"
+        else:
+            priority = "low"
+
+        return DegradationResult(
+            remaining_useful_life_years=remaining_life,
+            failure_probability=failure_prob,
+            recommended_capex=recommended_capex,
+            recommended_capex_priority=priority,
+            factors={
+                "asset_type": asset_type,
+                "year_built": year_built,
+                "age_years": age_years,
+                "base_design_life_years": base_life,
+                "effective_age_years": effective_age,
+                "physical_risk_score": float(physical_risk_score),
+                "climate_risk_score": float(climate_risk_score),
+                "maintenance_quality": maintenance_quality,
+                "annual_hazard": annual_hazard,
+                "horizon_years": horizon_years,
+                "capex_ratio": capex_ratio,
+            },
         )
     
     async def simulate_earthquake(

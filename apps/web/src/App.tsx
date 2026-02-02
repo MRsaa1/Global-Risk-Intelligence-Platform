@@ -21,23 +21,30 @@ const StrategicModules = lazy(() => import('./pages/StrategicModules'))
 const CIPModule = lazy(() => import('./pages/modules/CIPModule'))
 const SCSSModule = lazy(() => import('./pages/modules/SCSSModule'))
 const SROModule = lazy(() => import('./pages/modules/SROModule'))
+const StressTestReportPage = lazy(() => import('./pages/StressTestReportPage'))
+const ActionPlansPage = lazy(() => import('./pages/ActionPlansPage'))
+const StressPlannerPage = lazy(() => import('./pages/StressPlannerPage'))
+const BCPGeneratorPage = lazy(() => import('./pages/BCPGeneratorPage'))
+
+// 3D + AI Fintech Strategy Pages
+const Projects = lazy(() => import('./pages/Projects'))
+const ProjectCreate = lazy(() => import('./pages/ProjectCreate'))
+const ProjectDetail = lazy(() => import('./pages/ProjectDetail'))
+const Portfolios = lazy(() => import('./pages/Portfolios'))
+const PortfolioCreate = lazy(() => import('./pages/PortfolioCreate'))
+const PortfolioDetail = lazy(() => import('./pages/PortfolioDetail'))
+const FraudClaims = lazy(() => import('./pages/FraudClaims'))
+const FraudClaimCreate = lazy(() => import('./pages/FraudClaimCreate'))
+const AgentMonitoring = lazy(() => import('./pages/AgentMonitoring'))
+const RiskZoneAnalysis = lazy(() => import('./pages/RiskZoneAnalysis'))
+const NvidiaServices = lazy(() => import('./pages/NvidiaServices'))
+const RegulatorMode = lazy(() => import('./pages/RegulatorMode'))
+const BoardMode = lazy(() => import('./pages/BoardMode'))
 
 function App() {
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [isAuthenticated, setIsAuthenticated] = useState(authService.isAuthenticated())
   const location = useLocation()
-
-  useEffect(() => {
-    // Debug: log current location and routes
-    console.log('🔍 App - Current location:', location.pathname)
-    console.log('🔍 App - Is authenticated:', isAuthenticated)
-    console.log('🔍 App - Routes should match /command')
-    
-    // Check if routes are mounted
-    if (location.pathname === '/command') {
-      console.log('✅ App - Command route should be active')
-    }
-  }, [location, isAuthenticated])
 
   useEffect(() => {
     // Check if onboarding was completed
@@ -51,17 +58,6 @@ function App() {
     setShowOnboarding(false)
   }
 
-  // Debug: Log route structure
-  useEffect(() => {
-    console.log('🔍 App - Routes structure:', {
-      location: location.pathname,
-      isAuthenticated,
-      showOnboarding
-    })
-  }, [location.pathname, isAuthenticated, showOnboarding])
-
-  console.log('🔍 App - Rendering, location:', location.pathname)
-
   return (
     <ErrorBoundary>
       {showOnboarding && <Onboarding onComplete={handleOnboardingComplete} />}
@@ -71,16 +67,18 @@ function App() {
             <Login />
           </Suspense>
         } />
+        <Route path="/report" element={
+          <Suspense fallback={<LoadingScreen />}>
+            <StressTestReportPage />
+          </Suspense>
+        } />
         <Route path="/" element={<Layout />}>
           <Route index element={<Navigate to="/command" replace />} />
           <Route
             path="command"
             element={
               <Suspense fallback={<LoadingScreen />}>
-                {(() => {
-                  console.log('✅ CommandCenter route is rendering')
-                  return <CommandCenter />
-                })()}
+                <CommandCenter />
               </Suspense>
             }
           />
@@ -177,6 +175,143 @@ function App() {
             element={
               <Suspense fallback={<LoadingScreen />}>
                 <SROModule />
+              </Suspense>
+            }
+          />
+          {/* 3D + AI Fintech Strategy Routes */}
+          <Route
+            path="projects"
+            element={
+              <Suspense fallback={<LoadingScreen />}>
+                <Projects />
+              </Suspense>
+            }
+          />
+          <Route
+            path="projects/new"
+            element={
+              <Suspense fallback={<LoadingScreen />}>
+                <ProjectCreate />
+              </Suspense>
+            }
+          />
+          <Route
+            path="projects/:id"
+            element={
+              <Suspense fallback={<LoadingScreen />}>
+                <ProjectDetail />
+              </Suspense>
+            }
+          />
+          <Route
+            path="portfolios"
+            element={
+              <Suspense fallback={<LoadingScreen />}>
+                <Portfolios />
+              </Suspense>
+            }
+          />
+          <Route
+            path="portfolios/new"
+            element={
+              <Suspense fallback={<LoadingScreen />}>
+                <PortfolioCreate />
+              </Suspense>
+            }
+          />
+          <Route
+            path="portfolios/:id"
+            element={
+              <Suspense fallback={<LoadingScreen />}>
+                <PortfolioDetail />
+              </Suspense>
+            }
+          />
+          <Route
+            path="fraud"
+            element={
+              <Suspense fallback={<LoadingScreen />}>
+                <FraudClaims />
+              </Suspense>
+            }
+          />
+          <Route
+            path="fraud/claims/new"
+            element={
+              <Suspense fallback={<LoadingScreen />}>
+                <FraudClaimCreate />
+              </Suspense>
+            }
+          />
+          <Route
+            path="fraud/claims/:id"
+            element={
+              <Suspense fallback={<LoadingScreen />}>
+                <FraudClaims />
+              </Suspense>
+            }
+          />
+          <Route
+            path="agents"
+            element={
+              <Suspense fallback={<LoadingScreen />}>
+                <AgentMonitoring />
+              </Suspense>
+            }
+          />
+          <Route
+            path="nvidia-services"
+            element={
+              <Suspense fallback={<LoadingScreen />}>
+                <NvidiaServices />
+              </Suspense>
+            }
+          />
+          <Route
+            path="risk-zones-analysis"
+            element={
+              <Suspense fallback={<LoadingScreen />}>
+                <RiskZoneAnalysis />
+              </Suspense>
+            }
+          />
+          <Route
+            path="regulator-mode"
+            element={
+              <Suspense fallback={<LoadingScreen />}>
+                <RegulatorMode />
+              </Suspense>
+            }
+          />
+          <Route
+            path="board-mode"
+            element={
+              <Suspense fallback={<LoadingScreen />}>
+                <BoardMode />
+              </Suspense>
+            }
+          />
+          <Route
+            path="action-plans"
+            element={
+              <Suspense fallback={<LoadingScreen />}>
+                <ActionPlansPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="stress-planner"
+            element={
+              <Suspense fallback={<LoadingScreen />}>
+                <StressPlannerPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="bcp-generator"
+            element={
+              <Suspense fallback={<LoadingScreen />}>
+                <BCPGeneratorPage />
               </Suspense>
             }
           />

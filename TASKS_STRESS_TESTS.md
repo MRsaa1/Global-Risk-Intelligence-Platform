@@ -98,13 +98,14 @@
      nvcr.io/nim/black-forest-labs/flux-1-dev:latest
    ```
 
-### 🎯 API Keys (Настроены)
+### 🎯 API Keys (настройка)
 
 ```bash
-# .env уже создан с ключами:
-NVIDIA_API_KEY=nvapi-9fcj...      # LLM (работает!)
-NVIDIA_FOURCASTNET_API_KEY=nvapi-FJim...  # Earth-2 (для NIM)
-NVIDIA_FLUX_API_KEY=nvapi--VIS...  # FLUX (для NIM)
+# ВАЖНО: не хранить реальные ключи в репозитории.
+# Настраивать на сервере через .env / переменные окружения:
+NVIDIA_API_KEY=YOUR_KEY      # LLM
+NVIDIA_FOURCASTNET_API_KEY=YOUR_KEY  # Earth-2 (для NIM)
+NVIDIA_FLUX_API_KEY=YOUR_KEY  # FLUX (для NIM)
 ```
 
 ---
@@ -377,7 +378,7 @@ NVIDIA SERVICES (Mock → Real):
 2. Создать API key
 3. Добавить в .env:
    ```bash
-   NVIDIA_API_KEY=nvapi-xxxxx
+   NVIDIA_API_KEY=YOUR_KEY
    ```
 4. Перезапустить backend
 5. Протестировать:

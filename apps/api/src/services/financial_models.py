@@ -79,6 +79,30 @@ class ExpectedLoss:
     capital_requirement: float  # Basel-style capital
 
 
+@dataclass
+class CreditLimitResult:
+    """Credit limit calculation result."""
+    suggested_limit: float
+    max_limit: float
+    risk_adjusted_limit: float
+    collateral_coverage: float
+    limit_utilization_recommended: float
+    rating: str
+    factors: dict
+
+
+@dataclass
+class InsurancePremiumResult:
+    """Insurance premium calculation result."""
+    annual_premium: float
+    monthly_premium: float
+    base_premium: float
+    risk_loading: float
+    coverage_loading: float
+    deductible_discount: float
+    premium_breakdown: dict
+
+
 class FinancialModelService:
     """
     Service for financial risk calculations.
@@ -439,6 +463,165 @@ class FinancialModelService:
             expected_loss=expected_loss,
             unexpected_loss=unexpected_loss,
             capital_requirement=capital_requirement,
+        )
+    
+    def calculate_credit_limit(
+        self,
+        pd: float,
+        lgd: float,
+        ead: float,
+        collateral_value: float,
+        tenure_years: int,
+        risk_appetite: str = "moderate",
+    ) -> CreditLimitResult:
+        """
+        Calculate suggested credit limit based on risk parameters.
+        
+        Args:
+            pd: Probability of Default
+            lgd: Loss Given Default
+            ead: Exposure at Default (current exposure)
+            collateral_value: Value of collateral
+            tenure_years: Loan tenure in years
+            risk_appetite: 'conservative', 'moderate', or 'aggressive'
+            
+        Returns:
+            CreditLimitResult with suggested limits and factors
+        """
+        # Risk appetite multipliers
+        appetite_multipliers = {
+            "conservative": 0.7,
+            "moderate": 1.0,
+            "aggressive": 1.3,
+        }
+        appetite_mult = appetite_multipliers.get(risk_appetite, 1.0)
+        
+        # Base limit from collateral (LTV approach)
+        max_ltv = 0.80  # 80% LTV
+        collateral_based_limit = collateral_value * max_ltv
+        
+        # Risk adjustment based on PD
+        # Lower PD = higher limit capacity
+        pd_adjustment = 1 - (pd * 5)  # PD of 0.1 = 50% reduction
+        pd_adjustment = max(0.3, min(1.0, pd_adjustment))
+        
+        # LGD adjustment
+        # Higher LGD = more conservative limit
+        lgd_adjustment = 1 - (lgd * 0.5)
+        lgd_adjustment = max(0.5, min(1.0, lgd_adjustment))
+        
+        # Tenure adjustment (longer tenure = slightly lower limit)
+        tenure_adjustment = 1 - (tenure_years * 0.01)
+        tenure_adjustment = max(0.8, min(1.0, tenure_adjustment))
+        
+        # Calculate limits
+        max_limit = collateral_based_limit
+        risk_adjusted_limit = max_limit * pd_adjustment * lgd_adjustment * tenure_adjustment
+        suggested_limit = risk_adjusted_limit * appetite_mult
+        
+        # Collateral coverage ratio
+        collateral_coverage = collateral_value / suggested_limit if suggested_limit > 0 else 0
+        
+        # Recommended utilization (keep some headroom)
+        utilization_recommended = 0.75 if pd < 0.02 else 0.60 if pd < 0.05 else 0.50
+        
+        # Determine rating
+        rating = self._pd_to_rating(pd)
+        
+        return CreditLimitResult(
+            suggested_limit=round(suggested_limit, 2),
+            max_limit=round(max_limit, 2),
+            risk_adjusted_limit=round(risk_adjusted_limit, 2),
+            collateral_coverage=round(collateral_coverage, 2),
+            limit_utilization_recommended=utilization_recommended,
+            rating=rating.value,
+            factors={
+                "pd_adjustment": pd_adjustment,
+                "lgd_adjustment": lgd_adjustment,
+                "tenure_adjustment": tenure_adjustment,
+                "appetite_multiplier": appetite_mult,
+                "base_ltv": max_ltv,
+            },
+        )
+    
+    def calculate_insurance_premium(
+        self,
+        base_rate: float,
+        risk_score: float,
+        sum_insured: float,
+        deductible: float,
+        coverage_type: str = "property",
+    ) -> InsurancePremiumResult:
+        """
+        Calculate insurance premium based on risk and coverage parameters.
+        
+        Args:
+            base_rate: Base premium rate (annual, e.g., 0.005 = 0.5%)
+            risk_score: Risk score 0-100 (climate, physical combined)
+            sum_insured: Sum insured amount
+            deductible: Deductible amount
+            coverage_type: Type of coverage
+            
+        Returns:
+            InsurancePremiumResult with premium breakdown
+        """
+        # Coverage type multipliers
+        coverage_multipliers = {
+            "property": 1.0,
+            "liability": 0.8,
+            "business_interruption": 1.2,
+            "natural_disaster": 1.5,
+            "comprehensive": 1.8,
+            "other": 1.0,
+        }
+        coverage_mult = coverage_multipliers.get(coverage_type, 1.0)
+        
+        # Base premium from sum insured
+        base_premium = sum_insured * base_rate
+        
+        # Risk loading (higher risk = higher premium)
+        # 0-25: 0% loading, 25-50: 25% loading, 50-75: 50% loading, 75-100: 100% loading
+        if risk_score < 25:
+            risk_loading_pct = 0
+        elif risk_score < 50:
+            risk_loading_pct = 0.25
+        elif risk_score < 75:
+            risk_loading_pct = 0.50
+        else:
+            risk_loading_pct = 1.0
+        
+        risk_loading = base_premium * risk_loading_pct
+        
+        # Coverage type loading
+        coverage_loading = base_premium * (coverage_mult - 1)
+        
+        # Deductible discount (higher deductible = lower premium)
+        deductible_ratio = deductible / sum_insured if sum_insured > 0 else 0
+        deductible_discount_pct = min(0.20, deductible_ratio * 2)  # Max 20% discount
+        deductible_discount = (base_premium + risk_loading + coverage_loading) * deductible_discount_pct
+        
+        # Final premium calculation
+        annual_premium = base_premium + risk_loading + coverage_loading - deductible_discount
+        annual_premium = max(0, annual_premium)
+        monthly_premium = annual_premium / 12
+        
+        return InsurancePremiumResult(
+            annual_premium=round(annual_premium, 2),
+            monthly_premium=round(monthly_premium, 2),
+            base_premium=round(base_premium, 2),
+            risk_loading=round(risk_loading, 2),
+            coverage_loading=round(coverage_loading, 2),
+            deductible_discount=round(deductible_discount, 2),
+            premium_breakdown={
+                "base_rate": base_rate,
+                "risk_score": risk_score,
+                "risk_loading_pct": risk_loading_pct,
+                "coverage_type": coverage_type,
+                "coverage_multiplier": coverage_mult,
+                "deductible_discount_pct": deductible_discount_pct,
+                "sum_insured": sum_insured,
+                "deductible": deductible,
+            },
         )
     
     def _pd_to_rating(self, pd: float) -> RatingGrade:

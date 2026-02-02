@@ -169,7 +169,7 @@ function BarChartScene({
   return (
     <group ref={groupRef}>
       {/* Grid */}
-      <gridHelper args={[totalWidth + 2, 10, chartColors.background.border, chartColors.background.border]} />
+      <gridHelper args={[totalWidth + 2, 10, chartColors.background.borderOpaque, chartColors.background.borderOpaque]} />
       
       {/* Bars */}
       {data.map((d, i) => {
@@ -216,12 +216,12 @@ function BarChartScene({
                   itemSize={3}
                 />
               </bufferGeometry>
-              <lineBasicMaterial color={chartColors.background.border} />
+              <lineBasicMaterial color={chartColors.background.borderOpaque} />
             </line>
             <Text
               position={[startX - 0.8, y, 0]}
               fontSize={0.15}
-              color={chartColors.text.muted}
+              color={chartColors.text.mutedOpaque}
               anchorX="right"
               anchorY="middle"
             >

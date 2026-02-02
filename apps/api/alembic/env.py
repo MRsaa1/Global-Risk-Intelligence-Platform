@@ -47,11 +47,14 @@ def get_url() -> str:
     # Priority: environment variable > alembic.ini
     url = os.environ.get("DATABASE_URL")
     if url:
-        # Convert postgresql:// to postgresql+asyncpg://
+        # Convert postgresql:// to postgresql+asyncpg:// for async engine
         if url.startswith("postgresql://"):
             url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        # Convert sqlite:// to sqlite+aiosqlite:// for async migrations
+        elif url.startswith("sqlite://") and "+aiosqlite" not in url:
+            url = url.replace("sqlite://", "sqlite+aiosqlite://", 1)
         return url
-    
+
     # Fallback to alembic.ini
     return config.get_main_option("sqlalchemy.url")
 

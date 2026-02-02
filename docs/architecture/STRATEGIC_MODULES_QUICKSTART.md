@@ -4,6 +4,8 @@
 
 This guide will help you start implementing the Strategic Modules architecture.
 
+**V2 (PRROS):** For the 30-year PRROS vision and unified module set, see [STRATEGIC_MODULES_V2_VISION.md](STRATEGIC_MODULES_V2_VISION.md) and [STRATEGIC_MODULES_V2_ROADMAP.md](STRATEGIC_MODULES_V2_ROADMAP.md); the 10-module v1 set remains in STRATEGIC_MODULES.md and ROADMAP.
+
 ---
 
 ## Step 1: Understand the Vision (5 min)
@@ -326,6 +328,10 @@ class ModuleSentinelAgent(SentinelAgent):
 - **30-Year Roadmap:** `docs/architecture/STRATEGIC_MODULES_ROADMAP.md`
 - **Integration Matrix:** `docs/architecture/STRATEGIC_MODULES_MATRIX.md`
 - **Summary:** `STRATEGIC_MODULES_SUMMARY.md`
+- **V2 Vision (PRROS):** `docs/architecture/STRATEGIC_MODULES_V2_VISION.md`
+- **V2 Roadmap:** `docs/architecture/STRATEGIC_MODULES_V2_ROADMAP.md`
+- **V2 Implementation Potential:** `docs/architecture/STRATEGIC_MODULES_V2_IMPLEMENTATION_POTENTIAL.md` — что уже можно реализовать и скрытый потенциал платформы
+- **System Overseer Deep Integration:** `docs/architecture/SYSTEM_OVERSEER_DEEP_INTEGRATION.md` — план глубокой интеграции System Overseer во все компоненты платформы
 
 ---
 

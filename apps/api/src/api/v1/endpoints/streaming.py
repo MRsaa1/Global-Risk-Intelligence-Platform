@@ -17,8 +17,8 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 from enum import Enum
 import structlog
-import numpy as np
 from datetime import datetime
+import random
 
 logger = structlog.get_logger()
 router = APIRouter()
@@ -150,20 +150,119 @@ async def send_risk_updates(websocket: WebSocket):
     """
     Send periodic risk updates.
     
-    In production, this would pull from Redis/database.
+    Emits one RiskUpdate-shaped message per tick:
+    {"type":"risk_update","hotspot_id":"...","risk_score":0.7,"previous_score":0.65,"timestamp":"..."}
+
+    In production, replace the generator with real data (DB/Redis/events).
     """
+    from src.data.cities import get_all_cities, get_city
+    from src.services.city_risk_calculator import get_city_risk_calculator
+    from src.services.risk_stream_bus import pop_dirty_city
+    from src.core.database import AsyncSessionLocal
+    from src.models.asset import Asset
+    from sqlalchemy import select, func
+
+    # City universe for streaming updates (same IDs as /geodata/hotspots)
+    cities = get_all_cities()
+    city_ids = [c.id for c in cities]
+    if not city_ids:
+        city_ids = ["tokyo", "newyork", "london"]
+
+    calc = get_city_risk_calculator()
+    last: dict[str, float] = {}
+
+    def _zone_level(r: float) -> str:
+        if r > 0.8:
+            return "critical"
+        if r > 0.6:
+            return "high"
+        if r > 0.4:
+            return "medium"
+        return "low"
+
     while True:
         try:
-            # Simulate risk data (replace with real data source)
-            risk_data = generate_sample_risk_data()
-            
-            message = StreamMessage(
-                type=StreamType.RISK_UPDATE,
-                timestamp=datetime.utcnow().isoformat(),
-                data=risk_data
+            # Pick one city per tick to keep traffic low but continuous
+            city_id = await pop_dirty_city() or random.choice(city_ids)
+            score = await calc.calculate_risk(city_id, force_recalculate=True, use_external_data=False)
+            if not score:
+                await asyncio.sleep(2)
+                continue
+
+            base = float(score.risk_score)
+
+            # ------------------------------------------------------------------
+            # Real asset-driven adjustments (DB-backed):
+            # If assets/digital twins in this city change their risk scores (e.g. from sensors),
+            # the city risk should react and the city should move between zones on the globe.
+            # ------------------------------------------------------------------
+            city = get_city(city_id)
+            candidates: set[str] = {city_id}
+            if city:
+                candidates.add(city.name)
+                if city.name.lower().endswith(" city"):
+                    candidates.add(city.name[:-5])
+            # Also add a no-space variant to match DB values like "NewYork"
+            candidates = {c for c in candidates if c}
+            candidates |= {c.replace(" ", "") for c in candidates if " " in c}
+            candidates_lower = [c.lower() for c in candidates]
+
+            asset_risk: float | None = None
+            try:
+                async with AsyncSessionLocal() as session:
+                    q = (
+                        select(Asset.physical_risk_score, Asset.climate_risk_score, Asset.network_risk_score)
+                        .where(Asset.city.is_not(None))
+                        .where(func.lower(Asset.city).in_(candidates_lower))
+                    )
+                    res = await session.execute(q)
+                    rows = res.all()
+
+                vals: list[float] = []
+                for (phys, clim, net) in rows:
+                    parts: list[float] = []
+                    for v in (phys, clim, net):
+                        if v is None:
+                            continue
+                        try:
+                            parts.append(float(v) / 100.0)
+                        except Exception:
+                            continue
+                    if parts:
+                        vals.append(max(0.0, min(1.0, max(parts))))
+                if vals:
+                    asset_risk = sum(vals) / len(vals)
+            except Exception:
+                asset_risk = None
+
+            # Combine base city risk (macro) with asset risk (micro / sensors).
+            if asset_risk is not None:
+                new = max(0.0, min(1.0, base * 0.7 + asset_risk * 0.3))
+            else:
+                new = max(0.0, min(1.0, base))
+
+            prev = float(last.get(city_id, new))
+            last[city_id] = new
+
+            # Only emit when there is a meaningful change OR a zone transition
+            prev_zone = _zone_level(prev)
+            new_zone = _zone_level(new)
+            if abs(new - prev) < 0.002 and prev_zone == new_zone:
+                await asyncio.sleep(5)
+                continue
+
+            await websocket.send_json(
+                {
+                    "type": "risk_update",
+                    "hotspot_id": city_id,
+                    "risk_score": new,
+                    "previous_score": prev,
+                    "zone_level": new_zone,
+                    "previous_zone_level": prev_zone,
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
             )
-            
-            await manager.send_to(websocket, message)
+
             await asyncio.sleep(5)  # Update every 5 seconds
         
         except asyncio.CancelledError:
@@ -174,29 +273,12 @@ async def send_risk_updates(websocket: WebSocket):
 
 
 def generate_sample_risk_data() -> dict:
-    """Generate sample risk data for streaming."""
-    # In production, pull from Redis or compute service
-    
-    hotspots = [
-        {"id": "tokyo", "lat": 35.68, "lng": 139.65, "risk": 0.85 + np.random.uniform(-0.1, 0.1)},
-        {"id": "shanghai", "lat": 31.23, "lng": 121.47, "risk": 0.82 + np.random.uniform(-0.1, 0.1)},
-        {"id": "newyork", "lat": 40.71, "lng": -74.01, "risk": 0.70 + np.random.uniform(-0.1, 0.1)},
-        {"id": "london", "lat": 51.51, "lng": -0.13, "risk": 0.55 + np.random.uniform(-0.1, 0.1)},
-        {"id": "dubai", "lat": 25.20, "lng": 55.27, "risk": 0.45 + np.random.uniform(-0.1, 0.1)},
-    ]
-    
-    # Clamp risk values
-    for h in hotspots:
-        h["risk"] = max(0.0, min(1.0, h["risk"]))
-    
-    return {
-        "total_exposure": 482.3 + np.random.uniform(-5, 5),
-        "at_risk": 67.5 + np.random.uniform(-2, 2),
-        "critical": 14.8 + np.random.uniform(-1, 1),
-        "hotspots": hotspots,
-        "network_stress": 0.67 + np.random.uniform(-0.05, 0.05),
-        "active_scenarios": 3
-    }
+    """
+    Legacy sample snapshot generator (unused by the UI stream).
+
+    Kept for backward compatibility / future aggregated snapshots.
+    """
+    return {}
 
 
 # ==============================================

@@ -61,6 +61,13 @@ interface PlatformState {
   // WebSocket status
   wsStatus: 'connecting' | 'connected' | 'disconnected'
   
+  // Command Mode (split-view transformation)
+  commandMode: boolean
+  
+  // Actions - Command Mode
+  setCommandMode: (mode: boolean) => void
+  toggleCommandMode: () => void
+  
   // Actions - Portfolio
   setPortfolioIntent: (portfolio: PortfolioState) => void
   setPortfolioConfirmed: (portfolio: PortfolioState) => void
@@ -114,6 +121,10 @@ const defaultPortfolio: PortfolioState = {
   portfolioValue: 4.2,
 }
 
+function getInitialRecentEvents(): PlatformEvent[] {
+  return []
+}
+
 export const usePlatformStore = create<PlatformState>((set, get) => ({
   // Initial state
   portfolioIntent: null,
@@ -125,9 +136,19 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
   selectedZones: [],
   openDigitalTwins: [],
   showDigitalTwinPanel: false,
-  recentEvents: [],
+  recentEvents: getInitialRecentEvents(),
   lastEventId: null,
   wsStatus: 'disconnected',
+  commandMode: false,
+  
+  // Command Mode actions
+  setCommandMode: (mode) => {
+    set({ commandMode: mode })
+  },
+  
+  toggleCommandMode: () => {
+    set({ commandMode: !get().commandMode })
+  },
   
   // Portfolio actions
   setPortfolioIntent: (portfolio) => {
@@ -271,9 +292,10 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
       selectedZones: [],
       openDigitalTwins: [],
       showDigitalTwinPanel: false,
-      recentEvents: [],
+      recentEvents: getInitialRecentEvents(),
       lastEventId: null,
       wsStatus: 'disconnected',
+      commandMode: false,
     })
   },
 }))
@@ -311,4 +333,12 @@ export const useActiveScenario = () => {
 
 export const useSelectedStressTestId = () => {
   return usePlatformStore(state => state.selectedStressTestId)
+}
+
+export const useCommandMode = () => {
+  return usePlatformStore(state => state.commandMode)
+}
+
+export const useToggleCommandMode = () => {
+  return usePlatformStore(state => state.toggleCommandMode)
 }

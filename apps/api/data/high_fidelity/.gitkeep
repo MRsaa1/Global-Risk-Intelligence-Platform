@@ -1,0 +1,2 @@
+# High-fidelity scenario JSON (flood.json, wind.json, metadata.json) per scenario_id.
+# Seed with: python -m scripts.seed_high_fidelity (from apps/api, PYTHONPATH=src)

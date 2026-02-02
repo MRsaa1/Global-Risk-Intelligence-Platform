@@ -17,6 +17,7 @@ import structlog
 
 from src.layers.agents.sentinel import sentinel_agent, Alert, AlertSeverity, AlertType
 from src.core.config import settings
+from src.services.event_emitter import event_emitter
 
 logger = structlog.get_logger()
 router = APIRouter()
@@ -82,13 +83,20 @@ class AlertConnectionManager:
         self.connection_info: dict[WebSocket, dict] = {}
     
     async def connect(self, websocket: WebSocket, filters: dict = None):
-        """Accept a new connection."""
+        """Accept a new connection. Auto-start SENTINEL monitoring on first client."""
         await websocket.accept()
+        was_empty = len(self.active_connections) == 0
         self.active_connections.add(websocket)
         self.connection_info[websocket] = {
             "connected_at": datetime.utcnow(),
             "filters": filters or {},
         }
+        if was_empty:
+            try:
+                await start_monitoring()
+                logger.info("SENTINEL monitoring auto-started (first alerts WebSocket client)")
+            except Exception as e:
+                logger.warning("Auto-start monitoring failed: %s", e)
         logger.info(
             "Alert WebSocket connected",
             total=len(self.active_connections)
@@ -202,6 +210,10 @@ async def _monitoring_loop():
             # Broadcast new alerts
             for alert in alerts:
                 await alert_manager.broadcast_alert(alert)
+                # Emit to main WebSocket for Recent Activity on Dashboard
+                await event_emitter.emit_alert_generated(
+                    str(alert.id), alert.title, alert.message, alert.severity.value
+                )
                 logger.info(
                     "Alert generated",
                     alert_type=alert.alert_type.value,
@@ -226,70 +238,96 @@ async def _monitoring_loop():
 
 async def _build_monitoring_context() -> dict:
     """
-    Build context for SENTINEL monitoring.
-    
-    In production, this pulls from:
-    - Weather APIs (NOAA, OpenWeather)
-    - Sensor data (IoT)
-    - External feeds (USGS earthquakes, etc.)
-    - Database (asset states)
+    Build context for SENTINEL monitoring from real data.
+
+    - DB: active assets (climate_risk_score, physical_risk_score, network_risk_score, valuation)
+    - Geodata: risk hotspots (min_risk=0.6) for regional alerts
+    - Fallback: minimal simulated context if DB/geodata fail
     """
     import random
-    
-    # Simulated context (replace with real data sources)
+    from sqlalchemy import select
+    from src.core.database import AsyncSessionLocal
+    from src.models.asset import Asset
+
     context = {
         "weather_forecast": {},
         "sensors": {},
         "infrastructure": {},
         "assets": [],
+        "geodata_hotspots": [],
     }
-    
-    # Simulate occasional weather threats (5% chance)
-    if random.random() < 0.05:
-        threat_type = random.choice(["hurricane", "flood_warning", "heat_wave"])
+
+    # 1. Real assets from DB (SENTINEL _check_climate_thresholds uses these)
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(Asset)
+                .where(Asset.status == "active")
+                .limit(500)
+            )
+            assets = result.scalars().all()
+            context["assets"] = [
+                {
+                    "id": str(a.id),
+                    "climate_risk_score": a.climate_risk_score or 0,
+                    "physical_risk_score": a.physical_risk_score or 0,
+                    "network_risk_score": a.network_risk_score or 0,
+                    "valuation": float(a.current_valuation or 0),
+                }
+                for a in assets
+            ]
+    except Exception as e:
+        logger.warning("SENTINEL context: DB assets failed, using fallback", error=str(e))
+        context["assets"] = []
+
+    # 2. Real geodata hotspots (high-risk regions for SENTINEL _check_geodata_hotspots)
+    try:
+        from src.services.geo_data import geo_data_service
+        await geo_data_service._ensure_risk_scores(force_recalculate=False)
+        geojson = geo_data_service.get_risk_hotspots_geojson(min_risk=0.5, max_risk=1.0)
+        features = geojson.get("features") or []
+        context["geodata_hotspots"] = [
+            {
+                "id": f.get("id", ""),
+                "name": (f.get("properties") or {}).get("name", ""),
+                "risk_score": (f.get("properties") or {}).get("risk_score", 0),
+                "exposure": (f.get("properties") or {}).get("exposure", 0),
+            }
+            for f in features
+            if (f.get("properties") or {}).get("risk_score", 0) >= 0.5
+        ]
+    except Exception as e:
+        logger.warning("SENTINEL context: geodata hotspots failed", error=str(e))
+        context["geodata_hotspots"] = []
+
+    # 3. Optional: rare simulated weather/infra (so alerts are not only climate/hotspots)
+    if random.random() < 0.02:
+        threat_type = random.choice(["hurricane", "flood_warning"])
         if threat_type == "hurricane":
             context["weather_forecast"]["hurricane"] = {
-                "name": random.choice(["Alex", "Bella", "Carlos", "Diana"]),
-                "category": random.randint(1, 5),
+                "name": random.choice(["Alex", "Bella", "Carlos"]),
+                "category": random.randint(1, 4),
                 "region": random.choice(["Gulf Coast", "East Coast", "Caribbean"]),
-                "hours": random.randint(24, 96),
-                "exposure": random.uniform(50, 500),
-                "affected_assets": [f"asset_{i}" for i in range(random.randint(5, 20))],
+                "hours": random.randint(48, 96),
+                "exposure": random.uniform(50, 300),
+                "affected_assets": [],
             }
-        elif threat_type == "flood_warning":
+        else:
             context["weather_forecast"]["flood_warning"] = {
                 "region": random.choice(["Lower Manhattan", "Miami Beach", "New Orleans"]),
-                "level": random.uniform(1.5, 4.0),
-                "exposure": random.uniform(10, 100) * 1_000_000,
-                "affected_assets": [f"asset_{i}" for i in range(random.randint(3, 10))],
+                "level": random.uniform(1.5, 3.0),
+                "exposure": random.uniform(10, 80) * 1_000_000,
+                "affected_assets": [],
             }
-    
-    # Simulate infrastructure issues (3% chance)
-    if random.random() < 0.03:
+    if random.random() < 0.01:
         context["infrastructure"]["power_grid_1"] = {
             "type": "Power Grid",
             "status": random.choice(["degraded", "critical"]),
-            "affected_count": random.randint(10, 100),
-            "affected_assets": [f"asset_{i}" for i in range(random.randint(5, 15))],
-            "exposure": random.uniform(5, 50) * 1_000_000,
+            "affected_count": random.randint(5, 50),
+            "affected_assets": [],
+            "exposure": random.uniform(5, 30) * 1_000_000,
         }
-    
-    # Simulate sensor anomalies (2% chance)
-    if random.random() < 0.02:
-        context["sensors"][f"asset_{random.randint(1, 100)}"] = {
-            "structural_integrity_change": random.uniform(5.5, 15.0),
-        }
-    
-    # Simulate high-risk assets
-    context["assets"] = [
-        {
-            "id": f"asset_{i}",
-            "climate_risk_score": random.randint(30, 95),
-            "valuation": random.uniform(10, 100) * 1_000_000,
-        }
-        for i in range(100)
-    ]
-    
+
     return context
 
 
@@ -434,6 +472,10 @@ async def create_manual_alert(request: CreateAlertRequest):
     
     # Broadcast to connected clients
     await alert_manager.broadcast_alert(alert)
+    # Emit to main WebSocket for Recent Activity on Dashboard
+    await event_emitter.emit_alert_generated(
+        str(alert.id), alert.title, alert.message, alert.severity.value
+    )
     
     return _alert_to_response(alert)
 

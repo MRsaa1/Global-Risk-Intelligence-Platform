@@ -111,11 +111,13 @@ result = await physics_nemo_service.simulate_flood(
 
 **Purpose:** Free GPU credits for startups
 
-**Setup:**
-1. Apply at: https://www.nvidia.com/en-us/startups/
-2. Get approved (usually 1-2 weeks)
-3. Receive GPU credits
-4. Use for Earth-2 and PhysicsNeMo API calls
+**Status:** ✅ **Team is in NVIDIA Inception** — credits and access available.
+
+**Next steps with Inception:**
+1. Enable credits in `.env`: `NVIDIA_INCEPTION_ENABLED=true`
+2. Add API key(s) from NVIDIA Developer Portal (Inception benefits)
+3. Use credits for Earth-2, PhysicsNeMo, NIM, and LLM API calls
+4. Optionally run local NIM (FourCastNet, CorrDiff) on GPU server and set `USE_LOCAL_NIM=true` to reduce cloud cost
 
 **Benefits:**
 - ✅ Free credits for early-stage startups
@@ -127,7 +129,8 @@ result = await physics_nemo_service.simulate_flood(
 ```python
 # .env
 NVIDIA_INCEPTION_ENABLED=true
-NVIDIA_INCEPTION_CREDITS=10000  # Credits allocated
+NVIDIA_INCEPTION_CREDITS=10000  # Credits allocated (adjust per your allocation)
+NVIDIA_API_KEY=...              # From NVIDIA Developer Portal / Inception
 ```
 
 ---
@@ -138,7 +141,7 @@ NVIDIA_INCEPTION_CREDITS=10000  # Credits allocated
 |---------|--------|----------|-------------------|
 | Earth-2 | ✅ Integrated | ⭐⭐⭐ Critical | Full API integration |
 | PhysicsNeMo | ✅ Integrated | ⭐⭐⭐ Critical | Full API integration |
-| Inception | 📋 Setup Required | ⭐⭐⭐ Critical | Configuration ready |
+| Inception | ✅ In Program | ⭐⭐⭐ Critical | Configuration ready; use credits for APIs |
 
 ---
 
@@ -281,13 +284,13 @@ projection = await earth2_service.get_hyper_resolution_climate(
 
 ---
 
-## Next Steps
+## Next Steps (with Inception)
 
-1. **Apply for NVIDIA Inception** - Get free credits
-2. **Get API Key** - From NVIDIA Developer Portal
-3. **Configure** - Add to `.env` file
-4. **Test** - Run sample simulations
-5. **Monitor** - Track usage and costs
+1. ~~**Apply for NVIDIA Inception**~~ — ✅ Already in program
+2. **Get API Key** — From NVIDIA Developer Portal (Inception benefits)
+3. **Configure** — Set `NVIDIA_INCEPTION_ENABLED=true` and `NVIDIA_API_KEY` in `.env`
+4. **Test** — Run Earth-2 / NIM / LLM; stress tests and climate layers will use credits
+5. **Monitor** — Track usage and credits; consider local NIM for high-volume workloads
 
 ---
 

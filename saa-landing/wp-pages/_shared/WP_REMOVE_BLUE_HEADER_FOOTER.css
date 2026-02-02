@@ -1,0 +1,48 @@
+/*
+  УБРАТЬ шапку и подвал темы (не закрасить — скрыть).
+  Вставь в: Внешний вид → Настроить → Дополнительные CSS
+
+  Лучший способ — настройки: для страниц SAA в Elementor
+  выставить Page Layout = "Elementor Full Width" или "Canvas"
+  (тогда шапка/подвал не выводятся вообще).
+*/
+
+/* Скрыть шапку темы */
+#masthead,
+.site-header,
+.ast-site-header-wrap,
+.ast-header-wrap,
+header.site-header,
+.elementor-location-header,
+[data-elementor-type="header"] {
+  display: none !important;
+  visibility: hidden !important;
+  height: 0 !important;
+  overflow: hidden !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+}
+
+/* Скрыть подвал темы */
+#colophon,
+.site-footer,
+.ast-footer-overlay,
+footer.site-footer,
+.elementor-location-footer,
+[data-elementor-type="footer"] {
+  display: none !important;
+  visibility: hidden !important;
+  height: 0 !important;
+  overflow: hidden !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+}
+
+/* Фон страницы — чёрный */
+body,
+.elementor-page,
+.site {
+  background: #000 !important;
+}

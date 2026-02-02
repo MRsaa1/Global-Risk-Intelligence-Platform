@@ -194,6 +194,84 @@ class EventEmitter:
             intent=False,  # Failure is confirmed
             caused_by=caused_by,
         )
+
+    async def emit_geopolitical_alert(
+        self,
+        region: str,
+        affected_entity_ids: Optional[List[str]] = None,
+        message: Optional[str] = None,
+        estimated_impact: Optional[Dict[str, Any]] = None,
+    ) -> PlatformEvent:
+        """Emit geopolitical alert; broadcast STRESS_TEST_UPDATE so dashboards can prompt recalculation."""
+        affected = affected_entity_ids or []
+        ev = await self.emit(
+            event_type=EventTypes.GEOPOLITICAL_ALERT,
+            entity_type="region",
+            entity_id=region,
+            action="alert",
+            data={
+                "region": region,
+                "affected_entity_ids": affected,
+                "affected_count": len(affected),
+                "message": message or "Geopolitical event may affect stress test assumptions.",
+                "estimated_impact": estimated_impact or {},
+            },
+            intent=False,
+            actor_type="system",
+        )
+        await ws_manager.broadcast_to_channel(
+            "stress_tests",
+            {
+                "event_type": EventTypes.STRESS_TEST_UPDATE,
+                "entity_type": "stress_test",
+                "entity_id": region,
+                "action": "update",
+                "data": {
+                    "trigger": "geopolitical_alert",
+                    "affected_count": len(affected),
+                    "message": message or "Consider re-running stress tests for affected entities.",
+                    "estimated_impact": estimated_impact,
+                },
+            },
+        )
+        return ev
+
+    async def emit_stress_test_trigger(
+        self,
+        trigger_entity_id: str,
+        affected_entity_ids: Optional[List[str]] = None,
+        reason: str = "trigger",
+    ) -> PlatformEvent:
+        """Emit stress test trigger; broadcast STRESS_TEST_UPDATE for real-time dashboard."""
+        affected = affected_entity_ids or []
+        ev = await self.emit(
+            event_type=EventTypes.STRESS_TEST_TRIGGER,
+            entity_type="stress_test",
+            entity_id=trigger_entity_id,
+            action="trigger",
+            data={
+                "affected_entity_ids": affected,
+                "affected_count": len(affected),
+                "reason": reason,
+            },
+            intent=False,
+            actor_type="system",
+        )
+        await ws_manager.broadcast_to_channel(
+            "stress_tests",
+            {
+                "event_type": EventTypes.STRESS_TEST_UPDATE,
+                "entity_type": "stress_test",
+                "entity_id": trigger_entity_id,
+                "action": "update",
+                "data": {
+                    "trigger": "stress_test_trigger",
+                    "affected_count": len(affected),
+                    "message": "Stress test assumptions may have changed; consider recalculation.",
+                },
+            },
+        )
+        return ev
     
     async def emit_zone_selected(
         self,
@@ -330,6 +408,24 @@ class EventEmitter:
             data={"name": city_name},
             intent=False,
             actor_id=actor_id,
+        )
+    
+    async def emit_alert_generated(
+        self,
+        alert_id: str,
+        title: str,
+        message: str = "",
+        severity: str = "info",
+        **extra: Any,
+    ) -> PlatformEvent:
+        """Emit alert generated event (for Recent Activity and dashboard)."""
+        return await self.emit(
+            event_type=EventTypes.ALERT_GENERATED,
+            entity_type="alert",
+            entity_id=alert_id,
+            action="created",
+            data={"name": title, "message": message, "severity": severity, **extra},
+            intent=False,
         )
     
     def get_recent_events(self, limit: int = 50) -> List[PlatformEvent]:

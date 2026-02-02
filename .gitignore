@@ -42,6 +42,9 @@ build/
 .next/
 out/
 
+# macOS resource forks (cause null-byte errors in Alembic on Linux)
+._*
+
 # IDEs
 .vscode/
 .idea/
@@ -54,6 +57,7 @@ out/
 .env
 .env.local
 .env.*.local
+.env.nvidia
 
 # Logs
 *.log
@@ -68,16 +72,21 @@ logs/
 # Docker
 .dockerignore
 
-# Secrets
+# Secrets and tokens (never commit)
 secrets/
 *.key
 *.pem
 *.cert
+*api_key*
+*secret*
+*password*
+ghp_*
 
-# Temporary files
+# Temporary files and deploy artifacts
 tmp/
 temp/
 *.tmp
+*.tar.gz
 
 # Backup files
 backup_*.tar.gz
@@ -87,3 +96,4 @@ BACKUP_INFO.md
 # OS
 Thumbs.db
 .DS_Store
+._*

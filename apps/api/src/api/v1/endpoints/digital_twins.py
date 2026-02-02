@@ -5,11 +5,12 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from src.core.storage import storage
 from src.core.database import get_db
 from src.models.asset import Asset
 from src.models.digital_twin import DigitalTwin, TwinState, TwinTimeline
@@ -42,6 +43,27 @@ class DigitalTwinResponse(BaseModel):
     
     # Futures
     future_scenarios: Optional[dict]
+
+    @field_validator(
+        "climate_exposures",
+        "infrastructure_dependencies",
+        "financial_metrics",
+        "future_scenarios",
+        mode="before",
+    )
+    @classmethod
+    def _parse_json_text(cls, v):
+        # Models store these as TEXT (JSON as text). Accept dict or JSON string.
+        if v is None:
+            return None
+        if isinstance(v, dict):
+            return v
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except Exception:
+                return None
+        return None
     
     class Config:
         from_attributes = True
@@ -56,6 +78,20 @@ class TimelineEventResponse(BaseModel):
     event_description: Optional[str]
     data: Optional[dict]
     source: Optional[str]
+
+    @field_validator("data", mode="before")
+    @classmethod
+    def _parse_event_data(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, dict):
+            return v
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except Exception:
+                return None
+        return None
     
     class Config:
         from_attributes = True
@@ -86,15 +122,50 @@ async def get_digital_twin(
     - Financial metrics
     - Simulated future scenarios
     """
-    result = await db.execute(
-        select(DigitalTwin).where(DigitalTwin.asset_id == asset_id)
-    )
+    result = await db.execute(select(DigitalTwin).where(DigitalTwin.asset_id == str(asset_id)))
     twin = result.scalar_one_or_none()
     
     if not twin:
         raise HTTPException(status_code=404, detail="Digital Twin not found")
     
     return twin
+
+
+@router.get("/{asset_id}/geometry-url")
+async def get_twin_geometry_url(
+    asset_id: UUID,
+    expires_hours: int = 2,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get a URL/pointer to the twin geometry for rendering.
+
+    - For web GLB stored in object storage: returns a presigned URL
+    - For USD/Nucleus paths: returns the raw path (to be opened in Omniverse)
+    - When twin exists but has no geometry file: returns 200 with url=null (no 404)
+    """
+    result = await db.execute(select(DigitalTwin).where(DigitalTwin.asset_id == str(asset_id)))
+    twin = result.scalar_one_or_none()
+    if not twin or not twin.geometry_path:
+        return {"type": None, "url": None, "path": None}
+
+    gtype = (twin.geometry_type or "").lower()
+    path = str(twin.geometry_path)
+
+    # External GLB URL (e.g. demo or CDN)
+    if path.startswith(("http://", "https://")):
+        return {"type": "glb", "url": path, "path": path}
+
+    # bucket/object form (MinIO)
+    if "/" in path and not path.startswith(("http://", "https://", "omniverse://")) and gtype in ("glb", "gltf", ""):
+        if not storage.is_available:
+            raise HTTPException(status_code=503, detail="Object storage unavailable")
+        bucket, object_name = path.split("/", 1)
+        url = storage.get_presigned_url(bucket, object_name, expires_hours=expires_hours)
+        return {"type": "glb", "url": url, "bucket": bucket, "object": object_name}
+
+    # USD/Nucleus path
+    return {"type": gtype or "usd", "path": path}
 
 
 @router.get("/{asset_id}/timeline", response_model=list[TimelineEventResponse])
@@ -116,9 +187,7 @@ async def get_twin_timeline(
     - valuations
     """
     # First get the twin
-    result = await db.execute(
-        select(DigitalTwin).where(DigitalTwin.asset_id == asset_id)
-    )
+    result = await db.execute(select(DigitalTwin).where(DigitalTwin.asset_id == str(asset_id)))
     twin = result.scalar_one_or_none()
     
     if not twin:
@@ -156,11 +225,12 @@ async def add_timeline_event(
     - valuation: Financial valuation update
     """
     from datetime import datetime
+    from src.services.geo_data import geo_data_service
+    from src.services.risk_stream_bus import mark_city_dirty
+    from src.data.cities import get_all_cities
     
     # Get the twin
-    result = await db.execute(
-        select(DigitalTwin).where(DigitalTwin.asset_id == asset_id)
-    )
+    result = await db.execute(select(DigitalTwin).where(DigitalTwin.asset_id == str(asset_id)))
     twin = result.scalar_one_or_none()
     
     if not twin:
@@ -171,6 +241,74 @@ async def add_timeline_event(
         event_date = datetime.fromisoformat(event.event_date.replace("Z", "+00:00"))
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format. Use ISO format.")
+
+    # If this is a sensor reading, update current sensor snapshot + derive risk.
+    if (event.event_type or "").lower() == "sensor" and event.data is not None:
+        now = datetime.now(timezone.utc)
+        try:
+            twin.sensor_data = json.dumps(event.data)
+        except Exception:
+            twin.sensor_data = None
+        twin.sensor_updated_at = now
+
+        # Optionally sync derived state fields
+        si = event.data.get("structural_integrity")
+        cs = event.data.get("condition_score")
+        try:
+            if si is not None:
+                twin.structural_integrity = float(si)
+        except Exception:
+            pass
+        try:
+            if cs is not None:
+                twin.condition_score = float(cs)
+        except Exception:
+            pass
+
+        # Derive an asset physical risk score (0..100) from sensor snapshot.
+        # Convention: structural_integrity/condition_score are 0..100 (higher is better).
+        derived_physical_risk: float | None = None
+        try:
+            if si is not None:
+                derived_physical_risk = max(0.0, min(100.0, 100.0 - float(si)))
+            elif cs is not None:
+                derived_physical_risk = max(0.0, min(100.0, 100.0 - float(cs)))
+        except Exception:
+            derived_physical_risk = None
+
+        if derived_physical_risk is not None:
+            asset_res = await db.execute(select(Asset).where(Asset.id == str(asset_id)))
+            asset = asset_res.scalar_one_or_none()
+            if asset:
+                asset.physical_risk_score = float(derived_physical_risk)
+                # Nudge streaming so the globe updates this city quickly.
+                if asset.city:
+                    target = "".join(ch for ch in str(asset.city).lower() if ch.isalnum())
+                    resolved: str | None = None
+                    for c in get_all_cities():
+                        cid = "".join(ch for ch in str(c.id).lower() if ch.isalnum())
+                        cname = "".join(ch for ch in str(c.name).lower() if ch.isalnum())
+                        cname2 = "".join(ch for ch in str(c.name).replace(" City", "").lower() if ch.isalnum())
+                        if target in {cid, cname, cname2} or cid in target or cname in target or cname2 in target:
+                            resolved = c.id
+                            break
+                    # Fallback: nearest city by coordinates (if asset has lat/lon)
+                    if not resolved and asset.latitude is not None and asset.longitude is not None:
+                        best: tuple[float, str] | None = None
+                        for c in get_all_cities():
+                            # rough distance in degrees (good enough for nearest-city selection)
+                            dlat = float(asset.latitude) - float(c.lat)
+                            dlng = float(asset.longitude) - float(c.lng)
+                            d2 = dlat * dlat + dlng * dlng
+                            if best is None or d2 < best[0]:
+                                best = (d2, c.id)
+                        if best:
+                            resolved = best[1]
+                    if resolved:
+                        await mark_city_dirty(resolved)
+
+        # Ensure subsequent /geodata/* calls reflect the new sensor-driven risk quickly.
+        geo_data_service.invalidate_cache()
     
     timeline_event = TwinTimeline(
         digital_twin_id=twin.id,
@@ -178,7 +316,7 @@ async def add_timeline_event(
         event_date=event_date,
         event_title=event.event_title,
         event_description=event.event_description,
-        data=event.data,
+        data=json.dumps(event.data) if event.data is not None else None,
         source=event.source,
     )
     
@@ -203,14 +341,12 @@ async def sync_digital_twin(
     3. Recalculate risk scores
     4. Update financial metrics
     """
-    result = await db.execute(
-        select(DigitalTwin).where(DigitalTwin.asset_id == asset_id)
-    )
+    result = await db.execute(select(DigitalTwin).where(DigitalTwin.asset_id == str(asset_id)))
     twin = result.scalar_one_or_none()
     if not twin:
         raise HTTPException(status_code=404, detail="Digital Twin not found")
 
-    asset_res = await db.execute(select(Asset).where(Asset.id == asset_id))
+    asset_res = await db.execute(select(Asset).where(Asset.id == str(asset_id)))
     asset = asset_res.scalar_one_or_none()
     lat = (asset.latitude if asset and asset.latitude is not None else 52.52)
     lon = (asset.longitude if asset and asset.longitude is not None else 13.405)
@@ -301,12 +437,12 @@ async def get_climate_exposures(
     - Wildfire risk
     - Sea level rise
     """
-    twin_res = await db.execute(select(DigitalTwin).where(DigitalTwin.asset_id == asset_id))
+    twin_res = await db.execute(select(DigitalTwin).where(DigitalTwin.asset_id == str(asset_id)))
     twin = twin_res.scalar_one_or_none()
     if not twin:
         raise HTTPException(status_code=404, detail="Digital Twin not found")
 
-    asset_res = await db.execute(select(Asset).where(Asset.id == asset_id))
+    asset_res = await db.execute(select(Asset).where(Asset.id == str(asset_id)))
     asset = asset_res.scalar_one_or_none()
     lat = (asset.latitude if asset and asset.latitude is not None else 52.52)
     lon = (asset.longitude if asset and asset.longitude is not None else 13.405)

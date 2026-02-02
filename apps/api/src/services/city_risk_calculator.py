@@ -100,7 +100,12 @@ class CityRiskCalculator:
         self._cache: Dict[str, CityRiskScore] = {}
         self._cache_ttl = timedelta(hours=24)
     
-    async def calculate_risk(self, city_id: str, force_recalculate: bool = False) -> Optional[CityRiskScore]:
+    async def calculate_risk(
+        self,
+        city_id: str,
+        force_recalculate: bool = False,
+        use_external_data: bool = True,
+    ) -> Optional[CityRiskScore]:
         """
         Calculate risk score for a city.
         
@@ -124,7 +129,7 @@ class CityRiskCalculator:
             return None
         
         # Calculate individual risk factors
-        risk_factors = await self._calculate_all_factors(city)
+        risk_factors = await self._calculate_all_factors(city, use_external_data=use_external_data)
         
         # Calculate weighted average
         total_score = 0.0
@@ -198,25 +203,48 @@ class CityRiskCalculator:
         
         return result
     
-    async def calculate_all_cities(self, force_recalculate: bool = False) -> List[CityRiskScore]:
-        """Calculate risk scores for all cities."""
+    async def calculate_all_cities(
+        self,
+        force_recalculate: bool = False,
+        use_external_data: bool = True,
+        max_concurrency: int = 25,
+    ) -> List[CityRiskScore]:
+        """
+        Calculate risk scores for all cities.
+
+        Notes:
+        - External data (USGS/OpenWeather) can be slow and rate-limited; default is enabled
+          for backwards compatibility but should usually be disabled for real-time API usage.
+        - Concurrency is limited to avoid bursting external APIs.
+        """
         cities = get_all_cities()
-        
-        # Calculate in parallel
-        tasks = [self.calculate_risk(city.id, force_recalculate) for city in cities]
-        results = await asyncio.gather(*tasks)
-        
+
+        sem = asyncio.Semaphore(max(1, max_concurrency))
+
+        async def _one(city: CityData):
+            async with sem:
+                return await self.calculate_risk(
+                    city.id,
+                    force_recalculate=force_recalculate,
+                    use_external_data=use_external_data,
+                )
+
+        results = await asyncio.gather(*[_one(c) for c in cities])
         return [r for r in results if r is not None]
     
-    async def _calculate_all_factors(self, city: CityData) -> Dict[str, RiskFactor]:
+    async def _calculate_all_factors(
+        self,
+        city: CityData,
+        use_external_data: bool = True,
+    ) -> Dict[str, RiskFactor]:
         """Calculate all risk factors for a city."""
         factors = {}
         
         # Seismic risk
-        factors["seismic"] = await self._calculate_seismic_risk(city)
+        factors["seismic"] = await self._calculate_seismic_risk(city, use_external_data=use_external_data)
         
         # Flood/Hurricane risk
-        factors["flood"] = await self._calculate_flood_risk(city)
+        factors["flood"] = await self._calculate_flood_risk(city, use_external_data=use_external_data)
         factors["hurricane"] = await self._calculate_hurricane_risk(city)
         
         # Political risk
@@ -233,13 +261,17 @@ class CityRiskCalculator:
         
         return factors
     
-    async def _calculate_seismic_risk(self, city: CityData) -> RiskFactor:
+    async def _calculate_seismic_risk(self, city: CityData, use_external_data: bool = True) -> RiskFactor:
         """Calculate seismic risk using USGS data or fallback."""
         # Try to get real-time data from USGS
-        if self.usgs_client:
+        if use_external_data and self.usgs_client:
             try:
-                earthquakes = await self.usgs_client.get_recent_earthquakes(
-                    lat=city.lat, lng=city.lng, radius_km=500, days=365
+                # Hard timeout to keep API responsive
+                earthquakes = await asyncio.wait_for(
+                    self.usgs_client.get_recent_earthquakes(
+                        lat=city.lat, lng=city.lng, radius_km=500, days=365
+                    ),
+                    timeout=3.0,
                 )
                 if earthquakes:
                     # Calculate risk based on earthquake frequency and magnitude
@@ -274,13 +306,14 @@ class CityRiskCalculator:
             confidence=0.70,
         )
     
-    async def _calculate_flood_risk(self, city: CityData) -> RiskFactor:
+    async def _calculate_flood_risk(self, city: CityData, use_external_data: bool = True) -> RiskFactor:
         """Calculate flood risk using weather data or fallback."""
         # Try to get real-time weather data
-        if self.weather_client:
+        if use_external_data and self.weather_client:
             try:
-                weather = await self.weather_client.get_flood_risk(
-                    lat=city.lat, lng=city.lng
+                weather = await asyncio.wait_for(
+                    self.weather_client.get_flood_risk(lat=city.lat, lng=city.lng),
+                    timeout=2.5,
                 )
                 if weather:
                     return RiskFactor(

@@ -126,8 +126,8 @@ class ClimateService:
             logger.info(f"Using cached climate data for {cache_key}")
             return self.cache[cache_key]
         
-        # Try NVIDIA Earth-2 first if enabled
-        if use_earth2 and settings.nvidia_api_key:
+        # Try NVIDIA Earth-2 first if enabled (and API key + use_earth2 setting)
+        if use_earth2 and getattr(settings, "use_earth2", True) and settings.nvidia_api_key:
             try:
                 earth2_projection = await earth2_service.get_climate_projection(
                     latitude=latitude,
@@ -208,6 +208,9 @@ class ClimateService:
         else:
             risk_category = "low"
         
+        data_sources = ["CMIP6", "FEMA", "Copernicus"]
+        if flood and getattr(flood, "data_source", "").startswith("Open-Meteo"):
+            data_sources.append("Open-Meteo")
         assessment = ClimateRiskAssessment(
             latitude=latitude,
             longitude=longitude,
@@ -221,7 +224,7 @@ class ClimateService:
             drought=drought,
             composite_score=composite,
             risk_category=risk_category,
-            data_sources=["CMIP6", "FEMA", "Copernicus"],
+            data_sources=data_sources,
         )
         
         self.cache[cache_key] = assessment
@@ -234,33 +237,44 @@ class ClimateService:
         scenario: ClimateScenario,
         time_horizon: int,
     ) -> ClimateExposure:
-        """Assess flood risk using FEMA flood zones and CMIP6 precipitation projections."""
-        # In production, this would query FEMA API and CMIP6 data
-        # For now, return simulated data based on location
-        
-        # Simulate flood risk based on latitude (higher near coasts)
+        """Assess flood risk: Open-Meteo + flood impact (CPU) when Earth-2 off; else FEMA/CMIP6 style."""
+        try:
+            from src.services.flood_impact_service import flood_impact_service
+            result = await flood_impact_service.get_flood_forecast(
+                latitude=lat, longitude=lon, days=7, include_polygon=False
+            )
+            # Map risk level to score 0-100 for composite
+            risk_to_score = {"normal": 20, "elevated": 40, "high": 60, "critical": 80}
+            score = min(100, risk_to_score.get(result.max_risk_level, 30))
+            intensity = result.max_flood_depth_m or 0.5
+            return ClimateExposure(
+                hazard_type=HazardType.FLOOD,
+                score=score,
+                probability=0.01 * (score / 30),
+                intensity=intensity,
+                return_period=100,
+                trend=5.0,
+                data_source="Open-Meteo + Flood impact (CPU)",
+            )
+        except Exception as e:
+            logger.warning("Flood impact from Open-Meteo failed, using fallback: %s", e)
+        # Fallback: simulated data
         base_score = 30.0
-        
-        # Adjust for scenario
         scenario_multiplier = {
             ClimateScenario.SSP126: 1.0,
             ClimateScenario.SSP245: 1.2,
             ClimateScenario.SSP370: 1.4,
             ClimateScenario.SSP585: 1.6,
         }
-        
-        # Adjust for time horizon
         time_multiplier = 1 + (time_horizon - 2024) * 0.01
-        
         score = min(100, base_score * scenario_multiplier[scenario] * time_multiplier)
-        
         return ClimateExposure(
             hazard_type=HazardType.FLOOD,
             score=score,
-            probability=0.01 * (score / 30),  # ~1% annual for base
-            intensity=1.5,  # meters depth for 100-year event
+            probability=0.01 * (score / 30),
+            intensity=1.5,
             return_period=100,
-            trend=5.0,  # 5% increase per decade
+            trend=5.0,
             data_source="FEMA + CMIP6",
         )
     

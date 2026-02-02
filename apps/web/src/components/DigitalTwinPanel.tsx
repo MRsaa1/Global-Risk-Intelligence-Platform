@@ -9,14 +9,18 @@ import { useRef, useState, useEffect, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import * as Cesium from 'cesium'
-import EventRiskGraph from './EventRiskGraph'
-import { RiskFlowMini } from './RiskFlowDiagram'
+import UnifiedStressTestSelector from './stress/UnifiedStressTestSelector'
+
 
 // Cesium Ion access token
 const CESIUM_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIwYTExZmMxNS1jY2RhLTQ2YjctOTg0Mi02NWQxNGQxYjFhZGYiLCJpZCI6Mzc4MTk5LCJpYXQiOjE3NjgzMjc3NjJ9.neQZ3X5JRYBalv7cjUuVrq_kVw0nVyKQlwtOyxls5OM'
 
 // Cesium OSM Buildings Asset ID for worldwide gray 3D buildings
 const CESIUM_OSM_BUILDINGS = 96188
+
+// Google Photorealistic 3D Tiles via Cesium Ion (Asset from your Ion account)
+// No Google API key needed - Cesium Ion acts as proxy
+const CESIUM_ION_GOOGLE_PHOTOREALISTIC = 2275207
 
 interface AssetData {
   id: string
@@ -32,6 +36,8 @@ interface AssetData {
     heading: number
     pitch: number
   }
+  /** Optional: fixed camera height (m) for Google Photorealistic 3D - e.g. 2500 = city-level view */
+  google3dCameraHeight?: number
   risk_factors: {
     flood: number
     earthquake: number
@@ -61,7 +67,8 @@ const CITY_DATA: Record<string, AssetData> = {
     value: 52.3,
     risk_score: 0.75,
     cesiumAssetId: 75343,
-    cameraPosition: { lat: 40.7128, lng: -74.0060, height: 1500, heading: 45, pitch: -30 },
+    cameraPosition: { lat: 40.7128, lng: -74.0060, height: 4500, heading: 45, pitch: -30 },
+    google3dCameraHeight: 2200,
     risk_factors: { flood: 0.65, earthquake: 0.15, fire: 0.35, structural: 0.25 },
     sensors: { temperature: 21.8, humidity: 55, vibration: 0.01, strain: 0.001 },
   },
@@ -74,12 +81,12 @@ const CITY_DATA: Record<string, AssetData> = {
     value: 38.7,
     risk_score: 0.52,
     cesiumAssetId: 2644092,
-    cameraPosition: { lat: -33.8688, lng: 151.2093, height: 1500, heading: 120, pitch: -25 },
+    cameraPosition: { lat: -33.8688, lng: 151.2093, height: 4500, heading: 120, pitch: -25 },
     risk_factors: { flood: 0.40, earthquake: 0.12, fire: 0.38, structural: 0.22 },
     sensors: { temperature: 25.1, humidity: 65, vibration: 0.007, strain: 0.0007 },
   },
   
-  // SAN FRANCISCO - Aerometrex High Resolution (Asset ID: 1415196)
+  // SAN FRANCISCO - Aerometrex High Resolution (Asset ID: 1415196) + Google Photorealistic 3D
   sanfrancisco: {
     id: 'sanfrancisco',
     name: 'San Francisco High Resolution 3D',
@@ -87,7 +94,8 @@ const CITY_DATA: Record<string, AssetData> = {
     value: 48.5,
     risk_score: 0.78,
     cesiumAssetId: 1415196,
-    cameraPosition: { lat: 37.7749, lng: -122.4194, height: 1200, heading: 30, pitch: -30 },
+    cameraPosition: { lat: 37.7749, lng: -122.4194, height: 3500, heading: 30, pitch: -30 },
+    google3dCameraHeight: 1800,
     risk_factors: { flood: 0.35, earthquake: 0.92, fire: 0.45, structural: 0.38 },
     sensors: { temperature: 18.5, humidity: 72, vibration: 0.015, strain: 0.0012 },
   },
@@ -100,7 +108,7 @@ const CITY_DATA: Record<string, AssetData> = {
     value: 31.2,
     risk_score: 0.62,
     cesiumAssetId: 354759,
-    cameraPosition: { lat: 42.3601, lng: -71.0589, height: 1000, heading: 90, pitch: -30 },
+    cameraPosition: { lat: 42.3601, lng: -71.0589, height: 3500, heading: 90, pitch: -30 },
     risk_factors: { flood: 0.55, earthquake: 0.10, fire: 0.30, structural: 0.28 },
     sensors: { temperature: 18.2, humidity: 58, vibration: 0.006, strain: 0.0006 },
   },
@@ -113,12 +121,12 @@ const CITY_DATA: Record<string, AssetData> = {
     value: 18.9,
     risk_score: 0.45,
     cesiumAssetId: 354307,
-    cameraPosition: { lat: 39.7392, lng: -104.9903, height: 1000, heading: 0, pitch: -30 },
+    cameraPosition: { lat: 39.7392, lng: -104.9903, height: 3500, heading: 0, pitch: -30 },
     risk_factors: { flood: 0.25, earthquake: 0.20, fire: 0.35, structural: 0.18 },
     sensors: { temperature: 15.8, humidity: 35, vibration: 0.004, strain: 0.0004 },
   },
   
-  // MELBOURNE - Photogrammetry (Asset ID: 69380)
+  // MELBOURNE - Photogrammetry (Asset ID: 69380) + Google Photorealistic 3D
   melbourne: {
     id: 'melbourne',
     name: 'Melbourne Photogrammetry',
@@ -126,7 +134,8 @@ const CITY_DATA: Record<string, AssetData> = {
     value: 28.5,
     risk_score: 0.58,
     cesiumAssetId: 69380,
-    cameraPosition: { lat: -37.8136, lng: 144.9631, height: 1200, heading: 60, pitch: -35 },
+    cameraPosition: { lat: -37.8136, lng: 144.9631, height: 4000, heading: 60, pitch: -35 },
+    google3dCameraHeight: 2500,
     risk_factors: { flood: 0.35, earthquake: 0.15, fire: 0.45, structural: 0.30 },
     sensors: { temperature: 22.5, humidity: 62, vibration: 0.008, strain: 0.0008 },
   },
@@ -139,7 +148,7 @@ const CITY_DATA: Record<string, AssetData> = {
     value: 42.1,
     risk_score: 0.48,
     cesiumAssetId: 57588,
-    cameraPosition: { lat: 38.9072, lng: -77.0369, height: 1500, heading: 180, pitch: -30 },
+    cameraPosition: { lat: 38.9072, lng: -77.0369, height: 4500, heading: 180, pitch: -30 },
     risk_factors: { flood: 0.45, earthquake: 0.08, fire: 0.28, structural: 0.20 },
     sensors: { temperature: 20.5, humidity: 60, vibration: 0.005, strain: 0.0005 },
   },
@@ -159,9 +168,42 @@ const PREMIUM_CITIES = new Set([
   'washington',   // 57588 - Vricon 3D Surface
 ])
 
+// Region-appropriate sensor defaults (deterministic, no random) so Helsinki shows Nordic values, Tokyo Japanese, etc.
+const REGION_SENSOR_DEFAULTS: Record<string, { temperature: number; humidity: number; vibration: number; strain: number }> = {
+  nordic:   { temperature: 8.2,  humidity: 78, vibration: 0.008, strain: 0.0009 },  // Helsinki, Stockholm, Oslo, Copenhagen
+  japan:    { temperature: 19.5, humidity: 64, vibration: 0.012, strain: 0.0011 },  // Tokyo, Osaka
+  australia:{ temperature: 24.0, humidity: 58, vibration: 0.007, strain: 0.0007 },   // Sydney, Melbourne, Brisbane
+  us_east:  { temperature: 20.5, humidity: 55, vibration: 0.01,  strain: 0.001 },   // NYC, Boston, Washington
+  us_west:  { temperature: 17.8, humidity: 62, vibration: 0.014, strain: 0.0012 },  // SF, LA, Seattle
+  us_central:{ temperature: 16.2, humidity: 42, vibration: 0.006, strain: 0.0006 }, // Denver, Chicago
+  europe:   { temperature: 18.5, humidity: 62, vibration: 0.009, strain: 0.0008 },   // Berlin, Paris, London, Munich
+  default:  { temperature: 20,    humidity: 50, vibration: 0.01,  strain: 0.001 },
+}
+
+function getSensorsForRegion(cityName: string, country?: string): { temperature: number; humidity: number; vibration: number; strain: number } {
+  const n = (cityName || '').toLowerCase()
+  const c = (country || '').toLowerCase()
+  if (/\b(helsinki|stockholm|oslo|copenhagen|finland|sweden|norway|denmark|nordic)\b/.test(n) || /\b(finland|sweden|norway|denmark)\b/.test(c)) return REGION_SENSOR_DEFAULTS.nordic
+  if (/\b(tokyo|osaka|japan)\b/.test(n) || /\bjapan\b/.test(c)) return REGION_SENSOR_DEFAULTS.japan
+  if (/\b(sydney|melbourne|brisbane|perth|australia)\b/.test(n) || /\baustralia\b/.test(c)) return REGION_SENSOR_DEFAULTS.australia
+  if (/\b(new york|boston|washington|miami|atlanta)\b/.test(n) || (/\bunited states\b/.test(c) && /\b(east|dc|ny)\b/.test(n))) return REGION_SENSOR_DEFAULTS.us_east
+  if (/\b(san francisco|los angeles|seattle)\b/.test(n)) return REGION_SENSOR_DEFAULTS.us_west
+  if (/\b(denver|chicago)\b/.test(n)) return REGION_SENSOR_DEFAULTS.us_central
+  if (/\b(berlin|munich|paris|london|frankfurt|amsterdam|brussels)\b/.test(n) || /\b(germany|france|uk|netherlands)\b/.test(c)) return REGION_SENSOR_DEFAULTS.europe
+  return REGION_SENSOR_DEFAULTS.default
+}
+
 const DEFAULT_CITY = CITY_DATA.newyork
 
 // Dynamic asset (from zone click) with coordinates
+interface CameraPosition {
+  lat: number
+  lng: number
+  height: number
+  heading: number
+  pitch: number
+}
+
 interface DynamicAsset {
   id: string
   name: string
@@ -170,7 +212,10 @@ interface DynamicAsset {
   longitude: number
   exposure: number
   impactSeverity: number
+  cameraPosition?: CameraPosition
 }
+
+const API_BASE = '/api/v1'
 
 interface DigitalTwinPanelProps {
   isOpen: boolean
@@ -183,6 +228,17 @@ interface DigitalTwinPanelProps {
   eventName?: string | null  // Human-readable event name
   eventCategory?: string | null  // Category: climate, financial, geopolitical, etc.
   timeHorizon?: string | null  // "current", "5yr", "10yr", "25yr"
+  /** Disaster viz on 3D city: same toggles as Command Center globe */
+  showFloodLayer?: boolean
+  showWindLayer?: boolean
+  showMetroFloodLayer?: boolean
+  floodDepthOverride?: number
+  showHeatLayer?: boolean
+  showHeavyRainLayer?: boolean
+  showDroughtLayer?: boolean
+  showUvLayer?: boolean
+  /** Total exposure (B USD) of all assets in the risk zone — when set, Asset Value shows this (cost of assets in zone) */
+  zoneTotalExposure?: number | null
 }
 
 // Risk zone data for highlighting after stress test
@@ -196,12 +252,14 @@ interface RiskHighlight {
   estimatedLoss: number  // in millions
   populationAffected: number
   recommendations: string[]
+  polygon?: number[][]  // [[lng, lat], ...] flood extent
 }
 
-// Stress Test Report data
+// Stress Test Report data (matches backend execute response and StressTestReportContent)
 interface StressTestReport {
   eventName: string
   eventType: string
+  eventId: string
   cityName: string
   timestamp: string
   totalLoss: number
@@ -210,18 +268,68 @@ interface StressTestReport {
   zones: RiskHighlight[]
   mitigationActions: { action: string; priority: 'urgent' | 'high' | 'medium'; cost: number; riskReduction: number }[]
   dataSourcesUsed: string[]
-  // LLM-generated content
   executiveSummary?: string
+  concludingSummary?: string
   llmGenerated?: boolean
+  regionActionPlan?: {
+    region: string
+    country: string
+    event_type: string
+    summary: string
+    key_actions: string[]
+    contacts: Array<{ name: string; phone: string }>
+    sources: Array<{ title: string; url?: string }>
+    urls: string[]
+  }
+  reportV2?: Record<string, unknown>
+  /** When use_nvidia_orchestration=true: confidence, model_agreement, flag_for_human_review, used_model_fast/deep */
+  nvidiaOrchestration?: {
+    entity_type?: string
+    confidence?: number
+    model_agreement?: number
+    flag_for_human_review?: boolean
+    used_model_fast?: string
+    used_model_deep?: string
+  }
+  /** From Knowledge Graph when use_kg=true */
+  relatedEntities?: Array<{ id?: string; name?: string; relationship_type?: string }>
+  /** KG + entity resolution context for LLM */
+  graphContext?: string
+  /** Currency for display (USD, EUR, GBP) */
+  currency?: string
 }
 
-export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, onCitySelected, assetId, dynamicAsset, eventId, eventName, eventCategory, timeHorizon }: DigitalTwinPanelProps) {
+export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, onCitySelected, assetId, dynamicAsset, eventId, eventName, eventCategory, timeHorizon, showFloodLayer = false, showWindLayer = false, showMetroFloodLayer = false, floodDepthOverride, showHeatLayer = false, showHeavyRainLayer = false, showDroughtLayer = false, showUvLayer = false, zoneTotalExposure = null }: DigitalTwinPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const viewerRef = useRef<Cesium.Viewer | null>(null)
+  const photorealisticTilesetRef = useRef<Cesium.Cesium3DTileset | null>(null)
+  const floodEntityRef = useRef<Cesium.Entity | null>(null)
+  const windEntityRef = useRef<Cesium.Entity | null>(null)
+  const metroEntitiesRef = useRef<Cesium.Entity[]>([])
+  const heatEntityRef = useRef<Cesium.Entity | null>(null)
+  const heavyRainEntityRef = useRef<Cesium.Entity | null>(null)
+  const droughtEntityRef = useRef<Cesium.Entity | null>(null)
+  const uvEntityRef = useRef<Cesium.Entity | null>(null)
   const [activeTab, setActiveTab] = useState<'3d' | 'sensors' | 'risks'>('3d')
+  const [viewerReady, setViewerReady] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [loadProgress, setLoadProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  const [actual3DMode, setActual3DMode] = useState<'google' | 'osm' | 'premium'>('google')
+  // ~12s quality delay: show "Loading Google 3D" while tiles load, then reveal full quality (SSE 1)
+  const [qualityDelayActive, setQualityDelayActive] = useState(false)
+  const [qualityDelayRemaining, setQualityDelayRemaining] = useState(12)
+
+  // Cesium OSM Buildings can trigger noisy WebGL warnings on some Mac GPUs/drivers for certain locations.
+  // Default behavior:
+  // - Cities: ON
+  // - Enterprise/bank/etc: OFF (safe mode)
+  //
+  // The panel stays mounted, so we keep an override state and derive the effective value each render.
+  const defaultBuildings3dEnabled =
+    !dynamicAsset || String(dynamicAsset.type || '').toLowerCase() === 'city'
+  const [buildings3dOverride, setBuildings3dOverride] = useState<boolean | null>(null)
+  const buildings3dEnabled = buildings3dOverride ?? defaultBuildings3dEnabled
   
   // Stress test state
   const [stressTestRunning, setStressTestRunning] = useState(false)
@@ -229,16 +337,72 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
   const [stressTestProgress, setStressTestProgress] = useState(0)
   const [riskHighlights, setRiskHighlights] = useState<RiskHighlight[]>([])
   const [stressTestReport, setStressTestReport] = useState<StressTestReport | null>(null)
-  const [showReport, setShowReport] = useState(false)
   const riskEntitiesRef = useRef<Cesium.Entity[]>([])
   const prevEventIdRef = useRef<string | undefined>(undefined)
   const prevCityIdRef = useRef<string>('')
+
+  // Reset user override when switching to a different city/enterprise
+  useEffect(() => {
+    setBuildings3dOverride(null)
+  }, [dynamicAsset?.id, assetId])
   
   // Stress test type selection
   const [showTestSelector, setShowTestSelector] = useState(false)
-  const [selectedTestType, setSelectedTestType] = useState<'current' | 'forecast'>('current')
   const [selectedScenario, setSelectedScenario] = useState<string>('')
-  const [isExportingPDF, setIsExportingPDF] = useState(false)
+  
+  // Internal layer state for auto-enable when stress test is run inside DigitalTwin
+  const [internalFloodLayer, setInternalFloodLayer] = useState(false)
+  const [internalWindLayer, setInternalWindLayer] = useState(false)
+  const [internalMetroFloodLayer, setInternalMetroFloodLayer] = useState(false)
+  const [internalHeatLayer, setInternalHeatLayer] = useState(false)
+  const [internalHeavyRainLayer, setInternalHeavyRainLayer] = useState(false)
+  const [internalDroughtLayer, setInternalDroughtLayer] = useState(false)
+  const [internalUvLayer, setInternalUvLayer] = useState(false)
+  
+  // Combine props with internal state (internal state can override props to ON)
+  const effectiveShowFloodLayer = showFloodLayer || internalFloodLayer
+  const effectiveShowWindLayer = showWindLayer || internalWindLayer
+  const effectiveShowMetroFloodLayer = showMetroFloodLayer || internalMetroFloodLayer
+  const effectiveShowHeatLayer = showHeatLayer || internalHeatLayer
+  const effectiveShowHeavyRainLayer = showHeavyRainLayer || internalHeavyRainLayer
+  const effectiveShowDroughtLayer = showDroughtLayer || internalDroughtLayer
+  const effectiveShowUvLayer = showUvLayer || internalUvLayer
+  
+  // Auto-enable layers based on selected scenario
+  useEffect(() => {
+    if (!selectedScenario) return
+    const id = selectedScenario.toLowerCase()
+    
+    // Flood-related scenarios
+    if (id.includes('flood') || id.includes('sea_level') || id.includes('tsunami') || id.includes('heavy_rain')) {
+      setInternalFloodLayer(true)
+    }
+    // Metro flood
+    if (id.includes('metro_flood')) {
+      setInternalMetroFloodLayer(true)
+      setInternalFloodLayer(true)
+    }
+    // Wind/hurricane
+    if (id.includes('wind_storm') || id.includes('hurricane') || id.includes('typhoon') || id.includes('cyclone')) {
+      setInternalWindLayer(true)
+    }
+    // Heat
+    if (id.includes('heat_stress') || id.includes('heatwave') || id.includes('heat_wave')) {
+      setInternalHeatLayer(true)
+    }
+    // Heavy rain
+    if (id.includes('heavy_rain')) {
+      setInternalHeavyRainLayer(true)
+    }
+    // Drought
+    if (id.includes('drought')) {
+      setInternalDroughtLayer(true)
+    }
+    // UV
+    if (id.includes('uv_extreme') || id.includes('uv_index')) {
+      setInternalUvLayer(true)
+    }
+  }, [selectedScenario])
   
   // Picker mode (country / city / optional enterprise) when opening via D without a selected city
   const [pickerCountry, setPickerCountry] = useState('')
@@ -250,38 +414,23 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
     queryFn: async () => {
       const res = await fetch('/api/v1/geodata/cities')
       if (!res.ok) throw new Error('Failed to fetch cities')
-      return res.json() as Promise<{ cities: Array<{ id: string; name: string; country: string; coordinates: [number, number] }> }>
+      return res.json() as Promise<{
+        cities: Array<{
+          id: string
+          name: string
+          country: string
+          coordinates?: [number, number]
+          camera_position?: CameraPosition
+          exposure?: number
+          risk_score?: number
+        }>
+      }>
     },
-    enabled: pickerMode && isOpen,
+    enabled: isOpen,
   })
   const cities = citiesData?.cities ?? []
   const countries = [...new Set(cities.map((c) => c.country))].sort()
   const citiesInCountry = pickerCountry ? cities.filter((c) => c.country === pickerCountry) : []
-  
-  // Available stress test scenarios
-  const currentScenarios = [
-    { id: 'seismic_shock', name: 'Seismic Activity', category: 'climate' },
-    { id: 'flood_event', name: 'Flood Event', category: 'climate' },
-    { id: 'hurricane', name: 'Hurricane/Typhoon', category: 'climate' },
-    { id: 'credit_crunch', name: 'Credit Crunch', category: 'financial' },
-    { id: 'market_crash', name: 'Market Crash', category: 'financial' },
-    { id: 'liquidity_crisis', name: 'Liquidity Crisis', category: 'financial' },
-    { id: 'conflict_escalation', name: 'Conflict Escalation', category: 'geopolitical' },
-    { id: 'supply_chain', name: 'Supply Chain Disruption', category: 'operational' },
-    { id: 'cyber_attack', name: 'Cyber Attack', category: 'operational' },
-    { id: 'pandemic', name: 'Pandemic Outbreak', category: 'health' },
-  ]
-  
-  const forecastScenarios = [
-    { id: 'climate_5yr', name: 'Climate Risk 5yr', category: 'climate', horizon: '5yr' },
-    { id: 'climate_10yr', name: 'Climate Risk 10yr', category: 'climate', horizon: '10yr' },
-    { id: 'climate_25yr', name: 'Climate Risk 25yr', category: 'climate', horizon: '25yr' },
-    { id: 'sea_level_10yr', name: 'Sea Level Rise 10yr', category: 'climate', horizon: '10yr' },
-    { id: 'sea_level_25yr', name: 'Sea Level Rise 25yr', category: 'climate', horizon: '25yr' },
-    { id: 'financial_stress_5yr', name: 'Basel Stress 5yr', category: 'financial', horizon: '5yr' },
-    { id: 'tech_disruption_10yr', name: 'Tech Disruption 10yr', category: 'operational', horizon: '10yr' },
-    { id: 'demographic_25yr', name: 'Demographic Shift 25yr', category: 'operational', horizon: '25yr' },
-  ]
   
   // ============================================
   // SMART MODE DETECTION
@@ -314,13 +463,15 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
   }, [isOpen, dynamicAsset, assetId, effectiveCityId, normalizedCityId, isPremiumCity])
   
   // Mode determination:
-  // - useCesiumMode: Use dedicated Cesium Ion 3D photogrammetry model (premium cities)
-  // - useOsmMode: Use Cesium OSM Buildings (gray, professional) for all other cities
-  const useCesiumMode = isPremiumCity
-  const useOsmMode = !useCesiumMode && (!!dynamicAsset || !!assetId)
+  // - useGooglePhotorealistic: ALL cities → Google Photorealistic 3D Tiles (Asset #2275207, global tileset)
+  // - useCesiumMode: Disabled — Google Photorealistic covers all cities worldwide
+  // - useOsmMode: Fallback only if Google fails
+  const useGooglePhotorealistic = !pickerMode
+  const useCesiumMode = false
+  const useOsmMode = false
   
   // Compute city/asset data
-  const { city } = (() => {
+  const { city: cityBase } = (() => {
     // PRIORITY 1: Dynamic asset with coordinates
     if (dynamicAsset) {
       // Check if this dynamic asset is for a premium city
@@ -338,34 +489,37 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
         }
       }
       
-      // Non-premium city - use OSM Buildings with dynamic coordinates
+      const apiCity = cities.find((c) => c.id.toLowerCase().replace(/[^a-z]/g, '') === normalizedCityId)
+        ?? cities.find((c) => c.name.toLowerCase() === (dynamicAsset.name || '').toLowerCase())
+      const cam = dynamicAsset.cameraPosition ?? (apiCity?.camera_position ? {
+        ...apiCity.camera_position,
+        lat: apiCity.camera_position.lat ?? dynamicAsset.latitude,
+        lng: apiCity.camera_position.lng ?? dynamicAsset.longitude,
+      } : undefined) ?? {
+        lat: dynamicAsset.latitude,
+        lng: dynamicAsset.longitude,
+        height: 3000,
+        heading: 60,
+        pitch: -35,
+      }
+      const valueFromApi = typeof apiCity?.exposure === 'number' ? apiCity.exposure : null
+      const riskFromApi = typeof apiCity?.risk_score === 'number' ? apiCity.risk_score : null
       return {
         city: {
           id: dynamicAsset.id,
           name: dynamicAsset.name,
           location: `${dynamicAsset.latitude.toFixed(4)}, ${dynamicAsset.longitude.toFixed(4)}`,
-          value: dynamicAsset.exposure,
-          risk_score: dynamicAsset.impactSeverity,
+          value: dynamicAsset.exposure ?? valueFromApi ?? 10,
+          risk_score: dynamicAsset.impactSeverity ?? riskFromApi ?? 0.5,
           cesiumAssetId: CESIUM_OSM_BUILDINGS, // Use OSM Buildings
-          cameraPosition: {
-            lat: dynamicAsset.latitude,
-            lng: dynamicAsset.longitude,
-            height: 2000,
-            heading: 30,
-            pitch: -35,
-          },
+          cameraPosition: cam,
           risk_factors: {
             flood: dynamicAsset.impactSeverity * 0.8,
             earthquake: dynamicAsset.impactSeverity * 0.3,
             fire: dynamicAsset.impactSeverity * 0.5,
             structural: dynamicAsset.impactSeverity * 0.4,
           },
-          sensors: {
-            temperature: 20 + Math.random() * 10,
-            humidity: 50 + Math.random() * 30,
-            vibration: 0.01 + Math.random() * 0.02,
-            strain: 0.001 + Math.random() * 0.002,
-          },
+          sensors: getSensorsForRegion(dynamicAsset.name ?? '', apiCity?.country),
         } as AssetData
       }
     }
@@ -376,12 +530,34 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
       if (CITY_DATA[key]) {
         return { city: CITY_DATA[key] }
       }
-      // Non-premium city by assetId - falls through to default
+      const apiCity = cities.find((c) => c.id.toLowerCase().replace(/[^a-z]/g, '') === key)
+      if (apiCity) {
+        const [lng, lat] = apiCity.coordinates ?? [0, 0]
+        const cam = apiCity.camera_position ?? { lat, lng, height: 3000, heading: 60, pitch: -35 }
+        return {
+          city: {
+            id: apiCity.id,
+            name: apiCity.name,
+            location: `${apiCity.name}, ${apiCity.country}`,
+            value: typeof apiCity.exposure === 'number' ? apiCity.exposure : 10,
+            risk_score: typeof apiCity.risk_score === 'number' ? apiCity.risk_score : 0.5,
+            cesiumAssetId: CESIUM_OSM_BUILDINGS,
+            cameraPosition: cam,
+            risk_factors: { flood: 0.4, earthquake: 0.3, fire: 0.3, structural: 0.2 },
+            sensors: getSensorsForRegion(apiCity.name, apiCity.country),
+          } as AssetData,
+        }
+      }
     }
     
     // Only log when panel is actually open (handled in useEffect above)
     return { city: DEFAULT_CITY }
   })()
+
+  // Asset Value = cost of assets in the risk zone when zoneTotalExposure is provided (e.g. opened from zone asset click)
+  const city = typeof zoneTotalExposure === 'number' && zoneTotalExposure >= 0
+    ? { ...cityBase, value: zoneTotalExposure }
+    : cityBase
 
   // Initialize Cesium viewer when panel opens (skip when in picker mode)
   useEffect(() => {
@@ -396,14 +572,16 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
       try {
         setIsLoading(true)
         setError(null)
+        setActual3DMode('google')
 
         // Set Cesium Ion token
         Cesium.Ion.defaultAccessToken = CESIUM_TOKEN
 
         console.log('Digital Twin: Loading 3D model for', city.name, 
+          useGooglePhotorealistic ? '(Google Photorealistic 3D Tiles)' :
           useCesiumMode ? `(Premium Cesium Ion Asset #${city.cesiumAssetId})` : '(Cesium OSM Buildings)')
 
-        // Create viewer
+        // Create viewer (requestRenderMode = faster when idle; we requestRender on overlay updates)
         viewer = new Cesium.Viewer(containerRef.current, {
           animation: false,
           baseLayerPicker: false,
@@ -419,9 +597,15 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
           skyBox: false,
           skyAtmosphere: false,
           baseLayer: false,
+          requestRenderMode: true,
+          maximumRenderTimeChange: 0.5,
         })
 
         viewerRef.current = viewer
+
+        // With requestRenderMode, request render on camera move so scene updates when user drags/zooms
+        viewer.camera.moveStart.addEventListener(() => { viewer.scene.requestRender() })
+        viewer.camera.moveEnd.addEventListener(() => { viewer.scene.requestRender() })
 
         // Dark background
         viewer.scene.backgroundColor = Cesium.Color.fromCssColorString('#0a0a0f')
@@ -431,11 +615,85 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
         
         let tileset: Cesium.Cesium3DTileset
 
-        if (!useCesiumMode) {
+        let usedGooglePhotorealistic = false
+        if (useGooglePhotorealistic) {
+          // =============================================
+          // GOOGLE PHOTOREALISTIC 3D TILES
+          // Prefer official Cesium.createGooglePhotorealistic3DTileset() (1.124+); fallback to Ion Asset #2275207
+          // =============================================
+          const google3dOptions = {
+            showCreditsOnScreen: true,
+            maximumScreenSpaceError: 4,
+            skipLevelOfDetail: true,
+            baseScreenSpaceError: 512,
+            skipScreenSpaceErrorFactor: 12,
+            skipLevels: 1,
+            immediatelyLoadDesiredLevelOfDetail: true,
+            loadSiblings: false,
+            cullWithChildrenBounds: true,
+            maximumMemoryUsage: 1536,
+            dynamicScreenSpaceError: true,
+            dynamicScreenSpaceErrorDensity: 0.0006,
+            dynamicScreenSpaceErrorFactor: 1.8,
+            dynamicScreenSpaceErrorHeightFalloff: 0.08,
+          }
+          try {
+            viewer.scene.globe.show = false
+            viewer.scene.skyAtmosphere = new Cesium.SkyAtmosphere()
+            if (typeof (Cesium as any).createGooglePhotorealistic3DTileset === 'function') {
+              tileset = await (Cesium as any).createGooglePhotorealistic3DTileset(google3dOptions)
+            } else {
+              tileset = await Cesium.Cesium3DTileset.fromIonAssetId(CESIUM_ION_GOOGLE_PHOTOREALISTIC, google3dOptions)
+            }
+            if (!isViewerValid()) return
+            viewer.scene.primitives.add(tileset)
+            photorealisticTilesetRef.current = tileset
+            usedGooglePhotorealistic = true
+            setActual3DMode('google')
+            console.log('✅ Google Photorealistic 3D Tiles loaded for', city.name)
+          } catch (googleErr: any) {
+            console.warn('Google Photorealistic failed, falling back to OSM Buildings:', googleErr?.message)
+            tileset = undefined as any
+          }
+        }
+        if (!tileset && !useCesiumMode) {
           // =============================================
           // CESIUM OSM BUILDINGS - Worldwide gray 3D buildings (professional look)
           // Used for cities without premium Cesium Ion models
           // =============================================
+          if (!buildings3dEnabled) {
+            console.log('Digital Twin: 3D Buildings disabled (safe mode) for', city.name)
+
+            // Show a minimal globe to keep georeferenced overlays (risk zones) visible without 3D tiles.
+            viewer.scene.globe.show = true
+            try {
+              viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString('#0a0a0f')
+            } catch {
+              // ignore
+            }
+
+            // Fly to the city location
+            viewer.camera.flyTo({
+              destination: Cesium.Cartesian3.fromDegrees(
+                city.cameraPosition.lng,
+                city.cameraPosition.lat,
+                city.cameraPosition.height
+              ),
+              orientation: {
+                heading: Cesium.Math.toRadians(city.cameraPosition.heading),
+                pitch: Cesium.Math.toRadians(city.cameraPosition.pitch),
+                roll: 0
+              },
+              duration: 1.0
+            })
+
+            setLoadProgress(100)
+            setIsLoading(false)
+            setViewerReady(true)
+            console.log('✅ Safe mode (no 3D buildings) ready for', city.name)
+            return
+          }
+
           console.log('Digital Twin: Loading Cesium OSM Buildings for', city.name)
           
           viewer.scene.globe.show = false
@@ -443,18 +701,20 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
           // Load Cesium OSM Buildings (gray, professional)
           // Higher maximumScreenSpaceError = lower detail = less GPU pressure
           tileset = await Cesium.Cesium3DTileset.fromIonAssetId(CESIUM_OSM_BUILDINGS, {
-            maximumScreenSpaceError: 32, // Increased from 16 to prevent vertex buffer overflow
+            // Aggressive safe-mode defaults to reduce GPU pressure and avoid WebGL buffer issues on some Macs.
+            // Lower detail is preferable to noisy GL_INVALID_OPERATION spam.
+            maximumScreenSpaceError: 64,
             skipLevelOfDetail: true,
             baseScreenSpaceError: 1024,
-            skipScreenSpaceErrorFactor: 16,
-            skipLevels: 2, // Skip more levels for faster loading
+            skipScreenSpaceErrorFactor: 32,
+            skipLevels: 4, // Skip more levels for faster loading
             immediatelyLoadDesiredLevelOfDetail: false,
             loadSiblings: false,
             cullWithChildrenBounds: true,
-            maximumMemoryUsage: 512,
+            maximumMemoryUsage: 256,
             dynamicScreenSpaceError: true,
             dynamicScreenSpaceErrorDensity: 0.00278,
-            dynamicScreenSpaceErrorFactor: 4.0,
+            dynamicScreenSpaceErrorFactor: 8.0,
             dynamicScreenSpaceErrorHeightFalloff: 0.25,
           })
           
@@ -482,9 +742,10 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
             duration: 2
           })
           
+          setActual3DMode('osm')
           console.log('✅ Cesium OSM Buildings loaded for', city.name)
           
-        } else {
+        } else if (!tileset) {
           // =============================================
           // CESIUM ION 3D TILES MODE - Predefined cities with high-quality 3D models
           // =============================================
@@ -493,25 +754,41 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
           // Load 3D Tileset from Cesium Ion with optimized settings
           // Higher maximumScreenSpaceError = lower detail = less GPU pressure
           tileset = await Cesium.Cesium3DTileset.fromIonAssetId(city.cesiumAssetId, {
-            maximumScreenSpaceError: 32, // Increased from 16 to prevent vertex buffer overflow
+            // Aggressive safe-mode defaults to reduce GPU pressure and avoid WebGL buffer issues on some Macs.
+            maximumScreenSpaceError: 64,
             skipLevelOfDetail: true,
             baseScreenSpaceError: 1024,
-            skipScreenSpaceErrorFactor: 16,
-            skipLevels: 2, // Skip more levels for faster loading
+            skipScreenSpaceErrorFactor: 32,
+            skipLevels: 4, // Skip more levels for faster loading
             immediatelyLoadDesiredLevelOfDetail: false,
             loadSiblings: false,
             cullWithChildrenBounds: true,
-            maximumMemoryUsage: 512,
+            maximumMemoryUsage: 256,
             dynamicScreenSpaceError: true,
             dynamicScreenSpaceErrorDensity: 0.00278,
-            dynamicScreenSpaceErrorFactor: 4.0,
+            dynamicScreenSpaceErrorFactor: 8.0,
             dynamicScreenSpaceErrorHeightFalloff: 0.25,
           })
           
           if (!isViewerValid()) return
           
           viewer.scene.primitives.add(tileset)
+          setActual3DMode('premium')
         }
+
+        // Surface tile failures (often correlated with problematic content/GPU drivers)
+        tileset.tileFailed.addEventListener((e: any) => {
+          try {
+            console.warn('Cesium tile failed', {
+              source: usedGooglePhotorealistic ? 'google' : useCesiumMode ? city.cesiumAssetId : CESIUM_OSM_BUILDINGS,
+              name: city.name,
+              message: e?.message,
+              url: e?.url,
+            })
+          } catch {
+            // ignore
+          }
+        })
 
         // Track loading progress
         tileset.loadProgress.addEventListener((numberOfPendingRequests: number, numberOfTilesProcessing: number) => {
@@ -527,7 +804,7 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
 
         // Style the tileset for better visibility
         if (useCesiumMode) {
-          // Premium models - keep original colors/textures, just brighten
+          // Premium city models - brighten
           tileset.style = new Cesium.Cesium3DTileStyle({
             color: { conditions: [['true', 'color("white")']] }
           })
@@ -545,19 +822,53 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
         if (!isViewerValid()) return
 
         // Fly to the location
-        viewer.camera.flyTo({
-          destination: Cesium.Cartesian3.fromDegrees(
-            city.cameraPosition.lng,
-            city.cameraPosition.lat,
-            city.cameraPosition.height
-          ),
-          orientation: {
-            heading: Cesium.Math.toRadians(city.cameraPosition.heading),
-            pitch: Cesium.Math.toRadians(city.cameraPosition.pitch),
-            roll: 0,
-          },
-          duration: 1.0,
-        })
+        // - useCesiumMode: city-specific tileset → flyToBoundingSphere centers on 3D model
+        // - useGooglePhotorealistic: global tileset → flyTo Rectangle auto-computes optimal height
+        // - else: flyTo fixed coordinates
+        if (useCesiumMode && tileset.boundingSphere) {
+          viewer.camera.flyToBoundingSphere(tileset.boundingSphere, {
+            duration: 1.0,
+            offset: new Cesium.HeadingPitchRange(
+              Cesium.Math.toRadians(city.cameraPosition.heading),
+              Cesium.Math.toRadians(city.cameraPosition.pitch),
+              city.cameraPosition.height,
+            ),
+          })
+        } else if (useGooglePhotorealistic) {
+          const c = city.cameraPosition
+          // City view height: like loaded 3D view. Use explicit value, else by city name (API path), else default.
+          const nameLower = (city as { name?: string }).name?.toLowerCase() ?? ''
+          const baseH =
+            (city as AssetData).google3dCameraHeight
+            ?? (nameLower.includes('new york') ? 2200 : nameLower.includes('san francisco') ? 2000 : 2200)
+          const h = Math.round(baseH * 0.6)
+          viewer.camera.flyTo({
+            destination: Cesium.Cartesian3.fromDegrees(c.lng, c.lat, h),
+            orientation: {
+              heading: Cesium.Math.toRadians(c.heading),
+              pitch: Cesium.Math.toRadians(c.pitch),
+              roll: 0,
+            },
+            duration: 1.0,
+          })
+          // Keep loading overlay longer so first tiles load — avoid blank green screen
+          await new Promise(r => setTimeout(r, 4000))
+          if (!isViewerValid()) return
+        } else {
+          viewer.camera.flyTo({
+            destination: Cesium.Cartesian3.fromDegrees(
+              city.cameraPosition.lng,
+              city.cameraPosition.lat,
+              city.cameraPosition.height
+            ),
+            orientation: {
+              heading: Cesium.Math.toRadians(city.cameraPosition.heading),
+              pitch: Cesium.Math.toRadians(city.cameraPosition.pitch),
+              roll: 0,
+            },
+            duration: 1.0,
+          })
+        }
 
         // Enable proper lighting
         viewer.scene.light = new Cesium.DirectionalLight({
@@ -567,7 +878,27 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
         })
         viewer.scene.highDynamicRange = true
 
+        // Maximal detailing on zoom: when camera is close, force highest LOD
+        if (usedGooglePhotorealistic && tileset) {
+          viewer.camera.moveEnd.addEventListener(() => {
+            if (!viewer || viewer.isDestroyed() || !tileset) return
+            const carto = Cesium.Cartographic.fromCartesian(viewer.camera.positionWC)
+            const height = carto.height
+            // Ultra close (< 1.5 km): SSE 0.75; close (1.5–4 km): 1.5; medium (4–12 km): 3; far: 5
+            const sse = height < 1500 ? 0.75 : height < 4000 ? 1.5 : height < 12000 ? 3 : 5
+            if (tileset.maximumScreenSpaceError !== sse) {
+              tileset.maximumScreenSpaceError = sse
+              viewer.scene.requestRender()
+            }
+          })
+        }
+
         setIsLoading(false)
+        setViewerReady(true)
+        if (usedGooglePhotorealistic) {
+          setQualityDelayActive(true)
+          setQualityDelayRemaining(12)
+        }
         console.log('Digital Twin loaded for', city.name)
 
       } catch (e: any) {
@@ -580,21 +911,361 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
     initViewer()
 
     return () => {
-      isMounted = false  // Prevent async operations after unmount
+      isMounted = false
+      setViewerReady(false)
+      setQualityDelayActive(false)
+      setQualityDelayRemaining(12)
+      photorealisticTilesetRef.current = null
+      floodEntityRef.current = null
+      windEntityRef.current = null
+      metroEntitiesRef.current = []
+      heatEntityRef.current = null
+      heavyRainEntityRef.current = null
+      droughtEntityRef.current = null
+      uvEntityRef.current = null
       if (viewer && !viewer.isDestroyed()) {
         viewer.destroy()
         viewerRef.current = null
       }
     }
-  }, [isOpen, pickerMode, assetId, dynamicAsset, useCesiumMode, city.cesiumAssetId])  // Dependencies on props
+  }, [isOpen, pickerMode, assetId, dynamicAsset, useCesiumMode, useGooglePhotorealistic, city.cesiumAssetId, city.name, buildings3dEnabled])
 
-  // Reset stress test state when panel closes or city changes
+  // Quality delay countdown: tiles load in background, then reveal full quality (SSE 1)
+  useEffect(() => {
+    if (!qualityDelayActive) return
+    const t = setInterval(() => {
+      setQualityDelayRemaining((prev) => {
+        if (prev <= 1) {
+          setQualityDelayActive(false)
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+    return () => clearInterval(t)
+  }, [qualityDelayActive])
+
+  // Progressive LOD: during load use SSE 4; in last 3s request full quality (SSE 1)
+  useEffect(() => {
+    const tileset = photorealisticTilesetRef.current
+    if (!tileset || !qualityDelayActive) return
+    const sse = qualityDelayRemaining > 3 ? 4 : 1
+    if (tileset.maximumScreenSpaceError !== sse) {
+      tileset.maximumScreenSpaceError = sse
+      viewerRef.current?.scene.requestRender()
+    }
+  }, [qualityDelayActive, qualityDelayRemaining])
+
+  // Disaster viz on 3D city: flood / wind / metro layers (same APIs as globe)
+  const dtCenterLat = city.cameraPosition.lat
+  const dtCenterLng = city.cameraPosition.lng
+
+  // Draw disaster layers only after user has run a stress test (not on panel open)
+  useEffect(() => {
+    const viewer = viewerRef.current
+    if (!viewer || viewer.isDestroyed() || !viewerReady || !isOpen || !effectiveShowFloodLayer || !stressTestComplete) {
+      if (floodEntityRef.current && viewer?.entities.contains(floodEntityRef.current)) {
+        viewer?.entities.remove(floodEntityRef.current)
+        floodEntityRef.current = null
+      }
+      return
+    }
+    const url = `${API_BASE}/climate/flood-forecast?latitude=${dtCenterLat}&longitude=${dtCenterLng}&days=7&include_polygon=true`
+    fetch(url)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { polygon?: number[][]; max_flood_depth_m?: number; max_risk_level?: string } | null) => {
+        if (!viewerRef.current?.entities || viewerRef.current.isDestroyed()) return
+        const v = viewerRef.current
+        if (floodEntityRef.current && v.entities.contains(floodEntityRef.current)) {
+          v.entities.remove(floodEntityRef.current)
+          floodEntityRef.current = null
+        }
+        if (!data?.polygon || data.polygon.length < 3) return
+        const depthM = floodDepthOverride ?? (data.max_flood_depth_m ?? 0)
+        // Height raised 4x from original for visibility: base 20m, top 60m
+        const baseHeightM = 20
+        const topHeightM = 60
+        const risk = (data.max_risk_level ?? 'normal') as string
+        const riskColors: Record<string, { fill: string; outline: string }> = {
+          normal: { fill: 'rgba(34, 197, 94, 0.45)', outline: 'rgba(34, 197, 94, 0.8)' },
+          elevated: { fill: 'rgba(234, 179, 8, 0.5)', outline: 'rgba(234, 179, 8, 0.9)' },
+          high: { fill: 'rgba(249, 115, 22, 0.55)', outline: 'rgba(249, 115, 22, 0.9)' },
+          critical: { fill: 'rgba(239, 68, 68, 0.6)', outline: 'rgba(239, 68, 68, 0.95)' },
+        }
+        const { fill, outline } = riskColors[risk] ?? riskColors.normal
+        const hierarchy = new Cesium.PolygonHierarchy(
+          data.polygon.map(([lon, lat]) => Cesium.Cartesian3.fromDegrees(lon, lat, baseHeightM))
+        )
+        floodEntityRef.current = v.entities.add({
+          id: 'dt-flood-layer',
+          name: `Flood zone — risk: ${risk}`,
+          polygon: {
+            hierarchy,
+            height: baseHeightM,
+            extrudedHeight: topHeightM,
+            material: Cesium.Color.fromCssColorString(fill),
+            outline: true,
+            outlineColor: Cesium.Color.fromCssColorString(outline),
+          },
+          label: {
+            text: `Flood zone (${risk})\nWater level: ${depthM}m`,
+            font: '14pt sans-serif',
+            fillColor: Cesium.Color.WHITE,
+            outlineColor: Cesium.Color.BLACK,
+            outlineWidth: 2,
+            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+            verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+            pixelOffset: new Cesium.Cartesian2(0, -20),
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          },
+          position: Cesium.Cartesian3.fromDegrees(dtCenterLng, dtCenterLat, topHeightM + 5),
+        })
+        v.scene.requestRender()
+      })
+      .catch(() => {})
+    return () => {
+      if (floodEntityRef.current && viewer.entities.contains(floodEntityRef.current)) {
+        viewer.entities.remove(floodEntityRef.current)
+        floodEntityRef.current = null
+      }
+    }
+  }, [viewerReady, isOpen, effectiveShowFloodLayer, stressTestComplete, floodDepthOverride, dtCenterLat, dtCenterLng])
+
+  useEffect(() => {
+    const viewer = viewerRef.current
+    if (!viewer || viewer.isDestroyed() || !viewerReady || !isOpen || !effectiveShowWindLayer || !stressTestComplete) {
+      if (windEntityRef.current && viewer?.entities.contains(windEntityRef.current)) {
+        viewer?.entities.remove(windEntityRef.current)
+        windEntityRef.current = null
+      }
+      return
+    }
+    const url = `${API_BASE}/climate/wind-forecast?latitude=${dtCenterLat}&longitude=${dtCenterLng}&days=7&include_polygon=true`
+    fetch(url)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { polygon?: number[][]; max_category?: number } | null) => {
+        if (!viewerRef.current?.entities || viewerRef.current.isDestroyed()) return
+        const v = viewerRef.current
+        if (windEntityRef.current && v.entities.contains(windEntityRef.current)) {
+          v.entities.remove(windEntityRef.current)
+          windEntityRef.current = null
+        }
+        if (!data?.polygon || data.polygon.length < 3) return
+        const cat = data.max_category ?? 0
+        const colors: Record<number, string> = {
+          0: 'rgba(34, 197, 94, 0.35)',
+          1: 'rgba(34, 197, 94, 0.4)',
+          2: 'rgba(234, 179, 8, 0.45)',
+          3: 'rgba(249, 115, 22, 0.5)',
+          4: 'rgba(239, 68, 68, 0.55)',
+          5: 'rgba(127, 29, 29, 0.6)',
+        }
+        const fill = colors[cat] ?? colors[0]
+        const hierarchy = new Cesium.PolygonHierarchy(
+          data.polygon.map(([lon, lat]) => Cesium.Cartesian3.fromDegrees(lon, lat, 30))
+        )
+        windEntityRef.current = v.entities.add({
+          id: 'dt-wind-layer',
+          name: `Wind Cat ${cat}`,
+          polygon: {
+            hierarchy,
+            height: 30,
+            extrudedHeight: 30 + (cat * 15),
+            material: Cesium.Color.fromCssColorString(fill),
+            outline: true,
+            outlineColor: Cesium.Color.fromCssColorString(cat >= 4 ? 'rgba(220, 38, 38, 0.9)' : 'rgba(250, 204, 21, 0.8)'),
+          },
+        })
+        v.scene.requestRender()
+      })
+      .catch(() => {})
+    return () => {
+      if (windEntityRef.current && viewer.entities.contains(windEntityRef.current)) {
+        viewer.entities.remove(windEntityRef.current)
+        windEntityRef.current = null
+      }
+    }
+  }, [viewerReady, isOpen, effectiveShowWindLayer, stressTestComplete, dtCenterLat, dtCenterLng])
+
+  useEffect(() => {
+    const viewer = viewerRef.current
+    if (!viewer || viewer.isDestroyed() || !viewerReady || !isOpen || !effectiveShowMetroFloodLayer || !stressTestComplete) {
+      metroEntitiesRef.current.forEach((e) => {
+        if (viewer?.entities.contains(e)) viewer?.entities.remove(e)
+      })
+      metroEntitiesRef.current = []
+      return
+    }
+    const url = `${API_BASE}/climate/metro-flood?latitude=${dtCenterLat}&longitude=${dtCenterLng}&radius_km=15`
+    fetch(url)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { entrances?: { lat: number; lon: number; name: string; flood_depth_m: number }[] } | null) => {
+        if (!viewerRef.current?.entities || viewerRef.current.isDestroyed()) return
+        const v = viewerRef.current
+        metroEntitiesRef.current.forEach((e) => {
+          if (v.entities.contains(e)) v.entities.remove(e)
+        })
+        metroEntitiesRef.current = []
+        if (!data?.entrances?.length) return
+        data.entrances.forEach((ent: { lat: number; lon: number; name: string; flood_depth_m: number }) => {
+          const depthM = ent.flood_depth_m ?? 0
+          const length = Math.max(5, depthM * 1000)
+          const entity = v.entities.add({
+            position: Cesium.Cartesian3.fromDegrees(ent.lon, ent.lat, 20),
+            name: ent.name,
+            cylinder: {
+              length,
+              topRadius: 8,
+              bottomRadius: 8,
+              material: Cesium.Color.fromCssColorString('rgba(0, 120, 255, 0.6)'),
+              outline: true,
+              outlineColor: Cesium.Color.fromCssColorString('rgba(0, 150, 255, 0.9)'),
+            },
+            label: {
+              text: `Metro: ${ent.name}\n${depthM > 0 ? `${depthM}m flooded` : 'Dry'}`,
+              font: '12pt sans-serif',
+              fillColor: Cesium.Color.WHITE,
+              outlineColor: Cesium.Color.BLACK,
+              outlineWidth: 2,
+              style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+              verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+              pixelOffset: new Cesium.Cartesian2(0, -length / 2 - 10),
+            },
+          })
+          metroEntitiesRef.current.push(entity)
+        })
+        v.scene.requestRender()
+      })
+      .catch(() => {})
+    return () => {
+      metroEntitiesRef.current.forEach((e) => {
+        if (viewer.entities.contains(e)) viewer.entities.remove(e)
+      })
+      metroEntitiesRef.current = []
+    }
+  }, [viewerReady, isOpen, effectiveShowMetroFloodLayer, stressTestComplete, dtCenterLat, dtCenterLng])
+
+  // Heat — only after stress test
+  useEffect(() => {
+    const viewer = viewerRef.current
+    if (!viewer || viewer.isDestroyed() || !viewerReady || !isOpen || !effectiveShowHeatLayer || !stressTestComplete) {
+      if (heatEntityRef.current && viewer?.entities.contains(heatEntityRef.current)) { viewer?.entities.remove(heatEntityRef.current); heatEntityRef.current = null }
+      return
+    }
+    fetch(`${API_BASE}/climate/heat-forecast?latitude=${dtCenterLat}&longitude=${dtCenterLng}&days=7&include_polygon=true`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { polygon?: number[][]; max_risk_level?: string } | null) => {
+        if (!viewerRef.current?.entities || viewerRef.current.isDestroyed()) return
+        const v = viewerRef.current
+        if (heatEntityRef.current && v.entities.contains(heatEntityRef.current)) v.entities.remove(heatEntityRef.current)
+        heatEntityRef.current = null
+        if (!data?.polygon || data.polygon.length < 3) return
+        const risk = (data.max_risk_level ?? 'normal') as string
+        const colors: Record<string, string> = { normal: 'rgba(34, 197, 94, 0.3)', elevated: 'rgba(234, 179, 8, 0.4)', high: 'rgba(249, 115, 22, 0.5)', extreme: 'rgba(239, 68, 68, 0.55)' }
+        const hierarchy = new Cesium.PolygonHierarchy(data.polygon.map(([lon, lat]) => Cesium.Cartesian3.fromDegrees(lon, lat, 5)))
+        heatEntityRef.current = v.entities.add({
+          id: 'dt-heat-layer', name: 'Heat stress',
+          polygon: { hierarchy, height: 5, extrudedHeight: 15, material: Cesium.Color.fromCssColorString(colors[risk] ?? colors.normal), outline: true, outlineColor: Cesium.Color.fromCssColorString('rgba(239, 68, 68, 0.8)') },
+        })
+        v.scene.requestRender()
+      })
+      .catch(() => {})
+    return () => { if (heatEntityRef.current && viewer.entities.contains(heatEntityRef.current)) { viewer.entities.remove(heatEntityRef.current); heatEntityRef.current = null } }
+  }, [viewerReady, isOpen, effectiveShowHeatLayer, stressTestComplete, dtCenterLat, dtCenterLng])
+
+  // Heavy rain — only after stress test
+  useEffect(() => {
+    const viewer = viewerRef.current
+    if (!viewer || viewer.isDestroyed() || !viewerReady || !isOpen || !effectiveShowHeavyRainLayer || !stressTestComplete) {
+      if (heavyRainEntityRef.current && viewer?.entities.contains(heavyRainEntityRef.current)) { viewer?.entities.remove(heavyRainEntityRef.current); heavyRainEntityRef.current = null }
+      return
+    }
+    fetch(`${API_BASE}/climate/heavy-rain-forecast?latitude=${dtCenterLat}&longitude=${dtCenterLng}&days=7&include_polygon=true`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { polygon?: number[][]; max_risk_level?: string } | null) => {
+        if (!viewerRef.current?.entities || viewerRef.current.isDestroyed()) return
+        const v = viewerRef.current
+        if (heavyRainEntityRef.current && v.entities.contains(heavyRainEntityRef.current)) v.entities.remove(heavyRainEntityRef.current)
+        heavyRainEntityRef.current = null
+        if (!data?.polygon || data.polygon.length < 3) return
+        const risk = (data.max_risk_level ?? 'normal') as string
+        const colors: Record<string, string> = { normal: 'rgba(34, 197, 94, 0.3)', elevated: 'rgba(56, 189, 248, 0.4)', high: 'rgba(14, 165, 233, 0.5)', extreme: 'rgba(2, 132, 199, 0.55)' }
+        const hierarchy = new Cesium.PolygonHierarchy(data.polygon.map(([lon, lat]) => Cesium.Cartesian3.fromDegrees(lon, lat, 5)))
+        heavyRainEntityRef.current = v.entities.add({
+          id: 'dt-heavy-rain-layer', name: 'Heavy rain',
+          polygon: { hierarchy, height: 5, extrudedHeight: 15, material: Cesium.Color.fromCssColorString(colors[risk] ?? colors.normal), outline: true, outlineColor: Cesium.Color.fromCssColorString('rgba(14, 165, 233, 0.8)') },
+        })
+        v.scene.requestRender()
+      })
+      .catch(() => {})
+    return () => { if (heavyRainEntityRef.current && viewer.entities.contains(heavyRainEntityRef.current)) { viewer.entities.remove(heavyRainEntityRef.current); heavyRainEntityRef.current = null } }
+  }, [viewerReady, isOpen, effectiveShowHeavyRainLayer, stressTestComplete, dtCenterLat, dtCenterLng])
+
+  // Drought — only after stress test
+  useEffect(() => {
+    const viewer = viewerRef.current
+    if (!viewer || viewer.isDestroyed() || !viewerReady || !isOpen || !effectiveShowDroughtLayer || !stressTestComplete) {
+      if (droughtEntityRef.current && viewer?.entities.contains(droughtEntityRef.current)) { viewer?.entities.remove(droughtEntityRef.current); droughtEntityRef.current = null }
+      return
+    }
+    fetch(`${API_BASE}/climate/drought-forecast?latitude=${dtCenterLat}&longitude=${dtCenterLng}&include_polygon=true`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { polygon?: number[][]; drought_risk?: string } | null) => {
+        if (!viewerRef.current?.entities || viewerRef.current.isDestroyed()) return
+        const v = viewerRef.current
+        if (droughtEntityRef.current && v.entities.contains(droughtEntityRef.current)) v.entities.remove(droughtEntityRef.current)
+        droughtEntityRef.current = null
+        if (!data?.polygon || data.polygon.length < 3) return
+        const risk = (data.drought_risk ?? 'normal') as string
+        const colors: Record<string, string> = { normal: 'rgba(34, 197, 94, 0.3)', elevated: 'rgba(217, 119, 6, 0.4)', high: 'rgba(180, 83, 9, 0.5)', extreme: 'rgba(120, 53, 15, 0.55)' }
+        const hierarchy = new Cesium.PolygonHierarchy(data.polygon.map(([lon, lat]) => Cesium.Cartesian3.fromDegrees(lon, lat, 5)))
+        droughtEntityRef.current = v.entities.add({
+          id: 'dt-drought-layer', name: 'Drought',
+          polygon: { hierarchy, height: 5, extrudedHeight: 15, material: Cesium.Color.fromCssColorString(colors[risk] ?? colors.normal), outline: true, outlineColor: Cesium.Color.fromCssColorString('rgba(180, 83, 9, 0.8)') },
+        })
+        v.scene.requestRender()
+      })
+      .catch(() => {})
+    return () => { if (droughtEntityRef.current && viewer.entities.contains(droughtEntityRef.current)) { viewer.entities.remove(droughtEntityRef.current); droughtEntityRef.current = null } }
+  }, [viewerReady, isOpen, effectiveShowDroughtLayer, stressTestComplete, dtCenterLat, dtCenterLng])
+
+  // UV — only after stress test
+  useEffect(() => {
+    const viewer = viewerRef.current
+    if (!viewer || viewer.isDestroyed() || !viewerReady || !isOpen || !effectiveShowUvLayer || !stressTestComplete) {
+      if (uvEntityRef.current && viewer?.entities.contains(uvEntityRef.current)) { viewer?.entities.remove(uvEntityRef.current); uvEntityRef.current = null }
+      return
+    }
+    fetch(`${API_BASE}/climate/uv-forecast?latitude=${dtCenterLat}&longitude=${dtCenterLng}&days=7&include_polygon=true`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { polygon?: number[][]; max_risk_level?: string } | null) => {
+        if (!viewerRef.current?.entities || viewerRef.current.isDestroyed()) return
+        const v = viewerRef.current
+        if (uvEntityRef.current && v.entities.contains(uvEntityRef.current)) v.entities.remove(uvEntityRef.current)
+        uvEntityRef.current = null
+        if (!data?.polygon || data.polygon.length < 3) return
+        const risk = (data.max_risk_level ?? 'normal') as string
+        const colors: Record<string, string> = { normal: 'rgba(34, 197, 94, 0.3)', elevated: 'rgba(168, 85, 247, 0.4)', high: 'rgba(139, 92, 246, 0.5)', extreme: 'rgba(124, 58, 237, 0.55)' }
+        const hierarchy = new Cesium.PolygonHierarchy(data.polygon.map(([lon, lat]) => Cesium.Cartesian3.fromDegrees(lon, lat, 5)))
+        uvEntityRef.current = v.entities.add({
+          id: 'dt-uv-layer', name: 'UV index',
+          polygon: { hierarchy, height: 5, extrudedHeight: 15, material: Cesium.Color.fromCssColorString(colors[risk] ?? colors.normal), outline: true, outlineColor: Cesium.Color.fromCssColorString('rgba(139, 92, 246, 0.8)') },
+        })
+        v.scene.requestRender()
+      })
+      .catch(() => {})
+    return () => { if (uvEntityRef.current && viewer.entities.contains(uvEntityRef.current)) { viewer.entities.remove(uvEntityRef.current); uvEntityRef.current = null } }
+  }, [viewerReady, isOpen, effectiveShowUvLayer, stressTestComplete, dtCenterLat, dtCenterLng])
+
+  // Reset stress test state and quality delay when panel closes or city changes
   useEffect(() => {
     if (!isOpen) {
       setStressTestRunning(false)
       setStressTestComplete(false)
       setStressTestProgress(0)
       setRiskHighlights([])
+      setQualityDelayActive(false)
+      setQualityDelayRemaining(12)
     }
   }, [isOpen, dynamicAsset?.id, assetId])
 
@@ -607,7 +1278,6 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
     setStressTestRunning(false)
     setStressTestProgress(0)
     setRiskHighlights([])
-    setShowReport(false)
     if (viewerRef.current && !viewerRef.current.isDestroyed()) {
       riskEntitiesRef.current.forEach(e => viewerRef.current!.entities.remove(e))
       riskEntitiesRef.current = []
@@ -616,70 +1286,9 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
     prevCityIdRef.current = effectiveCityId
   }, [isOpen, eventId, effectiveCityId])
 
-  // Function to export stress test report to PDF
-  const exportToPDF = useCallback(async () => {
-    if (!stressTestReport) return
-    
-    setIsExportingPDF(true)
-    
-    try {
-      // Prepare data for PDF API
-      const pdfRequest = {
-        test_name: stressTestReport.eventName,
-        city_name: stressTestReport.cityName,
-        test_type: stressTestReport.eventType,
-        severity: stressTestReport.zones.length > 0 
-          ? Math.max(...stressTestReport.zones.map(z => z.riskLevel === 'critical' ? 0.9 : z.riskLevel === 'high' ? 0.7 : z.riskLevel === 'medium' ? 0.5 : 0.3))
-          : 0.5,
-        zones: stressTestReport.zones.map(z => ({
-          name: z.name,
-          zone_level: z.riskLevel,
-          affected_assets_count: z.buildingsAffected,
-          expected_loss: z.estimatedLoss,
-          population_affected: z.populationAffected,
-        })),
-        actions: stressTestReport.mitigationActions.map(a => ({
-          title: a.action,
-          priority: a.priority,
-          estimated_cost: a.cost,
-          risk_reduction: a.riskReduction,
-          timeline: a.priority === 'urgent' ? 'Immediate' : a.priority === 'high' ? '1-2 months' : '3-6 months',
-        })),
-        executive_summary: stressTestReport.executiveSummary,
-      }
-      
-      const response = await fetch('/api/v1/stress/report/pdf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(pdfRequest),
-      })
-      
-      if (!response.ok) {
-        throw new Error(`PDF generation failed: ${response.statusText}`)
-      }
-      
-      // Download the PDF
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `stress_test_${stressTestReport.cityName.replace(/\s+/g, '_')}_${stressTestReport.eventType}.pdf`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      window.URL.revokeObjectURL(url)
-      
-    } catch (error) {
-      console.error('PDF export failed:', error)
-      alert('PDF export failed. Please try again.')
-    } finally {
-      setIsExportingPDF(false)
-    }
-  }, [stressTestReport])
-  
   // Function to run stress test and highlight risk zones
   // NOW USES BACKEND API for calculation and LLM integration
-  const runStressTest = useCallback(async () => {
+  const runStressTest = useCallback(async (scenarioId?: string) => {
     if (!viewerRef.current || viewerRef.current.isDestroyed()) return
     
     const viewer = viewerRef.current
@@ -704,9 +1313,13 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
           city_name: city.name,
           center_latitude: city.cameraPosition.lat,
           center_longitude: city.cameraPosition.lng,
-          event_id: selectedScenario || eventId || 'general-scenario',
+          event_id: scenarioId ?? selectedScenario ?? eventId ?? 'general-scenario',
           severity: city.risk_score,
           use_llm: true,
+          entity_name: dynamicAsset?.name ?? city.name,
+          use_kg: true,
+          use_cascade_gnn: true,
+          use_nvidia_orchestration: true,
         })
       })
       
@@ -729,6 +1342,7 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
         estimated_loss: number
         population_affected: number
         recommendations: string[]
+        polygon?: number[][]
       }) => ({
         position: zone.position,
         radius: zone.radius,
@@ -739,6 +1353,7 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
         estimatedLoss: zone.estimated_loss,
         populationAffected: zone.population_affected,
         recommendations: zone.recommendations,
+        polygon: zone.polygon,
       }))
       
       setRiskHighlights(highlights)
@@ -747,6 +1362,7 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
       const report: StressTestReport = {
         eventName: data.event_name,
         eventType: data.event_type,
+        eventId: scenarioId ?? selectedScenario ?? eventId ?? 'general-scenario',
         cityName: data.city_name,
         timestamp: data.timestamp,
         totalLoss: data.total_loss,
@@ -754,6 +1370,7 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
         totalPopulationAffected: data.total_population_affected,
         zones: highlights,
         executiveSummary: data.executive_summary,
+        concludingSummary: data.concluding_summary ?? undefined,
         mitigationActions: data.mitigation_actions.map((action: { action: string; priority: string; cost?: number; risk_reduction?: number }) => ({
           action: action.action,
           priority: action.priority,
@@ -762,14 +1379,20 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
         })),
         dataSourcesUsed: data.data_sources,
         llmGenerated: data.llm_generated,
+        regionActionPlan: data.region_action_plan ?? undefined,
+        reportV2: data.report_v2 ?? undefined,
+        nvidiaOrchestration: data.nvidia_orchestration ?? undefined,
+        relatedEntities: data.related_entities ?? undefined,
+        graphContext: data.graph_context ?? undefined,
+        currency: data.currency ?? 'EUR',
       }
-      
+
       setStressTestReport(report)
       setStressTestProgress(100)
       
       console.log('✅ Backend stress test completed:', data.id)
       
-      // Add risk zone entities to Cesium viewer
+      // Add risk zone entities to Cesium viewer (polygon for flood, ellipse otherwise)
       highlights.forEach((zone) => {
         const color = zone.riskLevel === 'critical' 
           ? Cesium.Color.fromCssColorString('#ff4444').withAlpha(0.18)
@@ -786,24 +1409,40 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
           : zone.riskLevel === 'medium'
           ? Cesium.Color.fromCssColorString('#ffcc00').withAlpha(0.4)
           : Cesium.Color.fromCssColorString('#44cc44').withAlpha(0.3)
-        
-        const entity = viewer.entities.add({
-          position: Cesium.Cartesian3.fromDegrees(
-            zone.position.lng,
-            zone.position.lat,
-            30
-          ),
-          ellipse: {
-            semiMajorAxis: zone.radius,
-            semiMinorAxis: zone.radius,
-            height: 20,
-            extrudedHeight: zone.riskLevel === 'critical' ? 120 : zone.riskLevel === 'high' ? 80 : 50,
-            material: color,
-            outline: true,
-            outlineColor: outlineColor,
-            outlineWidth: 1,
-          }
-        })
+
+        const extrudedHeight = zone.riskLevel === 'critical' ? 120 : zone.riskLevel === 'high' ? 80 : 50
+
+        const entity = zone.polygon && zone.polygon.length >= 3
+          ? viewer.entities.add({
+              polygon: {
+                hierarchy: new Cesium.PolygonHierarchy(
+                  zone.polygon.map(([lng, lat]) => Cesium.Cartesian3.fromDegrees(lng, lat, 30))
+                ),
+                height: 20,
+                extrudedHeight,
+                material: color,
+                outline: true,
+                outlineColor: outlineColor,
+                outlineWidth: 1,
+              },
+            })
+          : viewer.entities.add({
+              position: Cesium.Cartesian3.fromDegrees(
+                zone.position.lng,
+                zone.position.lat,
+                30
+              ),
+              ellipse: {
+                semiMajorAxis: zone.radius,
+                semiMinorAxis: zone.radius,
+                height: 20,
+                extrudedHeight,
+                material: color,
+                outline: true,
+                outlineColor: outlineColor,
+                outlineWidth: 1,
+              },
+            })
         
         riskEntitiesRef.current.push(entity)
         
@@ -839,10 +1478,9 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
     return () => clearTimeout(t)
   }, [isOpen, isLoading, hasPreSelectedEvent, stressTestRunning, stressTestComplete, effectiveCityId, runStressTest])
 
-  // Auto-show report when stress test completes from Risk Zones
-  useEffect(() => {
-    if (stressTestComplete && hasPreSelectedEvent) setShowReport(true)
-  }, [stressTestComplete, hasPreSelectedEvent])
+  // When opened from Risk Zones with pre-selected stress test: do NOT auto-open report in new tab.
+  // Show map first; user sees "Analysis Complete" + "View Report" and can open report when ready.
+  // (Only persist report for when user clicks "View Report".)
 
   // Fallback local stress test calculation (original algorithm)
   const runLocalStressTest = useCallback(async () => {
@@ -1012,6 +1650,7 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
     const report: StressTestReport = {
       eventName,
       eventType: category,
+      eventId: selectedScenario || eventId || 'general-scenario',
       cityName: city.name,
       timestamp: new Date().toISOString(),
       totalLoss,
@@ -1062,6 +1701,7 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
       if (llmResponse.ok) {
         const llmData = await llmResponse.json()
         report.executiveSummary = llmData.executive_summary
+        report.concludingSummary = llmData.concluding_summary ?? undefined
         report.llmGenerated = true
         
         // Update mitigation actions if LLM provided them
@@ -1216,14 +1856,22 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
                           onClick={() => {
                             const c = cities.find((x) => x.id === pickerCityId)
                             if (c && onCitySelected) {
+                              const [lng, lat] = c.coordinates ?? [0, 0]
                               onCitySelected({
                                 id: c.id,
                                 name: c.name,
                                 type: 'city',
-                                latitude: c.coordinates[1],
-                                longitude: c.coordinates[0],
+                                latitude: lat,
+                                longitude: lng,
                                 exposure: 10,
                                 impactSeverity: 0.5,
+                                cameraPosition: c.camera_position ?? {
+                                  lat,
+                                  lng,
+                                  height: 3000,
+                                  heading: 60,
+                                  pitch: -35,
+                                },
                               })
                               setPickerCountry('')
                               setPickerCityId('')
@@ -1354,17 +2002,19 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
                     style={{ background: '#0a0a0f' }}
                   />
                   
-                  {/* Loading overlay */}
+                  {/* Loading overlay (initial viewer + tileset load) */}
                   {isLoading && (
                     <div className="absolute inset-0 flex items-center justify-center bg-black/80">
                       <div className="text-center">
                         <div className={`w-8 h-8 border-2 ${useCesiumMode ? 'border-amber-500' : 'border-amber-500'} border-t-transparent rounded-full animate-spin mx-auto mb-3`} />
-                        <div className={`${useCesiumMode ? 'text-amber-400' : 'text-amber-400'} text-sm`}>
-                          {useCesiumMode ? 'Loading Premium 3D Model...' : 'Loading 3D Buildings...'}
+                        <div className="text-amber-400 text-sm">
+                          {useGooglePhotorealistic ? 'Loading 3D city...' : useCesiumMode ? 'Loading Premium 3D Model...' : 'Loading 3D Buildings...'}
                         </div>
                         <div className="text-white/40 text-xs mt-1">{city.name}</div>
                         <div className="text-white/30 text-[10px] mt-2">
-                          {useCesiumMode 
+                          {useGooglePhotorealistic 
+                            ? 'Google Photorealistic 3D • City view next' 
+                            : useCesiumMode 
                             ? `Cesium Ion Asset #${city.cesiumAssetId}` 
                             : 'Cesium OSM Buildings • Worldwide'
                           }
@@ -1373,12 +2023,16 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
                     </div>
                   )}
 
-                  {/* Progressive loading indicator */}
-                  {!isLoading && loadProgress < 100 && (
-                    <div className="absolute bottom-4 right-4 pointer-events-none">
-                      <div className="flex items-center gap-2 px-3 py-1.5 bg-black/60 rounded-full">
-                        <div className="w-3 h-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-                        <span className="text-amber-400 text-xs">Loading detail... {loadProgress}%</span>
+                  {/* Quality delay overlay: one countdown only */}
+                  {!isLoading && qualityDelayActive && actual3DMode === 'google' && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/90 backdrop-blur-sm z-10">
+                      <div className="text-center">
+                        <div className="w-10 h-10 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                        <div className="text-amber-400 text-base font-medium">Refining 3D city</div>
+                        <div className="text-amber-300 text-3xl font-mono font-bold mt-3 tabular-nums">
+                          {qualityDelayRemaining}s
+                        </div>
+                        <div className="text-white/40 text-[10px] mt-2">Full photorealistic view next</div>
                       </div>
                     </div>
                   )}
@@ -1390,7 +2044,9 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
                         <div className="text-red-400 text-lg mb-2">Model Unavailable</div>
                         <div className="text-white/60 text-sm mb-4">{error}</div>
                         <div className="text-white/40 text-xs">
-                          {useCesiumMode 
+                          {useGooglePhotorealistic 
+                            ? 'Google Photorealistic 3D Tiles (Cesium Ion Asset #2275207). Check Cesium Ion access.'
+                            : useCesiumMode 
                             ? `Premium model (Asset #${city.cesiumAssetId}) requires Cesium Ion subscription.`
                             : 'OSM Buildings require Cesium Ion access. Check console for details.'
                           }
@@ -1403,7 +2059,12 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
                   <div className="absolute top-4 left-4 pointer-events-none">
                     <h2 className="text-white text-xl font-light">{city.name}</h2>
                     <p className="text-white/50 text-sm">{city.location}</p>
-                    {useCesiumMode ? (
+                    {actual3DMode === 'google' ? (
+                      <div className="mt-1 flex items-center gap-1.5">
+                        <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                        <span className="text-amber-400/70 text-[10px] uppercase tracking-wider">Google Photorealistic 3D</span>
+                      </div>
+                    ) : actual3DMode === 'premium' ? (
                       <div className="mt-1 flex items-center gap-1.5">
                         <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
                         <span className="text-amber-400/70 text-[10px] uppercase tracking-wider">Premium 3D Model</span>
@@ -1414,6 +2075,96 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
                         <span className="text-amber-400/70 text-[10px] uppercase tracking-wider">Cesium OSM Buildings</span>
                       </div>
                     )}
+                  </div>
+
+                  {/* Top-right controls: Zoom + Close - grouped so they don't overlap */}
+                  <div className="absolute top-4 right-4 flex items-start gap-1 pointer-events-auto z-50">
+                    {/* Zoom controls - left of close button */}
+                    {viewerReady && (
+                      <div className="flex flex-col gap-1">
+                        <button
+                          type="button"
+                          onMouseDown={(e) => { e.stopPropagation(); e.preventDefault() }}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            e.preventDefault()
+                            const v = viewerRef.current
+                            if (!v || v.isDestroyed()) return
+                            const cam = v.camera
+                            const carto = Cesium.Cartographic.fromCartesian(cam.positionWC)
+                            const newHeight = Math.max(150, carto.height * 0.65)
+                            cam.flyTo({
+                              destination: Cesium.Cartesian3.fromRadians(carto.longitude, carto.latitude, newHeight),
+                              orientation: { heading: cam.heading, pitch: cam.pitch, roll: cam.roll },
+                              duration: 0.25,
+                            })
+                          }}
+                          className="w-9 h-9 flex items-center justify-center rounded-lg bg-amber-500/30 hover:bg-amber-500/50 border border-amber-400/40 text-amber-200 text-lg font-bold transition-colors cursor-pointer"
+                          title="Zoom in"
+                        >
+                          +
+                        </button>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => { e.stopPropagation(); e.preventDefault() }}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            e.preventDefault()
+                            const v = viewerRef.current
+                            if (!v || v.isDestroyed()) return
+                            const cam = v.camera
+                            const carto = Cesium.Cartographic.fromCartesian(cam.positionWC)
+                            const newHeight = Math.min(80000, carto.height * 1.5)
+                            cam.flyTo({
+                              destination: Cesium.Cartesian3.fromRadians(carto.longitude, carto.latitude, newHeight),
+                              orientation: { heading: cam.heading, pitch: cam.pitch, roll: cam.roll },
+                              duration: 0.25,
+                            })
+                          }}
+                          className="w-9 h-9 flex items-center justify-center rounded-lg bg-amber-500/30 hover:bg-amber-500/50 border border-amber-400/40 text-amber-200 text-lg font-bold transition-colors cursor-pointer"
+                          title="Zoom out"
+                        >
+                          −
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const v = viewerRef.current
+                            if (!v || v.isDestroyed()) return
+                            const c = city.cameraPosition
+                            const baseH = useGooglePhotorealistic && (city as AssetData).google3dCameraHeight != null
+                              ? (city as AssetData).google3dCameraHeight!
+                              : 2000
+                            const h = useGooglePhotorealistic ? Math.round(baseH * 0.56) : c.height
+                            v.camera.flyTo({
+                              destination: Cesium.Cartesian3.fromDegrees(c.lng, c.lat, h),
+                              orientation: {
+                                heading: Cesium.Math.toRadians(c.heading),
+                                pitch: Cesium.Math.toRadians(c.pitch),
+                                roll: 0,
+                              },
+                              duration: 0.8,
+                            })
+                          }}
+                          className="w-9 h-9 flex items-center justify-center rounded-lg bg-black/70 hover:bg-black/90 border border-white/15 text-white transition-colors"
+                          title="Reset view / Center"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                          </svg>
+                        </button>
+                      </div>
+                    )}
+                    {/* Close button - always visible */}
+                    <button
+                      onClick={onClose}
+                      className="w-9 h-9 flex items-center justify-center rounded-lg bg-black/70 hover:bg-black/90 border border-white/15 transition-colors"
+                      title="Close"
+                    >
+                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
                   </div>
 
                   {/* Scenario Context Banner - Shows what test will be run */}
@@ -1470,32 +2221,32 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
 
                   {/* Bottom controls - Risk indicator + Stress Test button */}
                   <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between pointer-events-auto">
-                    {/* Risk indicator */}
-                    <div className={`px-3 py-1.5 rounded-full text-sm font-medium ${
-                      city.risk_score > 0.7 ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
-                      city.risk_score > 0.5 ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30' :
-                      'bg-green-500/20 text-green-400 border border-green-500/30'
+                    {/* Risk indicator - opaque background for visibility */}
+                    <div className={`px-4 py-2 rounded-lg text-sm font-semibold shadow-lg ${
+                      city.risk_score > 0.7 ? 'bg-red-900/95 text-red-100 border-2 border-red-400' :
+                      city.risk_score > 0.5 ? 'bg-orange-900/95 text-orange-100 border-2 border-orange-400' :
+                      'bg-emerald-900/95 text-emerald-100 border-2 border-emerald-400'
                     }`}>
                       Risk: {(city.risk_score * 100).toFixed(0)}%
                     </div>
                     
-                    {/* Stress Test Button with Selector - Always visible when not complete */}
+                    {/* Stress Test Button with Selector - opaque background for visibility */}
                     {!stressTestComplete && (
                       <div className="relative">
                         {stressTestRunning ? (
                           <button
                             disabled
-                            className="px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 bg-amber-500/30 text-amber-300 cursor-wait"
+                            className="px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 bg-amber-900/95 text-amber-100 border-2 border-amber-400 cursor-wait shadow-lg"
                           >
-                            <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                            <div className="w-4 h-4 border-2 border-amber-200 border-t-transparent rounded-full animate-spin" />
                             <span>Analyzing... {stressTestProgress}%</span>
                           </button>
                         ) : hasPreSelectedEvent ? (
                           <button
                             disabled
-                            className="px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 bg-amber-500/20 text-amber-400/80 border border-amber-500/30 cursor-wait"
+                            className="px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 bg-amber-900/95 text-amber-100 border-2 border-amber-400 cursor-wait shadow-lg"
                           >
-                            <div className="w-4 h-4 border-2 border-amber-400/60 border-t-transparent rounded-full animate-spin" />
+                            <div className="w-4 h-4 border-2 border-amber-200 border-t-transparent rounded-full animate-spin" />
                             <span>Preparing analysis…</span>
                           </button>
                         ) : (
@@ -1503,7 +2254,7 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
                             <button
                               onClick={() => setShowTestSelector(!showTestSelector)}
                               disabled={isLoading}
-                              className="px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-all bg-amber-500/20 text-amber-400 border border-amber-500/40 hover:bg-amber-500/30 hover:scale-105"
+                              className="px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-all bg-amber-900/95 text-amber-100 border-2 border-amber-400 hover:bg-amber-800 hover:scale-[1.02] shadow-lg"
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
@@ -1515,62 +2266,20 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
                             </button>
                             {/* Stress Test Selector Dropdown */}
                             {showTestSelector && !stressTestRunning && (
-                          <div className="absolute bottom-full right-0 mb-2 w-80 bg-black/95 backdrop-blur-xl rounded-xl border border-white/20 shadow-2xl overflow-hidden">
-                            {/* Tabs */}
-                            <div className="flex border-b border-white/10">
-                              <button
-                                onClick={() => setSelectedTestType('current')}
-                                className={`flex-1 py-2.5 text-xs font-medium transition-all ${
-                                  selectedTestType === 'current' 
-                                    ? 'bg-amber-500/20 text-amber-400 border-b-2 border-amber-400' 
-                                    : 'text-white/50 hover:text-white hover:bg-white/5'
-                                }`}
-                              >
-                                Current Events
-                              </button>
-                              <button
-                                onClick={() => setSelectedTestType('forecast')}
-                                className={`flex-1 py-2.5 text-xs font-medium transition-all ${
-                                  selectedTestType === 'forecast' 
-                                    ? 'bg-purple-500/20 text-purple-400 border-b-2 border-purple-400' 
-                                    : 'text-white/50 hover:text-white hover:bg-white/5'
-                                }`}
-                              >
-                                Forecast
-                              </button>
-                            </div>
-                            
-                            {/* Scenario List */}
-                            <div className="max-h-64 overflow-y-auto custom-scrollbar p-2">
-                              {(selectedTestType === 'current' ? currentScenarios : forecastScenarios).map((scenario) => (
-                                <button
-                                  key={scenario.id}
-                                  onClick={() => {
-                                    setSelectedScenario(scenario.id)
-                                    setShowTestSelector(false)
-                                    // Run stress test with selected scenario
-                                    runStressTest()
-                                  }}
-                                  className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-all hover:bg-white/10 flex items-center justify-between ${
-                                    selectedScenario === scenario.id ? 'bg-white/10' : ''
-                                  }`}
-                                >
-                                  <div>
-                                    <div className="text-white/90">{scenario.name}</div>
-                                    <div className="text-[10px] text-white/40">
-                                      {scenario.category}
-                                      {'horizon' in scenario && ` • ${scenario.horizon}`}
-                                    </div>
-                                  </div>
-                                  <div className={`w-2 h-2 rounded-full ${
-                                    scenario.category === 'climate' ? 'bg-amber-500' :
-                                    scenario.category === 'financial' ? 'bg-amber-500' :
-                                    scenario.category === 'geopolitical' ? 'bg-red-500' :
-                                    scenario.category === 'health' ? 'bg-green-500' :
-                                    'bg-purple-500'
-                                  }`} />
-                                </button>
-                              ))}
+                          <div className="absolute bottom-full right-0 mb-2 w-96 bg-black/95 backdrop-blur-xl rounded-xl border border-white/20 shadow-2xl overflow-hidden">
+                            <div className="p-2">
+                              <UnifiedStressTestSelector
+                                selectedScenarioId={selectedScenario || null}
+                                onSelect={(scenario) => {
+                                  setSelectedScenario(scenario.id)
+                                  setShowTestSelector(false)
+                                  runStressTest(scenario.id)
+                                }}
+                                onClear={() => {
+                                  setSelectedScenario('')
+                                  setShowTestSelector(false)
+                                }}
+                              />
                             </div>
                             
                             {/* Close button */}
@@ -1586,27 +2295,6 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
                         )}
                           </>
                         )}
-                      </div>
-                    )}
-                    
-                    {/* Test Complete indicator + View Report button */}
-                    {stressTestComplete && (
-                      <div className="flex items-center gap-3">
-                        <div className="px-3 py-1.5 bg-green-500/20 text-green-400 border border-green-500/30 rounded-full text-sm font-medium flex items-center gap-2">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                          <span>Analysis Complete</span>
-                        </div>
-                        <button
-                          onClick={() => setShowReport(true)}
-                          className="px-4 py-1.5 bg-amber-500/20 text-amber-400 border border-amber-500/40 rounded-lg text-sm font-medium hover:bg-amber-500/30 transition-all flex items-center gap-2"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                          </svg>
-                          <span>View Report</span>
-                        </button>
                       </div>
                     )}
                   </div>
@@ -1631,20 +2319,33 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
                       </div>
                     </div>
                   )}
+
+                  {/* Report ready pill: single place for Analysis complete + View Report (no duplicate in toolbar) */}
+                  {stressTestComplete && stressTestReport && (
+                    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 px-4 py-2.5 bg-black/85 backdrop-blur-sm rounded-xl border border-green-500/40 shadow-lg z-10">
+                      <span className="text-green-400 text-sm font-medium flex items-center gap-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Report ready
+                      </span>
+                      <button
+                        onClick={() => {
+                          try {
+                            localStorage.setItem('pfrp-stress-report', JSON.stringify(stressTestReport))
+                            window.open('/report?source=stress', '_blank', 'noopener,noreferrer')
+                          } catch (e) {
+                            console.error('Report open failed:', e)
+                          }
+                        }}
+                        className="px-3 py-1.5 bg-amber-500/25 text-amber-400 border border-amber-500/50 rounded-lg text-sm font-medium hover:bg-amber-500/35 transition-colors"
+                      >
+                        View Report
+                      </button>
+                    </div>
+                  )}
                 </>
               )}
-              
-              {/* Close button (always visible) */}
-              <div className="absolute top-4 right-4">
-                <button
-                  onClick={onClose}
-                  className="p-2 bg-white/10 rounded-lg hover:bg-white/20 transition-colors"
-                >
-                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
             </div>
             
             {/* Info Panel - hidden in picker mode */}
@@ -1748,8 +2449,12 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
                 </div>
               )}
               
-              {/* 3D View info */}
-              {activeTab === '3d' && (
+              {/* 3D View info - use explicit OSM check for reliable labeling */}
+              {activeTab === '3d' && (() => {
+                const isGoogle = actual3DMode === 'google'
+                const isPremium = actual3DMode === 'premium'
+                const isOsm = actual3DMode === 'osm'
+                return (
                 <div className="space-y-4">
                   <div className="text-white/40 text-[10px] uppercase tracking-wider mb-2">3D Model Info</div>
                   <div className="text-white/60 text-sm space-y-1">
@@ -1759,417 +2464,32 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
                   </div>
                   
                   <div className="mt-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-                    <div className="text-amber-400 text-xs font-medium mb-1">Cesium Ion 3D Tiles</div>
+                    <div className="text-amber-400 text-xs font-medium mb-1">
+                      {isGoogle ? 'Google Photorealistic 3D Tiles' : isPremium ? 'Cesium Ion 3D Tiles' : 'Cesium OSM Buildings'}
+                    </div>
                     <div className="text-white/50 text-xs">
-                      High-resolution photogrammetry model from Cesium Ion Asset #{city.cesiumAssetId}
+                      {isGoogle
+                        ? 'High-resolution photogrammetry from Google Maps Platform Map Tiles API'
+                        : isPremium
+                        ? `High-resolution photogrammetry model from Cesium Ion Asset #${city.cesiumAssetId}`
+                        : 'Gray 3D buildings from OpenStreetMap (Asset #96188). Available worldwide.'}
                     </div>
                   </div>
 
                   <div className="mt-4 p-3 bg-white/5 rounded-lg">
                     <div className="text-white/40 text-[10px] uppercase mb-2">Data Sources</div>
                     <div className="space-y-1 text-xs text-white/50">
-                      <div>• 3D Model: Cesium Ion</div>
+                      <div>• 3D Model: {isGoogle ? 'Google Maps Platform' : isPremium ? 'Cesium Ion (Premium)' : 'Cesium Ion (OSM)'}</div>
                       <div>• Risk Data: PFRP Engine</div>
                       <div>• Sensors: IoT Network</div>
                     </div>
                   </div>
                 </div>
-              )}
+                )
+              })()}
             </div>
             )}
           </div>
-
-          {/* ============================================ */}
-          {/* STRESS TEST REPORT PANEL */}
-          {/* ============================================ */}
-          <AnimatePresence>
-            {showReport && stressTestReport && (
-              <motion.div
-                className="absolute inset-4 z-60 bg-black/95 backdrop-blur-xl rounded-xl border border-white/10 overflow-hidden"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 20 }}
-              >
-                {/* Report Header */}
-                <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
-                  <div>
-                    <h2 className="text-white text-lg font-medium">Stress Test Report</h2>
-                    <p className="text-white/50 text-sm">{stressTestReport.cityName} • {stressTestReport.eventName}</p>
-                  </div>
-                  <button
-                    onClick={() => setShowReport(false)}
-                    className="p-2 bg-white/10 rounded-lg hover:bg-white/20 transition-colors"
-                  >
-                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-                
-                {/* Report Content */}
-                <div className="p-6 overflow-y-auto" style={{ maxHeight: 'calc(100% - 70px)' }}>
-                  {/* LLM Badge */}
-                  {stressTestReport.llmGenerated && (
-                    <div className="mb-4 flex items-center gap-2">
-                      <div className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-xs flex items-center gap-1.5">
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                        </svg>
-                        AI-Powered Analysis (NVIDIA Llama 3.1)
-                      </div>
-                    </div>
-                  )}
-                  
-                  {/* Executive Summary - LLM Generated */}
-                  {stressTestReport.executiveSummary && (
-                    <div className="mb-6 p-4 bg-gradient-to-br from-amber-500/10 to-amber-700/10 border border-amber-500/20 rounded-lg">
-                      <h3 className="text-amber-400 text-sm uppercase tracking-wider mb-3 flex items-center gap-2">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                        Executive Summary
-                      </h3>
-                      <div className="text-white/80 text-sm leading-relaxed whitespace-pre-wrap">
-                        {stressTestReport.executiveSummary}
-                      </div>
-                    </div>
-                  )}
-                  
-                  {/* Cascade Influence Graph */}
-                  <div className="mb-6">
-                    <h3 className="text-white/70 text-sm uppercase tracking-wider mb-3 flex items-center gap-2">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                      </svg>
-                      Cascade Influence Analysis
-                    </h3>
-                    <EventRiskGraph
-                      eventId={eventId || 'default'}
-                      eventType="current"
-                      eventName={stressTestReport.eventName}
-                      eventCategory={eventCategory}
-                      cityName={city.name}
-                      fullWidth={true}
-                      height={350}
-                    />
-                  </div>
-                  
-                  {/* Summary Cards */}
-                  <div className="mb-6">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-white/70 text-sm uppercase tracking-wider">Impact Summary</h3>
-                      <span className="text-white/40 text-xs">Estimated losses and affected entities</span>
-                    </div>
-                    <div className="grid grid-cols-4 gap-4">
-                      <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
-                        <div className="text-red-400/70 text-xs uppercase tracking-wider mb-1">Total Loss</div>
-                        <div className="text-red-400 text-2xl font-light">€{stressTestReport.totalLoss.toLocaleString()}M</div>
-                        <div className="text-red-400/50 text-[10px] mt-1">Expected financial impact</div>
-                      </div>
-                      <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-4">
-                        <div className="text-orange-400/70 text-xs uppercase tracking-wider mb-1">Buildings Affected</div>
-                        <div className="text-orange-400 text-2xl font-light">{stressTestReport.totalBuildingsAffected.toLocaleString()}</div>
-                        <div className="text-orange-400/50 text-[10px] mt-1">Structures in risk zones</div>
-                      </div>
-                      <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
-                        <div className="text-amber-400/70 text-xs uppercase tracking-wider mb-1">Population Impact</div>
-                        <div className="text-amber-400 text-2xl font-light">{stressTestReport.totalPopulationAffected.toLocaleString()}</div>
-                        <div className="text-amber-400/50 text-[10px] mt-1">People in affected areas</div>
-                      </div>
-                      <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
-                        <div className="text-amber-400/70 text-xs uppercase tracking-wider mb-1">Risk Zones</div>
-                        <div className="text-amber-400 text-2xl font-light">{stressTestReport.zones.length}</div>
-                        <div className="flex gap-1 mt-1 flex-wrap">
-                          {stressTestReport.zones.filter(z => z.riskLevel === 'critical').length > 0 && (
-                            <span className="px-1.5 py-0.5 bg-red-500/30 text-red-400 text-[10px] rounded">
-                              {stressTestReport.zones.filter(z => z.riskLevel === 'critical').length} critical
-                            </span>
-                          )}
-                          {stressTestReport.zones.filter(z => z.riskLevel === 'high').length > 0 && (
-                            <span className="px-1.5 py-0.5 bg-orange-500/30 text-orange-400 text-[10px] rounded">
-                              {stressTestReport.zones.filter(z => z.riskLevel === 'high').length} high
-                            </span>
-                          )}
-                          {stressTestReport.zones.filter(z => z.riskLevel === 'medium').length > 0 && (
-                            <span className="px-1.5 py-0.5 bg-yellow-500/30 text-yellow-400 text-[10px] rounded">
-                              {stressTestReport.zones.filter(z => z.riskLevel === 'medium').length} medium
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* VaR/CVaR and Monte Carlo Section */}
-                  <div className="mb-6 p-4 bg-gradient-to-br from-purple-500/10 to-amber-500/10 border border-purple-500/20 rounded-lg">
-                    <h3 className="text-purple-400 text-sm uppercase tracking-wider mb-4 flex items-center gap-2">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                      </svg>
-                      Financial Risk Metrics
-                    </h3>
-                    <div className="grid grid-cols-2 gap-4">
-                      {/* VaR */}
-                      <div className="bg-black/30 rounded-lg p-3">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-white/50 text-xs">Value at Risk (99%)</span>
-                          <span className="text-[8px] text-amber-400/70 bg-amber-400/10 px-1.5 rounded">MC</span>
-                        </div>
-                        <div className="text-amber-400 text-xl font-light">
-                          €{(stressTestReport.totalLoss * 1.3).toFixed(0)}M
-                        </div>
-                        <div className="text-white/40 text-[10px] mt-1">
-                          99% confidence, 1-year horizon
-                        </div>
-                      </div>
-                      
-                      {/* Expected Shortfall */}
-                      <div className="bg-black/30 rounded-lg p-3">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-white/50 text-xs">Expected Shortfall (CVaR)</span>
-                          <span className="text-[8px] text-purple-400/70 bg-purple-400/10 px-1.5 rounded">Copula</span>
-                        </div>
-                        <div className="text-purple-400 text-xl font-light">
-                          €{(stressTestReport.totalLoss * 1.55).toFixed(0)}M
-                        </div>
-                        <div className="text-white/40 text-[10px] mt-1">
-                          Average loss beyond VaR
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {/* Monte Carlo Engine Details */}
-                    <div className="mt-4 pt-3 border-t border-white/10">
-                      <div className="flex items-center gap-2 mb-3">
-                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                        <span className="text-white/50 text-xs uppercase tracking-wider">Monte Carlo Engine</span>
-                      </div>
-                      <div className="grid grid-cols-4 gap-3 text-[10px]">
-                        <div>
-                          <span className="text-white/40">Simulations</span>
-                          <div className="text-white font-mono">10,000</div>
-                        </div>
-                        <div>
-                          <span className="text-white/40">Copula</span>
-                          <div className="text-white">Gaussian</div>
-                        </div>
-                        <div>
-                          <span className="text-white/40">Confidence</span>
-                          <div className="text-white font-mono">99%</div>
-                        </div>
-                        <div>
-                          <span className="text-white/40">Engine</span>
-                          <div className="text-white">NumPy</div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Risk Cascade Flow */}
-                  <div className="mb-6">
-                    <h3 className="text-white/70 text-sm uppercase tracking-wider mb-3 flex items-center gap-2">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
-                      </svg>
-                      Risk Cascade Flow
-                    </h3>
-                    <RiskFlowMini 
-                      stressTestResults={{
-                        zones: stressTestReport.zones.map(z => ({
-                          name: z.label,
-                          loss: z.estimatedLoss,
-                          riskLevel: z.riskLevel
-                        }))
-                      }}
-                    />
-                  </div>
-                  
-                  {/* Methodology Section */}
-                  <div className="mb-6 p-4 bg-white/5 border border-white/10 rounded-lg">
-                    <h3 className="text-white/70 text-sm uppercase tracking-wider mb-3 flex items-center gap-2">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                      </svg>
-                      Risk Assessment Methodology
-                    </h3>
-                    <div className="grid grid-cols-2 gap-4 text-xs">
-                      <div>
-                        <div className="text-white/50 mb-2">Zone Identification Based On:</div>
-                        <ul className="text-white/70 space-y-1">
-                          <li className="flex items-start gap-1.5">
-                            <span className="text-amber-400 mt-0.5">→</span>
-                            <span><strong>Event Type Analysis:</strong> {stressTestReport.eventType === 'flood' ? 'Coastal, low-lying, and waterfront areas identified' :
-                              stressTestReport.eventType === 'seismic' ? 'Fault lines, soft soil, and high-rise clusters analyzed' :
-                              stressTestReport.eventType === 'fire' ? 'Industrial zones and dense urban areas mapped' :
-                              stressTestReport.eventType === 'financial' ? 'CBD, banking districts, and exchanges identified' :
-                              stressTestReport.eventType === 'infrastructure' ? 'Power grids, data centers, and transport hubs analyzed' :
-                              stressTestReport.eventType === 'supply_chain' ? 'Ports, warehouses, and logistics hubs mapped' :
-                              stressTestReport.eventType === 'pandemic' ? 'Transit hubs and high-density areas analyzed' :
-                              'Critical infrastructure and population centers analyzed'}</span>
-                          </li>
-                          <li className="flex items-start gap-1.5">
-                            <span className="text-amber-400 mt-0.5">→</span>
-                            <span><strong>Severity Factor:</strong> {(stressTestReport.zones[0]?.riskLevel === 'critical' ? 'High' : 'Moderate')} severity applied ({((stressTestReport.totalLoss / stressTestReport.totalBuildingsAffected) || 0).toFixed(1)}€M avg loss per building)</span>
-                          </li>
-                        </ul>
-                      </div>
-                      <div>
-                        <div className="text-white/50 mb-2">Risk Level Classification:</div>
-                        <ul className="text-white/70 space-y-1">
-                          <li className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-red-500"></span>
-                            <span><strong>Critical:</strong> Primary impact zone (epicenter, ground zero)</span>
-                          </li>
-                          <li className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-orange-500"></span>
-                            <span><strong>High:</strong> Secondary impact (cascading effects, proximity)</span>
-                          </li>
-                          <li className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
-                            <span><strong>Medium:</strong> Tertiary impact (indirect exposure)</span>
-                          </li>
-                        </ul>
-                      </div>
-                    </div>
-                    <div className="mt-3 pt-3 border-t border-white/10 text-white/50 text-[10px]">
-                      Calculations based on: Building Registry, Topographic Model, Historical Events (1970-2024), Infrastructure Mapping, Population Census
-                    </div>
-                  </div>
-                  
-                  {/* Risk Zones Detail */}
-                  <div className="mb-6">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-white/70 text-sm uppercase tracking-wider">Identified Risk Zones ({stressTestReport.zones.length})</h3>
-                      <span className="text-white/40 text-xs">Click zone for details</span>
-                    </div>
-                    <div className="space-y-2">
-                      {stressTestReport.zones.map((zone, i) => (
-                        <div key={i} className={`p-3 rounded-lg border ${
-                          zone.riskLevel === 'critical' ? 'bg-red-500/10 border-red-500/30' :
-                          zone.riskLevel === 'high' ? 'bg-orange-500/10 border-orange-500/30' :
-                          'bg-yellow-500/10 border-yellow-500/30'
-                        }`}>
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <div className={`w-2 h-2 rounded-full ${
-                                zone.riskLevel === 'critical' ? 'bg-red-500' :
-                                zone.riskLevel === 'high' ? 'bg-orange-500' : 'bg-yellow-500'
-                              }`} />
-                              <span className="text-white text-sm font-medium">{zone.label}</span>
-                              <span className={`text-xs uppercase px-2 py-0.5 rounded ${
-                                zone.riskLevel === 'critical' ? 'bg-red-500/20 text-red-400' :
-                                zone.riskLevel === 'high' ? 'bg-orange-500/20 text-orange-400' :
-                                'bg-yellow-500/20 text-yellow-400'
-                              }`}>{zone.riskLevel}</span>
-                            </div>
-                            <span className="text-white/50 text-xs">Radius: {zone.radius}m</span>
-                          </div>
-                          {/* Why this zone */}
-                          <div className="text-white/50 text-xs mb-2 italic">
-                            {zone.riskLevel === 'critical' ? '↳ Primary impact zone - highest vulnerability based on event type and location' :
-                             zone.riskLevel === 'high' ? '↳ Secondary impact - exposed to cascading effects from primary zone' :
-                             '↳ Tertiary impact - indirect exposure through infrastructure dependencies'}
-                          </div>
-                          <div className="grid grid-cols-3 gap-4 text-xs">
-                            <div>
-                              <span className="text-white/40">Buildings:</span>
-                              <span className="text-white/70 ml-1">{zone.affectedBuildings}</span>
-                            </div>
-                            <div>
-                              <span className="text-white/40">Loss:</span>
-                              <span className="text-white/70 ml-1">€{zone.estimatedLoss.toFixed(1)}M</span>
-                            </div>
-                            <div>
-                              <span className="text-white/40">Population:</span>
-                              <span className="text-white/70 ml-1">{zone.populationAffected.toLocaleString()}</span>
-                            </div>
-                          </div>
-                          {zone.recommendations.length > 0 && (
-                            <div className="mt-2 pt-2 border-t border-white/10">
-                              <div className="text-white/40 text-xs mb-1">Recommendations:</div>
-                              <ul className="text-white/60 text-xs space-y-0.5">
-                                {zone.recommendations.map((rec, j) => (
-                                  <li key={j} className="flex items-start gap-1">
-                                    <span className="text-amber-400">•</span> {rec}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  
-                  {/* Mitigation Actions */}
-                  <div className="mb-6">
-                    <h3 className="text-white/70 text-sm uppercase tracking-wider mb-3">Mitigation Actions</h3>
-                    <div className="bg-white/5 rounded-lg border border-white/10 overflow-hidden">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b border-white/10">
-                            <th className="text-left text-white/50 px-4 py-2 font-normal">Action</th>
-                            <th className="text-center text-white/50 px-4 py-2 font-normal">Priority</th>
-                            <th className="text-right text-white/50 px-4 py-2 font-normal">Cost (€M)</th>
-                            <th className="text-right text-white/50 px-4 py-2 font-normal">Risk Reduction</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {stressTestReport.mitigationActions.map((action, i) => (
-                            <tr key={i} className="border-b border-white/5">
-                              <td className="text-white/70 px-4 py-2">{action.action}</td>
-                              <td className="text-center px-4 py-2">
-                                <span className={`text-xs uppercase px-2 py-0.5 rounded ${
-                                  action.priority === 'urgent' ? 'bg-red-500/20 text-red-400' :
-                                  action.priority === 'high' ? 'bg-orange-500/20 text-orange-400' :
-                                  'bg-yellow-500/20 text-yellow-400'
-                                }`}>{action.priority}</span>
-                              </td>
-                              <td className="text-white/70 text-right px-4 py-2">{action.cost}</td>
-                              <td className="text-green-400 text-right px-4 py-2">-{action.riskReduction}%</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                  
-                  {/* Data Sources */}
-                  <div className="mb-6">
-                    <h3 className="text-white/70 text-sm uppercase tracking-wider mb-3">Data Sources Used</h3>
-                    <div className="flex flex-wrap gap-2">
-                      {stressTestReport.dataSourcesUsed.map((source, i) => (
-                        <span key={i} className="px-3 py-1 bg-white/5 border border-white/10 rounded-full text-white/60 text-xs">
-                          {source}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  
-                  {/* Footer */}
-                  <div className="flex items-center justify-between pt-4 border-t border-white/10">
-                    <div className="text-white/40 text-xs">
-                      Generated: {new Date(stressTestReport.timestamp).toLocaleString()}
-                    </div>
-                    <div className="flex gap-2">
-                      <button className="px-4 py-2 bg-white/10 text-white/70 rounded-lg text-sm hover:bg-white/20 transition-colors flex items-center gap-2">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                        </svg>
-                        Export PDF
-                      </button>
-                      <button 
-                        onClick={() => setShowReport(false)}
-                        className="px-4 py-2 bg-amber-500/20 text-amber-400 rounded-lg text-sm hover:bg-amber-500/30 transition-colors"
-                      >
-                        Back to Map
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
 
           {/* Cesium CSS */}
           <style>{`

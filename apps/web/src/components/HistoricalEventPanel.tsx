@@ -568,6 +568,283 @@ export const HISTORICAL_EVENTS: Record<string, HistoricalEvent> = {
       'Biodiversity risk assessment'
     ],
     comparableEvents: ['katrina2005', 'fukushima2011']
+  },
+  // === 13 events previously in menu but missing from HISTORICAL_EVENTS ===
+  latam1982: {
+    id: 'latam1982',
+    name: '1982 Latin American Debt Crisis',
+    year: 1982,
+    type: 'financial',
+    summary: 'Mexico defaulted on external debt in August 1982, triggering a wave of sovereign defaults across Latin America. The crisis led to the "lost decade" of growth, IMF austerity programs, and lasting effects on emerging market borrowing and banking regulation.',
+    duration: '10+ years (lost decade)',
+    gdpImpact: -350,
+    affectedRegions: ['Latin America', 'Mexico', 'Argentina', 'Brazil', 'Chile', 'Global Banking'],
+    industries: ['Banking', 'Government', 'Commodities', 'Manufacturing'],
+    recoveryTimeline: '5-15 years by country',
+    peakDate: 'August 12, 1982',
+    economicLoss: 500,
+    lessonsLearned: [
+      'Sovereign debt sustainability in emerging markets',
+      'Currency mismatch and dollar-denominated debt risks',
+      'IMF conditionality and austerity debates',
+      'Bank exposure to sovereign debt'
+    ],
+    comparableEvents: ['asian1997', 'russia1998', 'argentina2001', 'eurozone2011']
+  },
+  japan1990: {
+    id: 'japan1990',
+    name: '1990 Japan Asset Bubble',
+    year: 1990,
+    type: 'financial',
+    summary: 'The Japanese stock and property bubble burst in late 1989–1990, leading to decades of deflation and stagnation. Nikkei fell over 60%, land prices collapsed, and the banking sector faced a prolonged non-performing loan crisis.',
+    duration: '20+ years (lost decades)',
+    gdpImpact: -1200,
+    affectedRegions: ['Japan', 'Asia Pacific', 'Global'],
+    industries: ['Banking', 'Real Estate', 'Construction', 'Manufacturing', 'Exports'],
+    recoveryTimeline: '15-25 years',
+    peakDate: 'December 29, 1989',
+    economicLoss: 6000,
+    lessonsLearned: [
+      'Asset bubble identification and early intervention',
+      'Deflation dynamics and monetary policy limits',
+      'Bank NPL resolution and zombie lending',
+      'Demographic and structural growth constraints'
+    ],
+    comparableEvents: ['dotcom2000', 'lehman2008', 'crypto2022']
+  },
+  mexico1994: {
+    id: 'mexico1994',
+    name: '1994 Mexican Peso Crisis',
+    year: 1994,
+    type: 'financial',
+    summary: 'Mexico was forced to devalue the peso in December 1994 after a run on reserves. The "Tequila Crisis" triggered contagion across emerging markets and required a large US-led international bailout.',
+    duration: '2 years (acute phase)',
+    gdpImpact: -180,
+    affectedRegions: ['Mexico', 'Latin America', 'Emerging Markets', 'United States'],
+    industries: ['Banking', 'Government', 'Manufacturing', 'Exports'],
+    recoveryTimeline: '3-5 years',
+    peakDate: 'December 20, 1994',
+    economicLoss: 350,
+    lessonsLearned: [
+      'Currency peg exit and reserve adequacy',
+      'Hot money and portfolio flow volatility',
+      'Contagion in emerging markets',
+      'International lender-of-last-resort role'
+    ],
+    comparableEvents: ['asian1997', 'russia1998', 'argentina2001', 'latam1982']
+  },
+  argentina2001: {
+    id: 'argentina2001',
+    name: '2001 Argentine Crisis',
+    year: 2001,
+    type: 'financial',
+    summary: 'Argentina defaulted on sovereign debt and abandoned its currency board peg to the US dollar. The crisis caused a deep depression, bank runs, social unrest, and a major restructuring of external debt.',
+    duration: '4 years (2001-2005)',
+    gdpImpact: -280,
+    affectedRegions: ['Argentina', 'South America', 'Global Bond Markets'],
+    industries: ['Banking', 'Government', 'Agriculture', 'Retail'],
+    recoveryTimeline: '5-8 years',
+    peakDate: 'December 2001',
+    economicLoss: 650,
+    lessonsLearned: [
+      'Currency board rigidity and exit costs',
+      'Sovereign default and holdout creditors',
+      'Domestic vs foreign-law debt treatment',
+      'IMF program design in currency crises'
+    ],
+    comparableEvents: ['russia1998', 'asian1997', 'lehman2008', 'mexico1994']
+  },
+  china2015: {
+    id: 'china2015',
+    name: '2015 China Stock Crash',
+    year: 2015,
+    type: 'financial',
+    summary: 'Chinese equity markets lost over 30% in weeks after a leveraged rally. Beijing intervened with circuit breakers, margin rules, and state-backed buying. The episode raised concerns about financial stability and capital outflows.',
+    duration: '3 months (acute)',
+    gdpImpact: -150,
+    affectedRegions: ['China', 'Asia Pacific', 'Global Commodities'],
+    industries: ['Financial Services', 'Real Estate', 'Commodities', 'Retail'],
+    recoveryTimeline: '2-3 years',
+    peakDate: 'June 12, 2015',
+    economicLoss: 5000,
+    lessonsLearned: [
+      'Leveraged retail speculation risks',
+      'Circuit breakers and market intervention limits',
+      'Capital flow and FX reserve pressures',
+      'Transition from investment to consumption growth'
+    ],
+    comparableEvents: ['dotcom2000', 'flashcrash2010', 'crypto2022']
+  },
+  gulf1990: {
+    id: 'gulf1990',
+    name: '1990 Gulf War',
+    year: 1990,
+    type: 'geopolitical',
+    summary: 'Iraq\'s invasion of Kuwait and the subsequent US-led coalition response triggered an oil price spike, market volatility, and a brief recession. The conflict reshaped Middle East security and energy market expectations.',
+    duration: '8 months (invasion to ceasefire)',
+    gdpImpact: -250,
+    affectedRegions: ['Middle East', 'Kuwait', 'Iraq', 'United States', 'Global Energy'],
+    industries: ['Energy', 'Defense', 'Airlines', 'Insurance', 'Banking'],
+    recoveryTimeline: '1-2 years for oil markets',
+    peakDate: 'August 2, 1990',
+    economicLoss: 350,
+    lessonsLearned: [
+      'Oil supply shock and strategic reserves',
+      'Geopolitical risk in energy pricing',
+      'Military intervention and market impact',
+      'Post-conflict reconstruction and debt'
+    ],
+    comparableEvents: ['ukraine2022', 'oil1973', 'iraq2003', 'crimea2014']
+  },
+  iraq2003: {
+    id: 'iraq2003',
+    name: '2003 Iraq War',
+    year: 2003,
+    type: 'geopolitical',
+    summary: 'The US-led invasion of Iraq and prolonged conflict caused oil volatility, defense and reconstruction spending, and lasting regional instability. Markets initially rallied but uncertainty persisted for years.',
+    duration: '8+ years (major combat to drawdown)',
+    gdpImpact: -400,
+    affectedRegions: ['Iraq', 'Middle East', 'United States', 'United Kingdom', 'Global'],
+    industries: ['Energy', 'Defense', 'Construction', 'Insurance', 'Banking'],
+    recoveryTimeline: 'Ongoing',
+    peakDate: 'March 20, 2003',
+    casualties: 500000,
+    economicLoss: 3000,
+    lessonsLearned: [
+      'Costs of prolonged military engagement',
+      'Oil market and geopolitical risk',
+      'Reconstruction and institution-building challenges',
+      'Alliance and multilateral policy alignment'
+    ],
+    comparableEvents: ['gulf1990', 'sept11_2001', 'ukraine2022']
+  },
+  taiwan2024: {
+    id: 'taiwan2024',
+    name: '2024 Taiwan Tensions',
+    year: 2024,
+    type: 'geopolitical',
+    summary: 'Rising cross-strait tensions and military activity increased concerns over semiconductor supply chain concentration, tech decoupling, and conflict risk. Markets repriced geopolitical and supply chain risk in Asia.',
+    duration: 'Ongoing',
+    gdpImpact: -80,
+    affectedRegions: ['Taiwan', 'China', 'Asia Pacific', 'United States', 'Global Tech'],
+    industries: ['Semiconductors', 'Technology', 'Electronics', 'Shipping', 'Defense'],
+    recoveryTimeline: 'N/A - ongoing',
+    peakDate: '2024',
+    economicLoss: 200,
+    lessonsLearned: [
+      'Semiconductor supply chain concentration risk',
+      'Tech decoupling and onshoring pressures',
+      'Geopolitical risk in trade corridors',
+      'Defense and deterrence in contested regions'
+    ],
+    comparableEvents: ['tradewars2018', 'ukraine2022', 'crimea2014']
+  },
+  sars2003: {
+    id: 'sars2003',
+    name: '2003 SARS Outbreak',
+    year: 2003,
+    type: 'pandemic',
+    summary: 'Severe Acute Respiratory Syndrome (SARS) emerged in China and spread to 26 countries. The outbreak caused significant travel and economic disruption in Asia and accelerated global infectious disease surveillance and response frameworks.',
+    duration: '8 months',
+    gdpImpact: -40,
+    affectedRegions: ['China', 'Hong Kong', 'Canada', 'Singapore', 'Asia Pacific'],
+    industries: ['Travel', 'Airlines', 'Hospitality', 'Healthcare', 'Retail'],
+    recoveryTimeline: '1-2 years',
+    peakDate: 'April-May 2003',
+    casualties: 774,
+    economicLoss: 50,
+    lessonsLearned: [
+      'Early detection and transparent reporting',
+      'Travel restrictions and economic trade-offs',
+      'Healthcare system surge capacity',
+      'International coordination for novel pathogens'
+    ],
+    comparableEvents: ['covid2020', 'h1n1_2009', 'ebola2014']
+  },
+  ebola2014: {
+    id: 'ebola2014',
+    name: '2014 Ebola Outbreak',
+    year: 2014,
+    type: 'pandemic',
+    summary: 'The West African Ebola epidemic became the largest and most complex outbreak of the disease, primarily affecting Guinea, Liberia, and Sierra Leone. It tested global health emergency response and raised awareness of epidemic risks.',
+    duration: '2 years',
+    gdpImpact: -15,
+    affectedRegions: ['West Africa', 'Guinea', 'Liberia', 'Sierra Leone', 'Nigeria'],
+    industries: ['Healthcare', 'Mining', 'Agriculture', 'Transport', 'Tourism'],
+    recoveryTimeline: '3-5 years for affected economies',
+    peakDate: 'October 2014',
+    casualties: 11325,
+    economicLoss: 53,
+    lessonsLearned: [
+      'Health system capacity in low-resource settings',
+      'Community engagement and trust in outbreaks',
+      'International emergency response coordination',
+      'Economic impact of epidemic control measures'
+    ],
+    comparableEvents: ['covid2020', 'sars2003', 'h1n1_2009']
+  },
+  occupy2011: {
+    id: 'occupy2011',
+    name: '2011 Occupy Movement',
+    year: 2011,
+    type: 'geopolitical',
+    summary: 'The Occupy Wall Street movement spread from New York to cities globally, highlighting inequality and financial sector accountability after the 2008 crisis. Protests influenced political discourse and regulatory debates despite limited direct policy impact.',
+    duration: '6 months (peak activity)',
+    gdpImpact: -5,
+    affectedRegions: ['United States', 'Europe', 'Global'],
+    industries: ['Financial Services', 'Government', 'Retail', 'Real Estate'],
+    recoveryTimeline: 'N/A - discursive impact',
+    peakDate: 'September–October 2011',
+    economicLoss: 10,
+    lessonsLearned: [
+      'Inequality and political risk post-crisis',
+      'Social mobilization and regulatory pressure',
+      'Narrative and reputational risk for finance',
+      'Urban protest and business continuity'
+    ],
+    comparableEvents: ['arabspring2011', 'eurozone2011', 'lehman2008']
+  },
+  yellowvest2018: {
+    id: 'yellowvest2018',
+    name: '2018 Yellow Vest Protests',
+    year: 2018,
+    type: 'geopolitical',
+    summary: 'Fuel tax protests in France evolved into broader anti-government and inequality demonstrations. The movement disrupted transport, retail, and tourism and led to policy reversals and a national debate on reform and redistribution.',
+    duration: '6+ months',
+    gdpImpact: -25,
+    affectedRegions: ['France', 'Europe'],
+    industries: ['Retail', 'Transportation', 'Tourism', 'Energy', 'Government'],
+    recoveryTimeline: '6-12 months',
+    peakDate: 'November–December 2018',
+    economicLoss: 15,
+    lessonsLearned: [
+      'Energy and tax policy social acceptance',
+      'Urban-rural and inequality tensions',
+      'Protest and supply chain disruption',
+      'Policy U-turns and government credibility'
+    ],
+    comparableEvents: ['arabspring2011', 'occupy2011', 'brexit2016']
+  },
+  blm2020: {
+    id: 'blm2020',
+    name: '2020 BLM Protests',
+    year: 2020,
+    type: 'geopolitical',
+    summary: 'The murder of George Floyd sparked massive Black Lives Matter demonstrations across the US and globally. Protests coincided with COVID-19 and influenced corporate, institutional, and policy responses to racial justice and civil unrest risk.',
+    duration: '3+ months (peak)',
+    gdpImpact: -15,
+    affectedRegions: ['United States', 'United Kingdom', 'Europe', 'Global'],
+    industries: ['Insurance', 'Retail', 'Real Estate', 'Government', 'Corporate'],
+    recoveryTimeline: 'N/A - ongoing societal impact',
+    peakDate: 'May–June 2020',
+    economicLoss: 2,
+    lessonsLearned: [
+      'Civil unrest and business continuity',
+      'Corporate and institutional ESG response',
+      'Insurance and property damage from protests',
+      'Convergence of pandemic, protest, and policy'
+    ],
+    comparableEvents: ['covid2020', 'occupy2011', 'arabspring2011']
   }
 }
 
@@ -595,17 +872,28 @@ const EVENT_NAME_TO_ID: Record<string, string> = {
   '2020 COVID Crash': 'covid2020',
   '2022 Ukraine Conflict': 'ukraine2022',
   '2023 SVB Bank Failure': 'svb2023',
-  // Fallback mappings
-  '1994 Mexican Peso Crisis': 'asian1997',
-  '1998 Russian Default': 'asian1997',
-  '2001 Argentine Crisis': 'asian1997',
+  // 13 events added for menu/panel sync
+  '1982 Latin American Debt Crisis': 'latam1982',
+  '1990 Japan Asset Bubble': 'japan1990',
+  '1994 Mexican Peso Crisis': 'mexico1994',
+  '2001 Argentine Crisis': 'argentina2001',
+  '2015 China Stock Crash': 'china2015',
+  '1990 Gulf War': 'gulf1990',
+  '2003 Iraq War': 'iraq2003',
+  '2024 Taiwan Tensions': 'taiwan2024',
+  '2003 SARS': 'sars2003',
+  '2003 SARS Outbreak': 'sars2003',
+  '2014 Ebola Outbreak': 'ebola2014',
+  '2011 Occupy Movement': 'occupy2011',
+  '2018 Yellow Vest Protests': 'yellowvest2018',
+  '2020 BLM Protests': 'blm2020',
+  // Other fallbacks
+  '1998 Russian Default': 'russia1998',
   '1918 Spanish Flu': 'covid2020',
-  '2003 SARS': 'covid2020',
-  '2009 H1N1': 'covid2020',
-  '1990 Gulf War': 'ukraine2022',
-  '2014 Crimea Annexation': 'ukraine2022',
-  'gulf1990': 'ukraine2022',
-  'crypto2022': 'svb2023',
+  '2009 H1N1': 'h1n1_2009',
+  '2014 Crimea Annexation': 'crimea2014',
+  'gulf1990': 'gulf1990',
+  'crypto2022': 'crypto2022',
   'tradewars2018': 'tradewars2018',
 }
 
@@ -614,9 +902,12 @@ interface HistoricalEventPanelProps {
   onClose: () => void
   eventId: string | null
   onEventChange?: (eventId: string) => void
+  /** When Run Scenario ties this event to a stress test, pass for EventRiskGraph pipeline. */
+  stressTestId?: string
+  scenarioId?: string
 }
 
-export default function HistoricalEventPanel({ isOpen, onClose, eventId, onEventChange }: HistoricalEventPanelProps) {
+export default function HistoricalEventPanel({ isOpen, onClose, eventId, onEventChange, stressTestId, scenarioId }: HistoricalEventPanelProps) {
   const [notification, setNotification] = useState<string | null>(null)
   
   const event = eventId ? HISTORICAL_EVENTS[eventId] : null
@@ -792,6 +1083,8 @@ export default function HistoricalEventPanel({ isOpen, onClose, eventId, onEvent
                     eventType="historical"
                     eventName={event.name}
                     fullWidth={true}
+                    stressTestId={stressTestId}
+                    scenarioId={scenarioId}
                   />
                 </div>
               </div>

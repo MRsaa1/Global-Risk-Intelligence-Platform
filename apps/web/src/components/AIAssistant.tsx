@@ -34,37 +34,49 @@ export default function AIAssistant() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
   
-  // Send message to NVIDIA LLM
+  // Send message to AI-Q (Generative AI Q&A with context and citations)
   const sendMessage = async (content: string) => {
     if (!content.trim() || isLoading) return
-    
+
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
       content: content.trim(),
       timestamp: new Date(),
     }
-    
+
     setMessages(prev => [...prev, userMessage])
     setInput('')
     setIsLoading(true)
-    
+
     try {
-      const response = await fetch(`/api/v1/nvidia/test/chat?message=${encodeURIComponent(content)}`, {
+      const response = await fetch('/api/v1/aiq/ask', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          question: content.trim(),
+          include_overseer_status: true,
+          context: {},
+        }),
       })
-      
+
       const data = await response.json()
-      
+      const answer = data?.answer ?? (data?.error || 'No answer returned.')
+      const sources = data?.sources ?? []
+      const sourcesNote = sources.length > 0
+        ? `\n\n[Sources: ${sources.slice(0, 3).map((s: { title?: string }) => s?.title || '').filter(Boolean).join(', ')}]`
+        : ''
+
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: data.response || data.error || 'Failed to get response',
+        content: answer + sourcesNote,
         timestamp: new Date(),
       }
-      
+
       setMessages(prev => [...prev, assistantMessage])
-    } catch (error) {
+    } catch {
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
@@ -111,7 +123,7 @@ export default function AIAssistant() {
                 </div>
                 <div>
                   <h3 className="text-sm font-display font-semibold text-white/90">Risk AI Assistant</h3>
-                  <p className="text-[10px] text-white/40">NVIDIA Llama 3.1</p>
+                  <p className="text-[10px] text-white/40">Ask about risks, portfolio, scenarios</p>
                 </div>
               </div>
               <button 
@@ -127,7 +139,7 @@ export default function AIAssistant() {
               {messages.length === 0 ? (
                 <div className="text-center py-8">
                   <ChatBubbleLeftRightIcon className="w-12 h-12 mx-auto text-white/20 mb-4" />
-                  <p className="text-white/60 mb-4">Ask me anything about risk analysis</p>
+                  <p className="text-white/60 mb-4">Ask about risks, portfolio, or stress scenarios</p>
                   
                   {/* Sample prompts */}
                   <div className="space-y-2">
@@ -187,7 +199,7 @@ export default function AIAssistant() {
                   type="text"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder="Ask about risk analysis..."
+                  placeholder="Ask about risks, portfolio, scenario..."
                   className="flex-1 bg-white/5 border border-white/5 rounded-lg px-3 py-2 text-xs text-white/90 placeholder:text-white/30 focus:outline-none focus:border-amber-500/30"
                   disabled={isLoading}
                 />

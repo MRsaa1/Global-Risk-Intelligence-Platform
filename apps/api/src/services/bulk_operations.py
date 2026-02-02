@@ -54,27 +54,37 @@ class BulkOperationsService:
     def __init__(self):
         self.max_batch_size = 1000
         
-        # Asset type mapping for flexible input
+        # Asset type mapping for flexible input (must match AssetType enum)
         self.asset_type_mapping = {
             "office": "commercial_office",
             "commercial_office": "commercial_office",
             "retail": "commercial_retail",
             "commercial_retail": "commercial_retail",
-            "industrial": "industrial_manufacturing",
-            "industrial_manufacturing": "industrial_manufacturing",
-            "logistics": "industrial_logistics",
-            "industrial_logistics": "industrial_logistics",
-            "data_center": "industrial_data_center",
-            "industrial_data_center": "industrial_data_center",
-            "hotel": "hospitality_hotel",
-            "hospitality_hotel": "hospitality_hotel",
-            "residential": "residential_multifamily",
-            "residential_multifamily": "residential_multifamily",
-            "mixed_use": "mixed_use",
+            "industrial": "industrial",
+            "industrial_manufacturing": "industrial",
+            "logistics": "logistics",
+            "industrial_logistics": "logistics",
+            "data_center": "data_center",
+            "industrial_data_center": "data_center",
+            "hotel": "other",
+            "hospitality_hotel": "other",
+            "residential": "residential_multi",
+            "residential_multifamily": "residential_multi",
+            "residential_multi": "residential_multi",
+            "residential_single": "residential_single",
+            "mixed_use": "other",
             "infrastructure": "infrastructure_transport",
             "infrastructure_transport": "infrastructure_transport",
-            "energy": "infrastructure_energy",
-            "infrastructure_energy": "infrastructure_energy",
+            "infrastructure_power": "infrastructure_power",
+            "infrastructure_water": "infrastructure_water",
+            "energy": "energy_conventional",
+            "infrastructure_energy": "energy_conventional",
+            "energy_solar": "energy_solar",
+            "energy_wind": "energy_wind",
+            "energy_conventional": "energy_conventional",
+            "healthcare": "healthcare",
+            "education": "education",
+            "other": "other",
         }
     
     def _parse_csv(self, content: bytes) -> Tuple[List[Dict], List[str]]:

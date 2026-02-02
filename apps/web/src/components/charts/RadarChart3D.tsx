@@ -92,7 +92,7 @@ function RadarMesh({
           <mesh key={level} rotation={[Math.PI / 2, 0, 0]}>
             <ringGeometry args={[levelRadius - 0.02, levelRadius + 0.02, 32]} />
             <meshBasicMaterial 
-              color={chartColors.background.border} 
+              color={chartColors.background.borderOpaque} 
               transparent 
               opacity={0.2}
               side={THREE.DoubleSide}
@@ -117,7 +117,7 @@ function RadarMesh({
                 itemSize={3}
               />
             </bufferGeometry>
-            <lineBasicMaterial color={chartColors.background.border} opacity={0.3} transparent />
+            <lineBasicMaterial color={chartColors.background.borderOpaque} opacity={0.3} transparent />
           </line>
         )
       })}
@@ -352,7 +352,7 @@ export default function RadarChart3D({
           />
           
           {/* Grid helper */}
-          <gridHelper args={[10, 10, chartColors.background.border, chartColors.background.border]} />
+          <gridHelper args={[10, 10, chartColors.background.borderOpaque, chartColors.background.borderOpaque]} />
         </Canvas>
       </div>
       

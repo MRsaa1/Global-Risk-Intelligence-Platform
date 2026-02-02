@@ -33,9 +33,15 @@ def get_database_url() -> str:
     3. settings.database_url → PostgreSQL from config
     """
     if USE_SQLITE:
-        # SQLite for local development (no PostGIS)
-        db_path = os.path.join(os.path.dirname(__file__), "..", "..", "dev.db")
-        return f"sqlite+aiosqlite:///{db_path}"
+        # SQLite (dev or production). Allow override via DATABASE_URL.
+        default_db_path = os.path.join(os.path.dirname(__file__), "..", "..", "dev.db")
+        db_url = os.environ.get("DATABASE_URL") or f"sqlite:///{default_db_path}"
+
+        # Ensure async driver for SQLAlchemy async engine
+        if db_url.startswith("sqlite://") and "+aiosqlite" not in db_url:
+            db_url = db_url.replace("sqlite://", "sqlite+aiosqlite://", 1)
+
+        return db_url
     
     # PostgreSQL for production
     db_url = os.environ.get("DATABASE_URL") or settings.database_url
@@ -154,11 +160,41 @@ async def get_neo4j_session():
         await session.close()
 
 
+def _sqlite_sync_assets_columns(sync_conn):
+    """Add missing columns to assets table for SQLite (e.g. after model changes)."""
+    from sqlalchemy import text
+    try:
+        from src.models.asset import Asset
+    except ImportError:
+        return
+    try:
+        r = sync_conn.execute(text("PRAGMA table_info(assets)"))
+        existing = {row[1] for row in r}
+    except Exception:
+        return
+    def _sqlite_type(c):
+        n = type(c.type).__name__
+        if n in ("Integer", "BigInteger"):
+            return "INTEGER"
+        if n == "Float":
+            return "REAL"
+        return "TEXT"
+    for col in Asset.__table__.c:
+        if col.name in existing:
+            continue
+        try:
+            sync_conn.execute(text(f'ALTER TABLE assets ADD COLUMN "{col.name}" {_sqlite_type(col)}'))
+        except Exception:
+            pass
+
+
 async def init_databases():
     """Initialize database connections and create tables."""
     # Create SQLite/PostgreSQL tables
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        if is_sqlite:
+            await conn.run_sync(_sqlite_sync_assets_columns)
     
     # Skip Neo4j verification in development
     if not isinstance(neo4j_driver, MockNeo4jDriver):

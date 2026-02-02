@@ -3,11 +3,34 @@ Risk Zone Calculator Service.
 
 Smart algorithm for calculating risk zones based on event type,
 topography, and infrastructure patterns. Ported from frontend TypeScript.
+Supports ontology-driven classification via config/entity_ontology.json.
 """
+import json
 import random
+from pathlib import Path
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Dict, List, Optional
 from enum import Enum
+
+_ENTITY_ONTOLOGY_CACHE: Optional[dict] = None
+
+
+def _load_entity_ontology() -> dict:
+    """Load entity ontology from config/entity_ontology.json when present. Cached."""
+    global _ENTITY_ONTOLOGY_CACHE
+    if _ENTITY_ONTOLOGY_CACHE is not None:
+        return _ENTITY_ONTOLOGY_CACHE
+    try:
+        base = Path(__file__).resolve()
+        for parent in [base.parents[4], base.parents[3], base.parents[2], Path.cwd()]:
+            path = parent / "config" / "entity_ontology.json"
+            if path.exists():
+                _ENTITY_ONTOLOGY_CACHE = json.loads(path.read_text(encoding="utf-8"))
+                return _ENTITY_ONTOLOGY_CACHE
+    except Exception:
+        pass
+    _ENTITY_ONTOLOGY_CACHE = {}
+    return _ENTITY_ONTOLOGY_CACHE
 
 
 class EventCategory(str, Enum):
@@ -21,6 +44,13 @@ class EventCategory(str, Enum):
     PANDEMIC = "pandemic"
     GEOPOLITICAL = "geopolitical"
     GENERAL = "general"
+    # Climate disaster sub-types (Open-Meteo based)
+    WIND = "wind"                    # Hurricane / storm wind (Cat 1-5)
+    METRO_FLOOD = "metro_flood"      # Metro / subway flooding
+    HEAT = "heat"                    # Heat stress event
+    HEAVY_RAIN = "heavy_rain"        # Heavy precipitation event
+    DROUGHT = "drought"              # Drought conditions
+    UV = "uv"                        # UV extreme index
 
 
 class RiskLevel(str, Enum):
@@ -29,6 +59,161 @@ class RiskLevel(str, Enum):
     HIGH = "high"
     MEDIUM = "medium"
     LOW = "low"
+
+
+class EntityType(str, Enum):
+    """Entity type for context-dependent zone labels and LLM."""
+    HEALTHCARE = "HEALTHCARE"
+    FINANCIAL = "FINANCIAL"
+    ENTERPRISE = "ENTERPRISE"
+    INFRASTRUCTURE = "INFRASTRUCTURE"
+    GOVERNMENT = "GOVERNMENT"
+    REAL_ESTATE = "REAL_ESTATE"
+    CITY_REGION = "CITY_REGION"
+    DEFENSE = "DEFENSE"
+
+
+def detect_entity_type(entity_name: str) -> str:
+    """
+    Detect entity type from name for context-dependent zone labels and LLM.
+    Uses config/entity_ontology.json when present; otherwise built-in patterns.
+    Returns EntityType value (e.g. HEALTHCARE, FINANCIAL) or CITY_REGION as default.
+    """
+    if not entity_name or not entity_name.strip():
+        return EntityType.CITY_REGION.value
+    name = entity_name.lower().strip()
+    ontology = _load_entity_ontology()
+    entities = (ontology.get("entities") or {}) if ontology else {}
+    if entities:
+        # AIRPORT first so "Frankfurt Airport" gets AIRPORT not INFRASTRUCTURE
+        for eid in ["AIRPORT", "HEALTHCARE", "FINANCIAL", "ENTERPRISE", "INFRASTRUCTURE", "GOVERNMENT", "REAL_ESTATE", "DEFENSE"]:
+            ent = entities.get(eid)
+            if not ent:
+                continue
+            keywords = (ent.get("auto_detected_by") or {}).get("keywords") or []
+            if any(kw in name for kw in keywords):
+                return eid
+        return EntityType.CITY_REGION.value
+    # Fallback: built-in patterns
+    patterns = {
+        EntityType.HEALTHCARE: (
+            "klinik", "hospital", "clinic", "medical", "care", "health", "pharma",
+            "uniklinik", "universitätsklinik", "krankenhaus", "medizin",
+        ),
+        EntityType.FINANCIAL: (
+            "bank", "versicherung", "insurance", "invest", "capital", "finance",
+            "credit", "asset", "wealth", "treasury",
+        ),
+        EntityType.ENTERPRISE: (
+            "gmbh", "ag", "corp", "inc", "manufacturing", "production", "factory",
+            "industrial", "logistics", "warehouse",
+        ),
+        EntityType.INFRASTRUCTURE: (
+            "power", "energy", "water", "transport", "airport", "port", "grid",
+            "utility", "electric", "gas", "rail",
+        ),
+        EntityType.GOVERNMENT: (
+            "ministry", "government", "municipal", "city hall", "rathaus",
+            "administration", "public sector",
+        ),
+        EntityType.REAL_ESTATE: (
+            "immobilien", "real estate", "property", "development", "construction",
+            "building", "realty",
+        ),
+        EntityType.DEFENSE: (
+            "defense", "military", "security", "bundeswehr", "nato", "armed",
+        ),
+    }
+    for entity_type, keywords in patterns.items():
+        if any(kw in name for kw in keywords):
+            return entity_type.value
+    return EntityType.CITY_REGION.value
+
+
+def _get_entity_zone_labels_from_ontology(entity_type: str, entity_name: Optional[str]) -> Optional[List[str]]:
+    """Get risk zone labels from ontology for entity_type; AIRPORT override when name contains 'airport'."""
+    ontology = _load_entity_ontology()
+    entities = (ontology.get("entities") or {}) if ontology else {}
+    if not entities:
+        return None
+    if entity_type == "INFRASTRUCTURE" and entity_name and "airport" in entity_name.lower():
+        ent = entities.get("AIRPORT")
+        if ent:
+            return ent.get("risk_zones")
+    ent = entities.get(entity_type)
+    return (ent.get("risk_zones") if ent else None)
+
+
+# Zone label templates per entity type (used instead of event-category labels when entity is not city/region).
+# Index i maps to zone order (0=critical, 1-2=high, 3+=medium). Cycle if pattern has more zones than labels.
+ENTITY_ZONE_LABELS: dict[str, list[str]] = {
+    EntityType.HEALTHCARE.value: [
+        "Intensive Care Unit (ICU)",
+        "Emergency Department",
+        "Operating Theaters",
+        "Medical Supply Storage",
+        "Patient Wards",
+        "Diagnostic Center",
+    ],
+    EntityType.FINANCIAL.value: [
+        "Trading Floor",
+        "Core Banking Systems",
+        "Data Center",
+        "Vault/Treasury",
+        "Branch Network",
+        "Customer Service",
+    ],
+    EntityType.ENTERPRISE.value: [
+        "Production Line",
+        "Supply Chain Hub",
+        "R&D Facilities",
+        "Warehouse",
+        "Sales Operations",
+        "IT Infrastructure",
+    ],
+    EntityType.INFRASTRUCTURE.value: [
+        "Power Generation",
+        "Control Center",
+        "Distribution Network",
+        "Backup Systems",
+        "Maintenance Facilities",
+        "Administrative Zone",
+    ],
+    # Airport-specific (used when entity_type is INFRASTRUCTURE and "airport" in entity_name)
+    "AIRPORT": [
+        "Terminal 1",
+        "Terminal 2",
+        "Terminal 3",
+        "Control Center (ATC)",
+        "Power Generation",
+        "Ground Operations (e.g. Fraport AG)",
+    ],
+    EntityType.GOVERNMENT.value: [
+        "Central Administration",
+        "Public Services",
+        "Critical Records",
+        "Security Operations",
+        "Field Offices",
+        "Support Facilities",
+    ],
+    EntityType.REAL_ESTATE.value: [
+        "Core Asset Portfolio",
+        "Development Sites",
+        "Property Management",
+        "Tenant Operations",
+        "Maintenance",
+        "Administrative Offices",
+    ],
+    EntityType.DEFENSE.value: [
+        "Command Center",
+        "Strategic Assets",
+        "Communications Hub",
+        "Supply Depot",
+        "Training Facilities",
+        "Support Infrastructure",
+    ],
+    # CITY_REGION: use ZONE_PATTERNS[event_category].offsets[].zone_type (no override)
+}
 
 
 @dataclass
@@ -46,6 +231,25 @@ class ZonePattern:
     radius_multiplier: float = 1.0
 
 
+def _flood_polygon_from_center(lat: float, lng: float, radius_m: float, num_points: int = 12) -> List[List[float]]:
+    """Generate an irregular flood-extent polygon around center (list of [lng, lat])."""
+    import math
+    # Approx meters per degree at this latitude
+    m_per_deg_lat = 111320
+    m_per_deg_lng = 111320 * math.cos(math.radians(lat))
+    r_lat = radius_m / m_per_deg_lat
+    r_lng = radius_m / m_per_deg_lng
+    coords: List[List[float]] = []
+    for i in range(num_points):
+        angle = 2 * math.pi * i / num_points + random.random() * 0.3
+        # Slight irregularity (flood doesn't spread evenly)
+        r = 0.7 + 0.6 * random.random()
+        dlat = r * r_lat * math.sin(angle)
+        dlng = r * r_lng * math.cos(angle)
+        coords.append([lng + dlng, lat + dlat])
+    return coords
+
+
 @dataclass
 class RiskZoneResult:
     """Result of risk zone calculation."""
@@ -58,6 +262,7 @@ class RiskZoneResult:
     estimated_loss: float  # in millions
     population_affected: int
     recommendations: List[str] = field(default_factory=list)
+    polygon: Optional[List[List[float]]] = None  # [[lng, lat], ...] for flood/extent shapes
 
 
 @dataclass
@@ -75,6 +280,8 @@ class StressTestResult:
     executive_summary: Optional[str] = None
     mitigation_actions: List[dict] = field(default_factory=list)
     data_sources: List[str] = field(default_factory=list)
+    entity_type: Optional[str] = None  # HEALTHCARE, FINANCIAL, CITY_REGION, etc.
+    entity_name: Optional[str] = None
 
 
 # Zone placement patterns based on event type
@@ -170,6 +377,67 @@ ZONE_PATTERNS = {
         ],
         radius_multiplier=1.0
     ),
+    # Climate disaster sub-type patterns (Open-Meteo based scenarios)
+    EventCategory.WIND: ZonePattern(
+        offsets=[
+            ZoneOffset(0, 0, "Wind Damage Core"),
+            ZoneOffset(0.005, 0.003, "High-Rise Vulnerability Zone"),
+            ZoneOffset(-0.003, 0.004, "Coastal Exposure"),
+            ZoneOffset(0.002, -0.005, "Open Structure Area"),
+            ZoneOffset(-0.004, -0.002, "Infrastructure Corridor"),
+        ],
+        radius_multiplier=1.4
+    ),
+    EventCategory.METRO_FLOOD: ZonePattern(
+        offsets=[
+            ZoneOffset(0, 0, "Metro Station Hub"),
+            ZoneOffset(0.002, 0.001, "Underground Tunnel Section"),
+            ZoneOffset(-0.001, 0.003, "Ventilation Shaft Area"),
+            ZoneOffset(0.003, -0.002, "Transit Interchange"),
+            ZoneOffset(-0.003, -0.001, "Emergency Exit Zone"),
+        ],
+        radius_multiplier=0.6
+    ),
+    EventCategory.HEAT: ZonePattern(
+        offsets=[
+            ZoneOffset(0, 0, "Urban Heat Island Core"),
+            ZoneOffset(0.004, 0.002, "High-Density Residential"),
+            ZoneOffset(-0.002, 0.004, "Industrial Heat Zone"),
+            ZoneOffset(0.002, -0.003, "Elderly Care Facilities"),
+            ZoneOffset(-0.004, -0.003, "Energy Grid Stress Area"),
+        ],
+        radius_multiplier=1.3
+    ),
+    EventCategory.HEAVY_RAIN: ZonePattern(
+        offsets=[
+            ZoneOffset(0, 0, "Drainage Overflow Zone"),
+            ZoneOffset(0.003, 0.002, "Low-Lying Streets"),
+            ZoneOffset(-0.002, 0.004, "Stormwater Basin"),
+            ZoneOffset(0.004, -0.002, "Underground Parking"),
+            ZoneOffset(-0.004, -0.003, "Subway Entrance Area"),
+        ],
+        radius_multiplier=1.1
+    ),
+    EventCategory.DROUGHT: ZonePattern(
+        offsets=[
+            ZoneOffset(0, 0, "Water Supply Zone"),
+            ZoneOffset(0.005, 0.003, "Agricultural Area"),
+            ZoneOffset(-0.003, 0.004, "Reservoir Region"),
+            ZoneOffset(0.002, -0.004, "Industrial Water User"),
+            ZoneOffset(-0.004, -0.002, "Residential Water District"),
+        ],
+        radius_multiplier=1.5
+    ),
+    EventCategory.UV: ZonePattern(
+        offsets=[
+            ZoneOffset(0, 0, "Outdoor Activity Zone"),
+            ZoneOffset(0.003, 0.002, "Beach/Park Area"),
+            ZoneOffset(-0.002, 0.003, "Construction Sites"),
+            ZoneOffset(0.004, -0.002, "Sports Facilities"),
+            ZoneOffset(-0.003, -0.002, "School/Campus Area"),
+        ],
+        radius_multiplier=0.8
+    ),
 }
 
 # Urgent actions by category
@@ -237,6 +505,127 @@ URGENT_ACTIONS = {
         "Communicate with stakeholders",
         "Document all decisions and actions",
     ],
+    # Climate disaster sub-type urgent actions
+    EventCategory.WIND: [
+        "Secure loose objects and outdoor equipment",
+        "Reinforce windows and glass facades",
+        "Evacuate high-rise upper floors if Cat 3+",
+        "Activate structural monitoring systems",
+        "Pre-position repair crews for aftermath",
+    ],
+    EventCategory.METRO_FLOOD: [
+        "Halt all underground transit operations",
+        "Evacuate passengers from stations",
+        "Deploy emergency pumping equipment",
+        "Seal tunnel ventilation shafts",
+        "Activate alternative surface transport routes",
+    ],
+    EventCategory.HEAT: [
+        "Open public cooling centers",
+        "Increase water distribution to vulnerable areas",
+        "Reduce energy grid load where possible",
+        "Issue health advisories for elderly and children",
+        "Deploy mobile medical units to high-risk zones",
+    ],
+    EventCategory.HEAVY_RAIN: [
+        "Clear storm drains and drainage systems",
+        "Activate flood warning systems",
+        "Evacuate underground parking facilities",
+        "Pre-position rescue boats and equipment",
+        "Close underpasses and low-lying roads",
+    ],
+    EventCategory.DROUGHT: [
+        "Implement water rationing protocols",
+        "Prioritize water for critical infrastructure",
+        "Activate emergency water reserves",
+        "Coordinate with agricultural stakeholders",
+        "Monitor reservoir levels continuously",
+    ],
+    EventCategory.UV: [
+        "Issue public health warnings for outdoor exposure",
+        "Suspend outdoor construction during peak hours",
+        "Provide shade and hydration at outdoor venues",
+        "Reschedule outdoor sporting events",
+        "Distribute sunscreen to high-risk populations",
+    ],
+}
+
+# Scenario-specific mitigation actions (default when LLM not used or fails).
+# Supply chain: NO evacuation/emergency response; use sourcing and logistics.
+# Natural disaster: evacuation and emergency response.
+SCENARIO_MITIGATION_ACTIONS: Dict[EventCategory, List[dict]] = {
+    EventCategory.SUPPLY_CHAIN: [
+        {"action": "Source alternative suppliers from unaffected regions", "priority": "urgent", "cost": 2.5, "risk_reduction": 35},
+        {"action": "Increase inventory buffer for critical goods", "priority": "urgent", "cost": 1.8, "risk_reduction": 25},
+        {"action": "Activate secondary distribution channels", "priority": "high", "cost": 3.2, "risk_reduction": 20},
+        {"action": "Negotiate expedited shipping with carriers", "priority": "high", "cost": 0.8, "risk_reduction": 15},
+        {"action": "Establish local sourcing partnerships", "priority": "medium", "cost": 5.5, "risk_reduction": 20},
+    ],
+    EventCategory.FLOOD: [
+        {"action": "Immediate evacuation of critical zones", "priority": "urgent", "cost": 2.5, "risk_reduction": 35},
+        {"action": "Deploy emergency response teams", "priority": "urgent", "cost": 1.8, "risk_reduction": 25},
+        {"action": "Activate pumping stations and flood barriers", "priority": "high", "cost": 5.2, "risk_reduction": 20},
+        {"action": "Notify affected stakeholders", "priority": "high", "cost": 0.3, "risk_reduction": 10},
+        {"action": "Establish temporary shelters on high ground", "priority": "medium", "cost": 8.5, "risk_reduction": 15},
+    ],
+    EventCategory.SEISMIC: [
+        {"action": "Conduct structural inspection and evacuate unsafe areas", "priority": "urgent", "cost": 2.5, "risk_reduction": 35},
+        {"action": "Deploy emergency response and search-and-rescue", "priority": "urgent", "cost": 1.8, "risk_reduction": 25},
+        {"action": "Shut off gas lines and activate backup power", "priority": "high", "cost": 5.2, "risk_reduction": 20},
+        {"action": "Notify affected stakeholders", "priority": "high", "cost": 0.3, "risk_reduction": 10},
+        {"action": "Establish temporary medical facilities", "priority": "medium", "cost": 8.5, "risk_reduction": 15},
+    ],
+    EventCategory.FIRE: [
+        {"action": "Clear evacuation routes and evacuate critical zones", "priority": "urgent", "cost": 2.5, "risk_reduction": 35},
+        {"action": "Deploy fire response teams", "priority": "urgent", "cost": 1.8, "risk_reduction": 25},
+        {"action": "Activate sprinklers and establish firebreaks", "priority": "high", "cost": 5.2, "risk_reduction": 20},
+        {"action": "Notify affected stakeholders", "priority": "high", "cost": 0.3, "risk_reduction": 10},
+        {"action": "Establish temporary facilities", "priority": "medium", "cost": 8.5, "risk_reduction": 15},
+    ],
+    EventCategory.FINANCIAL: [
+        {"action": "Hedge exposure and activate liquidity reserves", "priority": "urgent", "cost": 2.5, "risk_reduction": 35},
+        {"action": "Contact counterparties for margin calls", "priority": "urgent", "cost": 1.8, "risk_reduction": 25},
+        {"action": "Review and update credit limits", "priority": "high", "cost": 0.5, "risk_reduction": 20},
+        {"action": "Prepare regulatory filings", "priority": "high", "cost": 0.3, "risk_reduction": 10},
+        {"action": "Diversify funding sources", "priority": "medium", "cost": 5.5, "risk_reduction": 15},
+    ],
+    EventCategory.INFRASTRUCTURE: [
+        {"action": "Activate backup power and redundant paths", "priority": "urgent", "cost": 2.5, "risk_reduction": 35},
+        {"action": "Deploy emergency repair crews", "priority": "urgent", "cost": 1.8, "risk_reduction": 25},
+        {"action": "Coordinate with utility providers", "priority": "high", "cost": 0.5, "risk_reduction": 20},
+        {"action": "Establish alternative communication channels", "priority": "high", "cost": 0.3, "risk_reduction": 10},
+        {"action": "Reroute critical services", "priority": "medium", "cost": 5.5, "risk_reduction": 15},
+    ],
+    EventCategory.PANDEMIC: [
+        {"action": "Activate remote work and hygiene protocols", "priority": "urgent", "cost": 2.5, "risk_reduction": 35},
+        {"action": "Review employee health status", "priority": "urgent", "cost": 1.8, "risk_reduction": 25},
+        {"action": "Prepare isolation areas", "priority": "high", "cost": 5.2, "risk_reduction": 20},
+        {"action": "Coordinate with health authorities", "priority": "high", "cost": 0.3, "risk_reduction": 10},
+        {"action": "Establish temporary facilities", "priority": "medium", "cost": 8.5, "risk_reduction": 15},
+    ],
+    EventCategory.GEOPOLITICAL: [
+        {"action": "Review exposure to affected regions", "priority": "urgent", "cost": 2.5, "risk_reduction": 35},
+        {"action": "Secure sensitive data and operations", "priority": "urgent", "cost": 1.8, "risk_reduction": 25},
+        {"action": "Prepare for regulatory changes", "priority": "high", "cost": 0.5, "risk_reduction": 20},
+        {"action": "Monitor situation continuously", "priority": "high", "cost": 0.3, "risk_reduction": 10},
+        {"action": "Prepare contingency communication", "priority": "medium", "cost": 5.5, "risk_reduction": 15},
+    ],
+    EventCategory.GENERAL: [
+        {"action": "Monitor situation closely", "priority": "urgent", "cost": 2.5, "risk_reduction": 35},
+        {"action": "Prepare contingency plans", "priority": "urgent", "cost": 1.8, "risk_reduction": 25},
+        {"action": "Review emergency procedures", "priority": "high", "cost": 0.5, "risk_reduction": 20},
+        {"action": "Communicate with stakeholders", "priority": "high", "cost": 0.3, "risk_reduction": 10},
+        {"action": "Document all decisions and actions", "priority": "medium", "cost": 0.5, "risk_reduction": 15},
+    ],
+}
+
+# City-specific zone labels for supply chain (when no entity_type override).
+# Enables "Port of Oakland", "Hunters Point Warehouse" for SF instead of generic "Port/Logistics Hub".
+CITY_SUPPLY_CHAIN_ZONE_LABELS: Dict[str, List[str]] = {
+    "San Francisco": ["Port of Oakland", "Hunters Point Warehouse", "SF Distribution Center", "I-80 Corridor", "Produce Market"],
+    "Oakland": ["Port of Oakland", "Oakland Army Base", "Central Warehouse", "I-880 Corridor", "Food Distribution"],
+    "Frankfurt": ["FRA Airport Cargo", "Rhine-Main Port", "Autobahn Hub", "DB Freight", "Central Warehouse"],
+    "London": ["Port of London", "Thames Gateway", "M25 Logistics", "Heathrow Cargo", "Central Distribution"],
 }
 
 
@@ -253,15 +642,29 @@ def get_event_category(event_id: str) -> EventCategory:
     """
     event_lower = event_id.lower()
     
+    # Climate disaster sub-types (Open-Meteo based scenarios) - check first for specificity
+    if any(kw in event_lower for kw in ['wind_storm', 'wind-storm', 'hurricane', 'typhoon', 'cyclone']):
+        return EventCategory.WIND
+    if any(kw in event_lower for kw in ['metro_flood', 'metro-flood', 'subway_flood', 'underground_flood']):
+        return EventCategory.METRO_FLOOD
+    if any(kw in event_lower for kw in ['heat_stress', 'heat-stress', 'heatwave', 'heat_wave']):
+        return EventCategory.HEAT
+    if any(kw in event_lower for kw in ['heavy_rain', 'heavy-rain', 'precipitation', 'downpour']):
+        return EventCategory.HEAVY_RAIN
+    if any(kw in event_lower for kw in ['drought_conditions', 'drought-conditions', 'drought']):
+        return EventCategory.DROUGHT
+    if any(kw in event_lower for kw in ['uv_extreme', 'uv-extreme', 'uv_index']):
+        return EventCategory.UV
+    
     # Regulatory + Extended scenario registry IDs
     if any(kw in event_lower for kw in ['eba', 'fed', 'severely_adverse', 'systemic', 'bank_failure', 'liquidity_freeze', 'asset_price', 'imf', 'sovereign', 'devaluation', 'default', 'restructuring', 'haircut', 'resolution', 'bail-in', 'capital_increase', 'climate_disclosure']):
         return EventCategory.FINANCIAL
     if any(kw in event_lower for kw in ['ngfs', 'ssp5', 'ssp2', 'climate_flood', 'flood_extreme', 'sea_level', 'sea-level']):
         return EventCategory.FLOOD
-    if any(kw in event_lower for kw in ['fire', 'wildfire', 'heatwave', 'heat', 'drought', 'heat_stress']):
+    if any(kw in event_lower for kw in ['fire', 'wildfire']):
         return EventCategory.FIRE
     
-    if any(kw in event_lower for kw in ['flood', 'tsunami', 'sea-level', 'sea_level', 'storm', 'hurricane']):
+    if any(kw in event_lower for kw in ['flood', 'tsunami', 'sea-level', 'sea_level', 'storm']):
         return EventCategory.FLOOD
     if any(kw in event_lower for kw in ['earthquake', 'seismic', 'quake', 'tremor']):
         return EventCategory.SEISMIC
@@ -310,6 +713,8 @@ def calculate_risk_zones(
     event_id: str,
     severity: float = 0.5,
     city_name: str = "Unknown City",
+    entity_name: Optional[str] = None,
+    entity_type_override: Optional[str] = None,
 ) -> StressTestResult:
     """
     Calculate risk zones for a stress test scenario.
@@ -317,6 +722,7 @@ def calculate_risk_zones(
     This is the main algorithm that determines:
     - Zone placement based on event type
     - Risk levels for each zone
+    - Zone labels from entity type when entity_name is provided (e.g. HEALTHCARE -> ICU, Emergency Dept)
     - Affected buildings and population
     - Estimated losses
     
@@ -326,18 +732,48 @@ def calculate_risk_zones(
         event_id: Event identifier string
         severity: Severity multiplier (0.0-1.0)
         city_name: Name of the city
+        entity_name: Optional name of the entity/location (e.g. Uniklinik Köln) for entity-type zone labels
+        entity_type_override: Optional type from Knowledge Graph or external resolution (e.g. HEALTHCARE); when set, used instead of detect_entity_type
     
     Returns:
-        StressTestResult with all calculated zones and metrics
+        StressTestResult with all calculated zones and metrics (includes entity_type when entity_name given)
     """
     from datetime import datetime
     
     category = get_event_category(event_id)
     pattern = ZONE_PATTERNS.get(category, ZONE_PATTERNS[EventCategory.GENERAL])
     
+    entity_type: Optional[str] = None
+    entity_zone_labels: Optional[List[str]] = None
+    if entity_name and entity_name.strip():
+        entity_type = entity_type_override if entity_type_override else detect_entity_type(entity_name)
+        entity_zone_labels = _get_entity_zone_labels_from_ontology(entity_type, entity_name)
+        if entity_zone_labels is None:
+            entity_zone_labels = ENTITY_ZONE_LABELS.get(entity_type)
+            if entity_type == EntityType.INFRASTRUCTURE.value and "airport" in (entity_name or "").lower():
+                entity_zone_labels = ENTITY_ZONE_LABELS.get("AIRPORT") or entity_zone_labels
+
+    # City-specific supply chain zone labels (e.g. San Francisco -> Port of Oakland, Hunters Point).
+    # For GENERAL scenario, use same city labels when city is known so SF shows "Port of Oakland" etc.
+    city_supply_labels: Optional[List[str]] = None
+    if city_name:
+        for key, labels in CITY_SUPPLY_CHAIN_ZONE_LABELS.items():
+            if key.lower() in city_name.lower():
+                if category == EventCategory.SUPPLY_CHAIN or category == EventCategory.GENERAL:
+                    city_supply_labels = labels
+                break
+    
     zones: List[RiskZoneResult] = []
     
     for index, offset in enumerate(pattern.offsets):
+        # Zone label: city supply-chain > entity-specific > event-category
+        if city_supply_labels and index < len(city_supply_labels):
+            zone_label = city_supply_labels[index]
+        elif entity_zone_labels and index < len(entity_zone_labels):
+            zone_label = entity_zone_labels[index]
+        else:
+            zone_label = offset.zone_type
+        
         # Determine risk level based on index
         if index == 0:
             risk_level = RiskLevel.CRITICAL
@@ -372,20 +808,26 @@ def calculate_risk_zones(
         population_affected = int(affected_buildings * (50 + random.random() * 100))
         
         recommendations = generate_recommendations(category, risk_level)
-        
+
+        pos_lat = center_lat + offset.lat
+        pos_lng = center_lng + offset.lng
+        polygon = (
+            _flood_polygon_from_center(pos_lat, pos_lng, radius)
+            if category == EventCategory.FLOOD
+            else None
+        )
+
         zones.append(RiskZoneResult(
-            position={
-                "lat": center_lat + offset.lat,
-                "lng": center_lng + offset.lng,
-            },
+            position={"lat": pos_lat, "lng": pos_lng},
             radius=round(radius, 1),
             risk_level=risk_level,
-            label=offset.zone_type,
+            label=zone_label,
             zone_type=category,
             affected_buildings=affected_buildings,
             estimated_loss=estimated_loss,
             population_affected=population_affected,
             recommendations=recommendations,
+            polygon=polygon,
         ))
     
     # Calculate totals
@@ -396,14 +838,10 @@ def calculate_risk_zones(
     # Format event name
     event_name = event_id.replace('-', ' ').replace('_', ' ').title()
     
-    # Default mitigation actions
-    mitigation_actions = [
-        {"action": "Immediate evacuation of critical zones", "priority": "urgent", "cost": 2.5, "risk_reduction": 35},
-        {"action": "Deploy emergency response teams", "priority": "urgent", "cost": 1.8, "risk_reduction": 25},
-        {"action": "Activate backup infrastructure", "priority": "high", "cost": 5.2, "risk_reduction": 20},
-        {"action": "Notify affected stakeholders", "priority": "high", "cost": 0.3, "risk_reduction": 10},
-        {"action": "Establish temporary facilities", "priority": "medium", "cost": 8.5, "risk_reduction": 15},
-    ]
+    # Scenario-specific mitigation actions (no evacuation for supply chain)
+    mitigation_actions = SCENARIO_MITIGATION_ACTIONS.get(
+        category, SCENARIO_MITIGATION_ACTIONS[EventCategory.GENERAL]
+    )
     
     # Data sources used
     data_sources = [
@@ -428,6 +866,8 @@ def calculate_risk_zones(
         zones=zones,
         mitigation_actions=mitigation_actions,
         data_sources=data_sources,
+        entity_type=entity_type,
+        entity_name=entity_name.strip() if entity_name else None,
     )
 
 
@@ -442,14 +882,18 @@ class RiskZoneCalculatorService:
         event_id: str,
         severity: float = 0.5,
         city_name: str = "Unknown City",
+        entity_name: Optional[str] = None,
+        entity_type_override: Optional[str] = None,
     ) -> StressTestResult:
-        """Calculate risk zones for a scenario."""
+        """Calculate risk zones for a scenario. Optionally use entity_name and entity_type_override (e.g. from KG)."""
         return calculate_risk_zones(
             center_lat=center_lat,
             center_lng=center_lng,
             event_id=event_id,
             severity=severity,
             city_name=city_name,
+            entity_name=entity_name,
+            entity_type_override=entity_type_override,
         )
 
 

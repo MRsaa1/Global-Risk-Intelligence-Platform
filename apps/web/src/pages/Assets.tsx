@@ -9,9 +9,11 @@ import {
   BuildingOffice2Icon,
   ArrowUpTrayIcon,
   ArrowDownTrayIcon,
+  InformationCircleIcon,
 } from '@heroicons/react/24/outline'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { assetsApi } from '../lib/api'
+import { assetsApi, seedApi, FinancialProductType } from '../lib/api'
+import { authService } from '../lib/auth'
 import EmptyState from '../components/EmptyState'
 import { VirtualList } from '../components/VirtualList'
 
@@ -78,7 +80,12 @@ function formatCurrency(value: number): string {
 
 export default function Assets() {
   const [search, setSearch] = useState('')
+  const [countryCode, setCountryCode] = useState<string>('')
+  const [city, setCity] = useState<string>('')
+  const [assetType, setAssetType] = useState<string>('')
+  const [financialProduct, setFinancialProduct] = useState<FinancialProductType | ''>('')
   const [showAddModal, setShowAddModal] = useState(false)
+  const [showDataSourcesModal, setShowDataSourcesModal] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [form, setForm] = useState({
     name: '',
@@ -112,10 +119,26 @@ export default function Assets() {
   }, [])
 
 
-  // Fetch assets from API
+  // Fetch filter options for Country, City, Type dropdowns
+  const { data: filterOptions } = useQuery({
+    queryKey: ['assets-filter-options'],
+    queryFn: () => assetsApi.getFilterOptions(),
+    staleTime: 60_000,
+  })
+
+  // Fetch assets from API (with country, city, type filters)
   const { data, isLoading, error } = useQuery({
-    queryKey: ['assets', search],
-    queryFn: () => assetsApi.list({ search, page: 1, page_size: 100 }),
+    queryKey: ['assets', search, countryCode, city, assetType, financialProduct],
+    queryFn: () =>
+      assetsApi.list({
+        search: search || undefined,
+        page: 1,
+        page_size: 100,
+        country_code: countryCode || undefined,
+        city: city || undefined,
+        asset_type: assetType || undefined,
+        financial_product: financialProduct || undefined,
+      }),
   })
 
   // Bulk import mutation
@@ -141,6 +164,20 @@ export default function Assets() {
     },
     onError: (err: any) => {
       alert(err?.response?.data?.detail || err?.message || 'Failed to create asset')
+    },
+  })
+
+  // Seed demo data (dev; requires admin)
+  const seedMutation = useMutation({
+    mutationFn: () => seedApi.run(authService.getToken()),
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ['assets'] })
+      queryClient.invalidateQueries({ queryKey: ['assets-filter-options'] })
+      const msg = data?.message || `Demo base loaded: ${data?.assets_created ?? 100}+ assets. Open any asset for 3D view and stress testing.`
+      alert(msg)
+    },
+    onError: (err: any) => {
+      alert(err?.response?.data?.detail || err?.message || 'Seed failed. Ensure you are logged in as admin and API is in non-production.')
     },
   })
 
@@ -179,9 +216,72 @@ export default function Assets() {
 
   const assets = data?.items || []
   const filteredAssets = assets.filter((asset) =>
-    asset.name?.toLowerCase().includes(search.toLowerCase()) ||
-    asset.city?.toLowerCase().includes(search.toLowerCase())
+    financialProduct ? asset.financial_product === financialProduct : true
   )
+
+  // Data sources modal - where to get data for Assets and Digital Twins (NVIDIA, Cesium 3D)
+  const renderDataSourcesModal = () => {
+    if (!mounted || typeof document === 'undefined' || !document.body || !showDataSourcesModal) return null
+    return createPortal(
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+        onClick={() => setShowDataSourcesModal(false)}
+      >
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95, y: 10 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          onClick={(e) => e.stopPropagation()}
+          className="bg-dark-card rounded-2xl border border-white/10 shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col"
+        >
+          <div className="flex items-center justify-between p-6 border-b border-white/10 flex-shrink-0">
+            <h2 className="text-xl font-display font-bold text-white">Data sources for Assets & Digital Twins</h2>
+            <button
+              onClick={() => setShowDataSourcesModal(false)}
+              className="text-dark-muted hover:text-white transition-colors cursor-pointer p-1"
+              aria-label="Close"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <div className="p-6 overflow-y-auto space-y-5 text-sm">
+            <section>
+              <h3 className="font-semibold text-white mb-2">Quick start</h3>
+              <ul className="text-dark-muted space-y-1 list-disc list-inside">
+                <li><strong className="text-white/90">Demo data:</strong> &quot;Load demo data&quot; on Assets (dev) or <code className="text-primary-400">POST /api/v1/seed/seed</code></li>
+                <li><strong className="text-white/90">CSV template:</strong> &quot;Download Template&quot; or <code className="text-primary-400">GET /api/v1/bulk/assets/template</code></li>
+                <li><strong className="text-white/90">Bulk import:</strong> &quot;Bulk Import&quot; → select CSV (UTF-8, up to 1000 rows, max 10 MB)</li>
+              </ul>
+            </section>
+            <section>
+              <h3 className="font-semibold text-white mb-2">Important CSV columns</h3>
+              <p className="text-dark-muted mb-2">Required: <code className="text-primary-400">name</code>. For 3D & Digital Twins: <code className="text-primary-400">latitude</code>, <code className="text-primary-400">longitude</code>, <code className="text-primary-400">city</code>, <code className="text-primary-400">country_code</code>. Recommended: <code className="text-primary-400">asset_type</code>, <code className="text-primary-400">valuation</code>, <code className="text-primary-400">gross_floor_area_m2</code>, <code className="text-primary-400">year_built</code>.</p>
+            </section>
+            <section>
+              <h3 className="font-semibold text-white mb-2">Where to get data</h3>
+              <p className="text-dark-muted mb-2"><strong className="text-white/90">Open:</strong> OpenAddresses, OpenStreetMap, cadastral/geoportals, Urban Atlas (EU). <strong className="text-white/90">Commercial:</strong> CoStar, JLL, CBRE, Vexcel, Nearmap. <strong className="text-white/90">Your own:</strong> ERP, CMMS, BIM (IFC) via <code className="text-primary-400">POST /assets/&#123;id&#125;/upload-bim</code>.</p>
+            </section>
+            <section>
+              <h3 className="font-semibold text-white mb-2">Premium 3D cities (Cesium)</h3>
+              <p className="text-dark-muted">New York, Sydney, San Francisco, Boston, Denver, Melbourne, Washington DC. Use exact <code className="text-primary-400">city</code> names for photogrammetry 3D; other cities use OSM Buildings with <code className="text-primary-400">latitude</code>/<code className="text-primary-400">longitude</code>.</p>
+            </section>
+            <section>
+              <h3 className="font-semibold text-white mb-2">NVIDIA (Earth-2, Physics NeMo, LLM)</h3>
+              <p className="text-dark-muted">Need: <code className="text-primary-400">latitude</code>, <code className="text-primary-400">longitude</code>, <code className="text-primary-400">city</code>, <code className="text-primary-400">gross_floor_area_m2</code> or <code className="text-primary-400">valuation</code>, <code className="text-primary-400">asset_type</code>, <code className="text-primary-400">year_built</code>.</p>
+            </section>
+            <p className="text-dark-muted pt-2 border-t border-white/10">
+              <strong className="text-amber-400/90">Full guide:</strong> <code className="text-primary-400">ASSET_DATA_SOURCES.md</code> in project root.
+            </p>
+          </div>
+        </motion.div>
+      </motion.div>,
+      document.body
+    )
+  }
 
   // Modal component - render it always via Portal
   const renderModal = () => {
@@ -401,6 +501,7 @@ export default function Assets() {
           </div>
         </div>
         {renderModal()}
+        {renderDataSourcesModal()}
       </>
     )
   }
@@ -420,6 +521,7 @@ export default function Assets() {
           </div>
         </div>
         {renderModal()}
+        {renderDataSourcesModal()}
       </>
     )
   }
@@ -431,8 +533,12 @@ export default function Assets() {
           <div className="flex items-center justify-between mb-8">
             <div>
               <h1 className="text-2xl font-display font-bold">Assets</h1>
-              <p className="text-dark-muted mt-1">
+              <p className="text-dark-muted mt-1 flex items-center gap-2 flex-wrap">
                 Manage your physical assets and their Digital Twins
+                <button type="button" onClick={() => setShowDataSourcesModal(true)} className="inline-flex items-center gap-1.5 text-white/40 hover:text-amber-400/90 transition-colors" title="Where to get data for Assets and Digital Twins (NVIDIA, Cesium 3D)">
+                  <InformationCircleIcon className="w-4 h-4 flex-shrink-0" />
+                  <span className="text-xs">Data sources</span>
+                </button>
               </p>
             </div>
             <div className="flex gap-3">
@@ -476,14 +582,28 @@ export default function Assets() {
           <EmptyState
             icon={BuildingOffice2Icon}
             title="No assets yet"
-            description="Get started by adding your first physical asset. Upload a BIM file to create a Digital Twin."
+            description="Load demo data (button below) to add 100+ sample buildings (Munich, Berlin, Madrid, New York, etc.), then open any asset for real 3D view and stress testing. Or add manually, Bulk Import, or use Data sources for CSV."
             action={{
               label: "Add Your First Asset",
               onClick: handleAddAsset,
             }}
           />
+          {import.meta.env.DEV && authService.getToken() && (
+            <div className="flex justify-center mt-4">
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => seedMutation.mutate()}
+                disabled={seedMutation.isPending}
+                className="px-4 py-2 bg-white/5 border border-white/20 text-white/70 rounded-xl text-sm hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+              >
+                {seedMutation.isPending ? 'Loading...' : 'Load demo data'}
+              </motion.button>
+            </div>
+          )}
         </div>
         {renderModal()}
+        {renderDataSourcesModal()}
       </>
     )
   }
@@ -494,8 +614,12 @@ export default function Assets() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-display font-bold">Assets</h1>
-          <p className="text-dark-muted mt-1">
-            Manage your physical assets and their Digital Twins
+          <p className="text-dark-muted mt-1 flex items-center gap-2 flex-wrap">
+            Manage your physical assets and their Digital Twins. Open any asset for 3D view and stress testing.
+            <button type="button" onClick={() => setShowDataSourcesModal(true)} className="inline-flex items-center gap-1.5 text-white/40 hover:text-amber-400/90 transition-colors" title="Where to get data for Assets and Digital Twins (NVIDIA, Cesium 3D)">
+              <InformationCircleIcon className="w-4 h-4 flex-shrink-0" />
+              <span className="text-xs">Data sources</span>
+            </button>
           </p>
         </div>
         <div className="flex gap-3">
@@ -521,6 +645,16 @@ export default function Assets() {
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
+            onClick={() => seedMutation.mutate()}
+            disabled={seedMutation.isPending}
+            className="flex items-center gap-2 px-5 py-2.5 bg-amber-500/20 border border-amber-500/40 text-amber-200 rounded-xl font-medium text-sm hover:bg-amber-500/30 transition-colors disabled:opacity-50"
+            title="Add 100+ sample buildings (Munich, Berlin, Madrid, NY…) for 3D view and stress testing"
+          >
+            {seedMutation.isPending ? 'Loading...' : 'Load demo data'}
+          </motion.button>
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
               onClick={(e) => handleAddAsset(e)}
             className="flex items-center gap-2 px-5 py-2.5 bg-primary-500 text-white rounded-xl font-medium text-sm hover:bg-primary-600 transition-colors cursor-pointer"
           >
@@ -539,9 +673,9 @@ export default function Assets() {
         className="hidden"
       />
 
-      {/* Filters */}
-      <div className="flex gap-4 mb-6">
-        <div className="flex-1 relative">
+      {/* Filters: Country, City, Type, Search, Financial product */}
+      <div className="flex flex-wrap gap-3 mb-6 items-center">
+        <div className="flex-1 min-w-[200px] relative">
           <MagnifyingGlassIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-muted" />
           <input
             type="text"
@@ -551,10 +685,63 @@ export default function Assets() {
             className="w-full pl-12 pr-4 py-3 bg-dark-card border border-dark-border rounded-xl text-white placeholder-dark-muted focus:outline-none focus:border-primary-500"
           />
         </div>
-        <button className="flex items-center gap-2 px-4 py-3 bg-dark-card border border-dark-border rounded-xl text-dark-muted hover:text-white transition-colors">
-          <FunnelIcon className="w-5 h-5" />
-          Filters
-        </button>
+        <div className="flex items-center gap-2 px-4 py-3 bg-dark-card border border-dark-border rounded-xl text-dark-muted min-w-[140px]">
+          <FunnelIcon className="w-5 h-5 flex-shrink-0" />
+          <select
+            value={countryCode}
+            onChange={(e) => setCountryCode(e.target.value)}
+            className="bg-transparent outline-none text-white/80 text-sm flex-1"
+            aria-label="Filter by country"
+          >
+            <option value="">All countries</option>
+            {(filterOptions?.countries ?? []).map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+        </div>
+        <div className="flex items-center gap-2 px-4 py-3 bg-dark-card border border-dark-border rounded-xl text-dark-muted min-w-[140px]">
+          <select
+            value={city}
+            onChange={(e) => setCity(e.target.value)}
+            className="bg-transparent outline-none text-white/80 text-sm flex-1"
+            aria-label="Filter by city"
+          >
+            <option value="">All cities</option>
+            {(filterOptions?.cities ?? []).map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+        </div>
+        <div className="flex items-center gap-2 px-4 py-3 bg-dark-card border border-dark-border rounded-xl text-dark-muted min-w-[160px]">
+          <select
+            value={assetType}
+            onChange={(e) => setAssetType(e.target.value)}
+            className="bg-transparent outline-none text-white/80 text-sm flex-1"
+            aria-label="Filter by asset type"
+          >
+            <option value="">All types</option>
+            {(filterOptions?.asset_types ?? []).map((t) => (
+              <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>
+            ))}
+          </select>
+        </div>
+        <div className="flex items-center gap-2 px-4 py-3 bg-dark-card border border-dark-border rounded-xl text-dark-muted min-w-[140px]">
+          <select
+            value={financialProduct}
+            onChange={(e) => setFinancialProduct(e.target.value as FinancialProductType | '')}
+            className="bg-transparent outline-none text-white/80 text-sm flex-1"
+            aria-label="Filter by financial product"
+          >
+            <option value="">All products</option>
+            <option value="mortgage">Mortgage</option>
+            <option value="property_insurance">Property insurance</option>
+            <option value="project_finance">Project finance</option>
+            <option value="infra_bond">Infra bond</option>
+            <option value="credit_facility">Credit facility</option>
+            <option value="lease">Lease</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
       </div>
 
       {/* Asset List - Use VirtualList for large lists */}
@@ -706,6 +893,7 @@ export default function Assets() {
 
       {/* Add Asset Modal - Rendered via Portal to document.body */}
       {renderModal()}
+      {renderDataSourcesModal()}
       
       {/* Alternative: Direct render (for debugging) - uncomment if Portal doesn't work */}
       {showAddModal && (

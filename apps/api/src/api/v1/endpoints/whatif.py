@@ -64,6 +64,7 @@ class CompareRequest(BaseModel):
     """Scenario comparison request."""
     scenario_ids: List[str]
     base_exposure: float = 100_000_000
+    parameters: Optional[Dict[str, float]] = None  # Override: event_severity, event_probability, portfolio_exposure, mitigation_level, recovery_speed, asset_correlation
 
 
 class OptimizeRequest(BaseModel):
@@ -324,6 +325,7 @@ async def compare_scenarios(request: CompareRequest):
     result = await whatif_simulator.compare_scenarios(
         scenario_ids=request.scenario_ids,
         base_exposure=request.base_exposure,
+        parameters=request.parameters,
     )
     
     return ComparisonResponse(
@@ -370,6 +372,12 @@ async def optimize_mitigation(request: OptimizeRequest):
 
 
 # ==================== CASCADE ANALYSIS ENDPOINTS ====================
+
+@router.get("")
+async def whatif_root():
+    """What-If service info; confirms /whatif is mounted."""
+    return {"service": "whatif", "cascade_simulate": "POST /api/v1/whatif/cascade/simulate"}
+
 
 @router.post("/cascade/nodes")
 async def add_cascade_node(request: CascadeNodeRequest):
@@ -508,7 +516,7 @@ async def simulate_cascade(request: CascadeSimRequest):
             node_impacts=result.node_impacts,
         )
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.get("/cascade/vulnerability", response_model=VulnerabilityResponse)
@@ -553,3 +561,47 @@ async def get_cascade_graph():
             for e in cascade_gnn_service.edges
         ],
     }
+
+
+def _edge_type_to_link_type(et: str) -> str:
+    """Map cascade EdgeType to EventRiskGraph link type."""
+    m = {"physical": "operational", "financial": "financial", "operational": "operational", "supply": "supply", "utility": "operational"}
+    return m.get((et or "").lower(), "operational")
+
+
+@router.get("/cascade/event-graph")
+async def get_event_graph_from_stress(
+    scenario_id: str = Query(..., description="Scenario ID (e.g. seismic_shock, credit_crunch)"),
+    city_id: str = Query("default", description="City ID for geodata; use 'default' when unknown"),
+):
+    """
+    Build cascade graph from stress test context (city + scenario) and return it
+    in EventRiskGraph format. Used when stressTestId/scenarioId are passed into
+    EventRiskGraph; on 4xx/5xx the frontend falls back to static templates.
+    """
+    try:
+        cascade_gnn_service.build_graph_for_city_scenario(
+            city_id=city_id or "default",
+            scenario_id=scenario_id,
+        )
+    except Exception as e:
+        logger.warning("build_graph_for_city_scenario failed", error=str(e))
+        raise HTTPException(status_code=400, detail=str(e))
+    nodes = []
+    for n in cascade_gnn_service.nodes.values():
+        nodes.append({
+            "id": n.id,
+            "name": n.name,
+            "type": n.node_type.value,
+            "value": max(1, n.value / 1e6),
+            "risk": n.risk_score / 100.0,
+        })
+    links = []
+    for e in cascade_gnn_service.edges:
+        links.append({
+            "source": e.source_id,
+            "target": e.target_id,
+            "strength": e.weight,
+            "type": _edge_type_to_link_type(e.edge_type.value),
+        })
+    return {"nodes": nodes, "links": links}

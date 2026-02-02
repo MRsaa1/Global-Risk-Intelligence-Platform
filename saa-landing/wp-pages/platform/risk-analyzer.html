@@ -1,0 +1,452 @@
+<!-- Paste into Elementor HTML widget (it supports <style>). -->
+<!-- Risk Analyzer module page — same corporate style as Platform (dark + gold). All content in English. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+  .saa-wp-bleed{
+    position:relative;
+    left:50%;
+    margin-left:-50vw;
+    width:100vw;
+    max-width:100vw;
+    background:#000;
+    overflow:hidden;
+  }
+
+  .saa-wp{
+    --bg-void:#000000;
+    --bg-deep:#0a0908;
+    --bg-surface:#0f0e0a;
+    --bg-elevated:#141310;
+    --bg-card:#1a1815;
+
+    --text-primary:#e4e4e7;
+    --text-secondary:#9a9a9a;
+    --text-muted:#6b6b6b;
+
+    --accent-primary:#C9A962;
+    --accent-primary-hover:#D4AF37;
+    --accent-primary-glow:rgba(201,169,98,0.3);
+
+    --border-subtle:rgba(255,255,255,0.06);
+    --border-light:rgba(255,255,255,0.1);
+
+    --font-sans:'Space Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    --font-display:'Space Grotesk',-apple-system,BlinkMacSystemFont,sans-serif;
+    --font-mono:'JetBrains Mono','SF Mono','Consolas',monospace;
+
+    --text-xs:11px;
+    --text-sm:12px;
+    --text-base:14px;
+    --text-lg:16px;
+    --text-xl:18px;
+    --text-2xl:24px;
+    --text-3xl:32px;
+
+    color:var(--text-primary);
+    font-family:var(--font-sans) !important;
+    line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+    text-rendering:optimizeLegibility;
+    font-weight:400;
+    letter-spacing:-0.01em !important;
+    font-feature-settings:'cv02','cv03','cv04','cv11';
+    font-optical-sizing:auto;
+  }
+
+  .saa-wp *{box-sizing:border-box}
+  .saa-wp a{color:var(--accent-primary);text-decoration:none}
+  .saa-wp a:hover{color:var(--accent-primary-hover);text-decoration:underline}
+  .saa-wp .mono{font-family:var(--font-mono)}
+
+  .saa-wp .content,
+  .saa-wp .content *{
+    font-family:var(--font-sans) !important;
+    font-feature-settings:inherit !important;
+    font-optical-sizing:inherit !important;
+    letter-spacing:inherit !important;
+  }
+  .saa-wp .mono,
+  .saa-wp .mono *{
+    font-family:var(--font-mono) !important;
+    letter-spacing:0.02em;
+  }
+
+  /* Unified font and size for body text (same as Team / Privacy Policy / Terms) */
+  .saa-wp .content{
+    font-family:var(--font-sans) !important;
+    font-size:14px !important;
+    font-weight:400 !important;
+    letter-spacing:-0.01em !important;
+    line-height:1.6 !important;
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+    text-rendering:optimizeLegibility;
+    font-feature-settings:'cv02','cv03','cv04','cv11';
+    font-optical-sizing:auto;
+  }
+  .saa-wp .content p,
+  .saa-wp .content p *,
+  .saa-wp .content li,
+  .saa-wp .content ul,
+  .saa-wp .content .card,
+  .saa-wp .content .card *,
+  .saa-wp .content .tagline,
+  .saa-wp .content .kpi div:not(.dot){
+    font-family:var(--font-sans) !important;
+    font-size:14px !important;
+    font-weight:400 !important;
+    letter-spacing:-0.01em !important;
+    line-height:1.6 !important;
+  }
+  .saa-wp .content .lead{font-size:var(--text-lg) !important}
+  .saa-wp .content strong{font-weight:600 !important;font-size:14px !important}
+  .saa-wp .content code.mono{font-family:var(--font-mono) !important;font-size:13px !important}
+
+  .saa-wp .bg{
+    position:absolute;
+    inset:-50%;
+    background:
+      radial-gradient(ellipse at 30% 20%, rgba(201, 169, 98, 0.05) 0%, transparent 50%),
+      radial-gradient(ellipse at 70% 80%, rgba(201, 169, 98, 0.03) 0%, transparent 50%);
+    animation:saaGradientMove 20s ease-in-out infinite;
+    pointer-events:none;
+    z-index:0;
+  }
+  @keyframes saaGradientMove{
+    0%,100%{transform:translate(0,0) scale(1)}
+    33%{transform:translate(2%,2%) scale(1.05)}
+    66%{transform:translate(-2%,-2%) scale(0.95)}
+  }
+
+  .saa-wp .content{
+    position:relative;
+    z-index:1;
+    max-width:1200px;
+    margin:0 auto;
+    padding:48px 24px 72px;
+  }
+
+  .saa-wp .topbar{
+    position:sticky;
+    top:0;
+    z-index:2;
+    background:rgba(10,9,8,0.85);
+    backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--border-subtle);
+  }
+  .saa-wp .topbar-inner{
+    max-width:1200px;
+    margin:0 auto;
+    padding:16px 24px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+  }
+  .saa-wp .brand{display:flex;align-items:center;gap:12px;text-decoration:none}
+  .saa-wp .brand-mark{
+    width:36px;height:36px;border:1px solid var(--accent-primary);border-radius:8px;
+    display:flex;align-items:center;justify-content:center;
+    font-family:var(--font-mono) !important;font-size:12px;font-weight:600;color:var(--accent-primary);
+  }
+  .saa-wp .brand-text{color:var(--text-primary);font-size:13px;font-weight:500}
+  .saa-wp .nav{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+  .saa-wp .nav a{
+    font-size:13px;color:var(--text-secondary);
+    padding:8px 10px;border-radius:8px;border:1px solid transparent;
+  }
+  .saa-wp .nav a:hover{color:var(--text-primary);border-color:var(--border-light);text-decoration:none}
+
+  .saa-wp .eyebrow{
+    font-size:var(--text-xs);
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+    color:var(--text-muted);
+    font-family:var(--font-mono) !important;
+  }
+  .saa-wp h1{
+    margin:12px 0 10px;
+    font-size:var(--text-3xl);
+    font-weight:700;
+    letter-spacing:-0.02em;
+    line-height:1.15;
+    font-family:var(--font-display) !important;
+    background:linear-gradient(135deg, var(--text-primary) 0%, var(--accent-primary) 50%, var(--text-primary) 100%);
+    background-size:200% auto;
+    -webkit-background-clip:text;
+    -webkit-text-fill-color:transparent;
+    background-clip:text;
+    animation:saaTitleShift 8s ease infinite;
+  }
+  @keyframes saaTitleShift{0%,100%{background-position:0% center}50%{background-position:200% center}}
+  .saa-wp h2{
+    margin:28px 0 12px;
+    font-size:var(--text-xl);
+    font-weight:600;
+    letter-spacing:-0.01em;
+    font-family:var(--font-display) !important;
+    color:var(--text-primary);
+  }
+  .saa-wp h3{
+    margin:0 0 6px;
+    font-size:var(--text-base);
+    font-weight:600;
+    color:var(--text-primary);
+    font-family:var(--font-display) !important;
+    letter-spacing:-0.01em;
+  }
+  .saa-wp .content p,
+  .saa-wp .content p *{
+    margin:10px 0;
+    color:var(--text-secondary) !important;
+    font-size:var(--text-base) !important;
+    font-weight:400 !important;
+    letter-spacing:-0.01em !important;
+  }
+  .saa-wp .lead{font-size:var(--text-lg) !important;color:var(--text-secondary);max-width:92ch}
+  .saa-wp .muted{color:var(--text-muted)}
+
+  .saa-wp .module-hero-visual{
+    width:100%;
+    max-width:720px;
+    height:200px;
+    margin:20px 0 28px;
+    border-radius:16px;
+    background:linear-gradient(135deg, rgba(212,175,55,0.05) 0%, rgba(10,14,23,0.8) 100%);
+    border:1px solid var(--border-subtle);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    overflow:hidden;
+    position:relative;
+  }
+  .saa-wp .module-hero-visual .visual-glow{
+    position:absolute;
+    width:120px;
+    height:120px;
+    background:radial-gradient(circle, rgba(212,175,55,0.15) 0%, transparent 70%);
+    border-radius:50%;
+    filter:blur(20px);
+    animation:visualPulseRisk 3s ease-in-out infinite;
+  }
+  @keyframes visualPulseRisk{
+    0%,100%{opacity:0.5;transform:scale(1)}
+    50%{opacity:0.8;transform:scale(1.1)}
+  }
+  @keyframes lineGrowRisk{
+    0%{stroke-dashoffset:220}
+    100%{stroke-dashoffset:0}
+  }
+  .saa-wp .module-hero-visual svg{
+    width:100%;
+    height:100%;
+    object-fit:contain;
+    padding:0 24px;
+  }
+
+  .saa-wp .grid{display:grid;gap:16px}
+  @media (min-width: 900px){ .saa-wp .grid.cols-2{grid-template-columns:1fr 1fr} }
+  .saa-wp .card{
+    background:var(--bg-elevated);
+    border:1px solid var(--border-subtle);
+    border-radius:12px;
+    padding:16px;
+    transition:all .25s ease;
+  }
+  .saa-wp .card:hover{border-color:rgba(201,169,98,.28);box-shadow:0 12px 30px rgba(0,0,0,.35);transform:translateY(-2px)}
+  .saa-wp ul{margin:12px 0 0 18px;padding-left:20px;color:var(--text-secondary);line-height:1.8;font-size:var(--text-base)}
+  .saa-wp ul li{margin:0 0 8px}
+  .saa-wp .hr{height:1px;background:var(--border-subtle);margin:20px 0}
+  .saa-wp .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+  .saa-wp .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:10px;
+    padding:10px 14px;
+    border-radius:10px;
+    border:1px solid var(--border-light);
+    background:transparent;
+    color:var(--text-primary);
+    font-size:13px;
+    font-weight:500;
+    cursor:pointer;
+    transition:all .2s ease;
+    text-decoration:none;
+  }
+  .saa-wp .btn:hover{border-color:var(--accent-primary);color:var(--accent-primary);text-decoration:none}
+  .saa-wp .btn.primary{background:var(--accent-primary);border-color:var(--accent-primary);color:#000}
+  .saa-wp .btn.primary:hover{background:var(--accent-primary-hover);border-color:var(--accent-primary-hover);color:#000}
+  .saa-wp .pill{
+    display:inline-flex;align-items:center;gap:8px;
+    padding:6px 10px;
+    border:1px solid var(--border-subtle);
+    border-radius:999px;
+    background:rgba(255,255,255,0.02);
+    color:var(--text-secondary);
+    font-size:12px;
+    font-family:var(--font-mono) !important;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    margin:4px 8px 4px 0;
+  }
+  .saa-wp .page-footer{ margin-top:24px;padding-top:20px;border-top:1px solid var(--border-subtle);display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:20px }
+  .saa-wp .page-footer-copy{ color:var(--text-muted);font-size:12px }
+  .saa-wp .page-footer-legal{ display:flex;align-items:center;gap:8px;flex-wrap:wrap }
+  .saa-wp .page-footer-legal a{ color:var(--text-muted);font-size:12px;text-decoration:none }
+  .saa-wp .page-footer-legal a:hover{ color:var(--text-secondary) }
+  .saa-wp .page-footer-badge img{ height:32px;width:auto;display:block }
+  .saa-wp .page-footer-badge:hover img{ opacity:0.9 }
+</style>
+
+<div class="saa-wp-bleed">
+  <div class="saa-wp">
+    <div class="bg" aria-hidden="true"></div>
+
+    <div class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="/" aria-label="SAA Alliance home">
+          <div class="brand-mark">SAA</div>
+          <div class="brand-text">Scientific Analytics Alliance</div>
+        </a>
+        <nav class="nav" aria-label="SAA navigation">
+          <a href="/about/">About</a>
+          <a href="/platform/">Platform</a>
+          <a href="/how-it-works/">How it works</a>
+          <a href="/team/">Team</a>
+          <a href="/contact/">Contact</a>
+        </nav>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="eyebrow">Platform · Risk Management</div>
+      <h1>SAA Risk Analyzer</h1>
+      <p class="lead">
+        Institutional portfolio risk management platform — VaR/CVaR, stress tests, PCA, backtesting, multi-source market data, JWT + RBAC. Production-ready.
+      </p>
+
+      <div class="module-hero-visual" aria-hidden="true">
+        <div class="visual-glow"></div>
+        <svg viewBox="0 0 400 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="gaugeGradRisk" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#22c55e"/>
+              <stop offset="50%" stop-color="#d4af37"/>
+              <stop offset="100%" stop-color="#ef4444"/>
+            </linearGradient>
+          </defs>
+          <path d="M100 140 A100 100 0 0 1 300 140" stroke="url(#gaugeGradRisk)" stroke-width="12" fill="none" stroke-linecap="round" opacity="0.3"/>
+          <path d="M100 140 A100 100 0 0 1 240 60" stroke="#d4af37" stroke-width="12" fill="none" stroke-linecap="round" style="stroke-dasharray: 220; stroke-dashoffset: 220; animation: lineGrowRisk 1.5s ease forwards;"/>
+          <line x1="200" y1="140" x2="200" y2="60" stroke="#d4af37" stroke-width="3" stroke-linecap="round" transform="rotate(50 200 140)"/>
+          <circle cx="200" cy="140" r="10" fill="#d4af37"/>
+          <text x="100" y="160" fill="#22c55e" font-size="10" opacity="0.7">LOW</text>
+          <text x="200" y="160" fill="#d4af37" font-size="10" text-anchor="middle" opacity="0.7">MEDIUM</text>
+          <text x="300" y="160" fill="#ef4444" font-size="10" text-anchor="end" opacity="0.7">HIGH</text>
+          <text x="200" y="110" fill="#d4af37" font-size="24" font-weight="bold" text-anchor="middle">VaR</text>
+        </svg>
+      </div>
+
+      <div class="btns">
+        <a class="btn primary" href="https://analyzer.saa-alliance.com/" target="_blank" rel="noopener">Launch Risk Analyzer</a>
+        <a class="btn" href="/platform/">Back to Platform</a>
+      </div>
+
+      <h2>About</h2>
+      <p>
+        SAA Risk Analyzer is a full-featured portfolio risk analytics service: a single Go backend and React web interface cover risk metrics, portfolio management, market data, and secure access. The risk engine (Gonum) computes VaR/CVaR using historical and parametric methods, correlations, PCA, stress-test scenarios, and backtesting; market data is pulled from multiple APIs with automatic fallback; authentication is JWT, passwords are Argon2id, roles are RBAC.
+      </p>
+
+      <h2>Capabilities</h2>
+
+      <h3>Risk analytics</h3>
+      <ul>
+        <li><strong>VaR</strong> — Value at Risk: historical and parametric methods, 95% / 99% / 99.9%, 1- and 10-day horizon</li>
+        <li><strong>CVaR</strong> — Conditional VaR (Expected Shortfall), tail risk estimate</li>
+        <li><strong>Correlations</strong> — Asset correlation matrix, interactive heatmap</li>
+        <li><strong>PCA</strong> — Principal Component Analysis for factor risk decomposition</li>
+        <li><strong>Stress tests</strong> — Scenarios: crisis, market crash, recession; configurable shocks</li>
+        <li><strong>Backtesting</strong> — VaR model validation (Kupiec POF, Christoffersen)</li>
+        <li><strong>Risk dashboard</strong> — VaR, CVaR, volatility, asset contribution to risk</li>
+      </ul>
+
+      <h3>Portfolios and data</h3>
+      <ul>
+        <li><strong>Portfolios</strong> — Create, edit, delete; multiple portfolios</li>
+        <li><strong>Positions</strong> — Add, update, remove positions by asset</li>
+        <li><strong>Market data</strong> — CoinGecko, Binance, Yahoo Finance with automatic fallback when a source is unavailable</li>
+        <li><strong>Import</strong> — Upload positions and prices (CSV), bulk update</li>
+      </ul>
+
+      <h3>Security and infrastructure</h3>
+      <ul>
+        <li><strong>Authentication</strong> — JWT (access + refresh), stored in localStorage</li>
+        <li><strong>Passwords</strong> — Argon2id (time=1, memory=64MB), 16-byte salt</li>
+        <li><strong>RBAC</strong> — Roles: <code class="mono">admin</code>, <code class="mono">analyst</code>, <code class="mono">viewer</code></li>
+        <li><strong>CORS, rate limiting</strong> — Configurable policies</li>
+        <li><strong>Logging</strong> — Structured logs (Zap), levels and format in config</li>
+      </ul>
+
+      <h2>Technology stack</h2>
+      <div class="grid cols-2">
+        <div class="card">
+          <h3>Backend</h3>
+          <p>Go 1.22, Gin, GORM, Gonum, JWT (golang-jwt), Argon2id (crypto), Viper, Zap</p>
+        </div>
+        <div class="card">
+          <h3>Frontend</h3>
+          <p>React 18, TypeScript 5.2, Vite 5, Tailwind CSS, Zustand, Recharts, Framer Motion, Axios</p>
+        </div>
+        <div class="card">
+          <h3>Database</h3>
+          <p>PostgreSQL 15</p>
+        </div>
+        <div class="card">
+          <h3>Proxy (optional)</h3>
+          <p>Caddy 2 or Nginx</p>
+        </div>
+      </div>
+
+      <h2>Architecture</h2>
+      <p>
+        Browser (React SPA, Vite dev: 5173 / Docker: 3001) talks to the Backend (Go + Gin on :8084) over HTTP/REST. Backend exposes handlers for portfolio, risk, health; services for risk (VaR, CVaR, correlation, PCA, stress, backtest, returns) and market data (multi-API fallback); auth (JWT, Argon2id, RBAC) and jobs. PostgreSQL (risk_db) stores assets, prices, portfolios, positions, jobs via GORM.
+      </p>
+
+      <h2>Quick start</h2>
+      <p>
+        Requirements: Go 1.22+, Node.js 18+, PostgreSQL 15+. Clone repo, run <code class="mono">go build</code> in backend and <code class="mono">npm install</code> in frontend; create database <code class="mono">risk_db</code>; set env (DB_*, PORT, JWT_SECRET); start backend and frontend. Docker: <code class="mono">docker-compose up -d --build</code>. API: http://localhost:8084, Frontend: http://localhost:3001.
+      </p>
+
+      <h2>API (main endpoints)</h2>
+      <p class="muted">Base URL: <code class="mono">/api</code></p>
+      <ul>
+        <li><strong>GET</strong> <code class="mono">/health</code> — Service health</li>
+        <li><strong>GET/POST/PUT/DELETE</strong> <code class="mono">/portfolios</code>, <code class="mono">/portfolios/:id</code> — Portfolio CRUD</li>
+        <li><strong>POST/PUT/DELETE</strong> <code class="mono">/portfolios/:id/positions</code> — Positions</li>
+        <li><strong>GET</strong> <code class="mono">/market/price/:symbol</code> — Current price</li>
+        <li><strong>GET</strong> <code class="mono">/risk/dashboard?portfolio_id=</code> — Risk dashboard</li>
+        <li><strong>POST</strong> <code class="mono">/risk/var</code>, <code class="mono">/risk/cvar</code>, <code class="mono">/risk/correlation</code> — VaR, CVaR, correlation</li>
+      </ul>
+
+      <div class="hr"></div>
+      <div class="btns">
+        <a class="btn primary" href="https://analyzer.saa-alliance.com/" target="_blank" rel="noopener">Launch Risk Analyzer</a>
+        <a class="btn" href="/platform/">All modules</a>
+        <a class="btn" href="/contact/">Contact</a>
+      </div>
+
+      <footer class="page-footer" role="contentinfo">
+        <span class="page-footer-copy">© 2025 Scientific Analytics Alliance • Premium Research & Wealth Intelligence</span>
+        <div class="page-footer-legal">
+          <a href="/privacy-policy/">Privacy Policy</a>
+          <span class="muted" style="font-size:12px">•</span>
+          <a href="/terms/">Terms of Use</a>
+        </div>
+        <a href="https://www.nvidia.com/en-us/startups/" target="_blank" rel="noopener" class="page-footer-badge" aria-label="NVIDIA Inception Program">
+          <img src="https://saa-alliance.com/wp-content/uploads/2026/01/nvidia-inception-program-badge-rgb-1c-blk-for-screen.png" alt="NVIDIA Inception Program Member" loading="lazy" decoding="async">
+        </a>
+      </footer>
+    </div>
+  </div>
+</div>

@@ -25,7 +25,7 @@ services:
     ports:
       - "9002:9002"
     environment:
-      - DATABASE_URL=sqlite:///./prod.db
+      - DATABASE_URL=sqlite:///./data/prod.db
       - USE_SQLITE=true
       - DEBUG=false
       - CORS_ORIGINS=["https://risk.saa-alliance.com"]

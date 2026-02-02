@@ -290,4 +290,10 @@ If the answer to any of these is "no" — reconsider.
 
 ---
 
+## Related
+
+- **Product Model (3D + AI in FinTech):** [docs/PRODUCT_MODEL_3D_FINTECH.md](docs/PRODUCT_MODEL_3D_FINTECH.md) — шесть направлений: оценка рисков по физическим активам, кредитование/страхование сложных объектов, REIT, fraud, project finance, иммерсивная аналитика.
+
+---
+
 *Last updated: January 2026*

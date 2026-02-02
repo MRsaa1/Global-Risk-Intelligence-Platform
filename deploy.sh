@@ -54,13 +54,16 @@ echo "Project extracted"
 cat > apps/api/.env << 'EOF'
 DATABASE_URL=sqlite:///./prod.db
 USE_SQLITE=true
+ENVIRONMENT=production
 DEBUG=false
-CORS_ORIGINS=["https://risk.saa-alliance.com","http://localhost:5180"]
-NVIDIA_API_KEY=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
+CORS_ORIGINS=["https://risk.saa-alliance.com"]
+
+# Secrets MUST be provided out-of-band (do not commit keys):
+# NVIDIA_API_KEY=...
+# NVIDIA_FOURCASTNET_API_KEY=...
+# NVIDIA_FLUX_API_KEY=...
+# NGC_API_KEY=...
 NVIDIA_LLM_API_URL=https://integrate.api.nvidia.com/v1
-NVIDIA_FOURCASTNET_API_KEY=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
-NVIDIA_FLUX_API_KEY=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
-NGC_API_KEY=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
 NVIDIA_MODE=cloud
 EOF
 
@@ -99,12 +102,12 @@ pkill -f "npm run preview" 2>/dev/null || true
 cd apps/api
 source .venv/bin/activate
 export USE_SQLITE=true
-nohup python -m uvicorn src.main:app --host 0.0.0.0 --port 9002 > /tmp/api.log 2>&1 &
+nohup python -m uvicorn src.main:app --host 127.0.0.1 --port 9002 > /tmp/api.log 2>&1 &
 echo "Backend started on port 9002"
 
 # Start frontend (production build)
 cd ../web
-nohup npm run preview -- --host 0.0.0.0 --port 5180 > /tmp/web.log 2>&1 &
+nohup ./node_modules/.bin/serve -s dist -l 5180 > /tmp/web.log 2>&1 &
 echo "Frontend started on port 5180"
 ENDSSH
 

@@ -133,6 +133,40 @@ class FinancialAnalysisResponse(BaseModel):
     risk_summary: dict
 
 
+# Credit Limit Schemas (Phase 0.2)
+class CreditLimitRequest(BaseModel):
+    """Request for credit limit calculation."""
+    asset_id: Optional[str] = None
+    pd: float = Field(..., ge=0, le=1, description="Probability of Default")
+    lgd: float = Field(..., ge=0, le=1, description="Loss Given Default")
+    ead: float = Field(..., ge=0, description="Exposure at Default")
+    collateral_value: float = Field(..., ge=0, description="Collateral value")
+    tenure_years: int = Field(default=10, ge=1, le=30, description="Loan tenure in years")
+    risk_appetite: str = Field(default="moderate", description="Risk appetite: conservative, moderate, aggressive")
+
+
+class CreditLimitResponse(BaseModel):
+    """Response for credit limit calculation."""
+    suggested_limit: float
+    max_limit: float
+    risk_adjusted_limit: float
+    collateral_coverage: float
+    limit_utilization_recommended: float
+    rating: str
+    factors: dict
+
+
+# Insurance Premium Schemas (Phase 0.2)
+class InsurancePremiumRequest(BaseModel):
+    """Request for insurance premium calculation."""
+    asset_id: Optional[str] = None
+    base_rate: float = Field(default=0.005, ge=0, le=0.1, description="Base premium rate (e.g., 0.005 = 0.5%)")
+    risk_score: float = Field(..., ge=0, le=100, description="Combined risk score 0-100")
+    sum_insured: float = Field(..., ge=0, description="Sum insured amount")
+    deductible: float = Field(default=0, ge=0, description="Deductible amount")
+    coverage_type: str = Field(default="property", description="Coverage type: property, liability, business_interruption, natural_disaster, comprehensive")
+
+
 # ==================== ENDPOINTS ====================
 
 @router.post("/climate-stress", response_model=ClimateStressResponse)
@@ -168,7 +202,7 @@ async def run_climate_stress_test(
     for asset_id in request.asset_ids:
         # Get asset
         result = await db.execute(
-            select(Asset).where(Asset.id == asset_id)
+            select(Asset).where(Asset.id == str(asset_id))
         )
         asset = result.scalar_one_or_none()
         
@@ -236,6 +270,7 @@ async def run_climate_stress_test(
 @router.post("/cascade", response_model=CascadeSimulationResponse)
 async def run_cascade_simulation(
     request: CascadeSimulationRequest,
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Simulate cascade failure through the dependency network.
@@ -256,9 +291,30 @@ async def run_cascade_simulation(
         )
         
         # Calculate hidden risk multiplier
-        # Compare cascade exposure to direct exposure
-        # (In production, this would use actual asset valuations)
-        direct_exposure = 10_000_000  # Placeholder
+        # Compare cascade exposure to direct exposure from actual asset valuation
+        direct_exposure = 0.0
+        
+        # Try to get the trigger asset's valuation from DB
+        asset_result = await db.execute(
+            select(Asset).where(Asset.id == request.trigger_node_id)
+        )
+        trigger_asset = asset_result.scalar_one_or_none()
+        
+        if trigger_asset and trigger_asset.current_valuation:
+            direct_exposure = trigger_asset.current_valuation
+        else:
+            # If trigger is not an asset (e.g., infrastructure node),
+            # estimate direct exposure as average valuation or use fallback
+            avg_result = await db.execute(
+                select(Asset.current_valuation).where(Asset.current_valuation.isnot(None))
+            )
+            valuations = [v[0] for v in avg_result.fetchall() if v[0]]
+            if valuations:
+                direct_exposure = sum(valuations) / len(valuations)
+            else:
+                # Last resort fallback
+                direct_exposure = 10_000_000
+        
         hidden_multiplier = result.total_exposure / direct_exposure if direct_exposure > 0 else 1.0
         
         return CascadeSimulationResponse(
@@ -374,4 +430,108 @@ async def run_financial_analysis(
             "lgd_factors": lgd_result.factors,
             "valuation_factors": valuation_result.factors if valuation_result else None,
         },
+    )
+
+
+@router.post("/credit-limit", response_model=CreditLimitResponse)
+async def calculate_credit_limit(
+    request: CreditLimitRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Calculate suggested credit limit based on risk parameters.
+    
+    Uses PD, LGD, collateral value, and risk appetite to determine
+    the appropriate credit limit for an asset or facility.
+    
+    Risk Appetite Options:
+    - conservative: 70% of calculated limit
+    - moderate: 100% of calculated limit  
+    - aggressive: 130% of calculated limit
+    """
+    result = financial_model_service.calculate_credit_limit(
+        pd=request.pd,
+        lgd=request.lgd,
+        ead=request.ead,
+        collateral_value=request.collateral_value,
+        tenure_years=request.tenure_years,
+        risk_appetite=request.risk_appetite,
+    )
+    
+    # If asset_id provided, update suggested_credit_limit on asset
+    if request.asset_id:
+        asset_result = await db.execute(
+            select(Asset).where(Asset.id == request.asset_id)
+        )
+        asset = asset_result.scalar_one_or_none()
+        if asset:
+            asset.suggested_credit_limit = result.suggested_limit
+            await db.commit()
+    
+    return CreditLimitResponse(
+        suggested_limit=result.suggested_limit,
+        max_limit=result.max_limit,
+        risk_adjusted_limit=result.risk_adjusted_limit,
+        collateral_coverage=result.collateral_coverage,
+        limit_utilization_recommended=result.limit_utilization_recommended,
+        rating=result.rating,
+        factors=result.factors,
+    )
+
+
+class InsurancePremiumResponse(BaseModel):
+    """Response for insurance premium calculation."""
+    annual_premium: float
+    monthly_premium: float
+    base_premium: float
+    risk_loading: float
+    coverage_loading: float
+    deductible_discount: float
+    premium_breakdown: dict
+
+
+@router.post("/insurance-premium", response_model=InsurancePremiumResponse)
+async def calculate_insurance_premium(
+    request: InsurancePremiumRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Calculate insurance premium based on risk and coverage parameters.
+    
+    Premium is calculated as:
+    Base Premium + Risk Loading + Coverage Loading - Deductible Discount
+    
+    Coverage Types:
+    - property: Standard property coverage (1.0x)
+    - liability: Liability coverage (0.8x)
+    - business_interruption: BI coverage (1.2x)
+    - natural_disaster: Natural disaster coverage (1.5x)
+    - comprehensive: All-risk coverage (1.8x)
+    """
+    result = financial_model_service.calculate_insurance_premium(
+        base_rate=request.base_rate,
+        risk_score=request.risk_score,
+        sum_insured=request.sum_insured,
+        deductible=request.deductible,
+        coverage_type=request.coverage_type,
+    )
+    
+    # If asset_id provided, update suggested_premium_annual on asset
+    if request.asset_id:
+        asset_result = await db.execute(
+            select(Asset).where(Asset.id == request.asset_id)
+        )
+        asset = asset_result.scalar_one_or_none()
+        if asset:
+            asset.suggested_premium_annual = result.annual_premium
+            await db.commit()
+    
+    return InsurancePremiumResponse(
+        annual_premium=result.annual_premium,
+        monthly_premium=result.monthly_premium,
+        base_premium=result.base_premium,
+        risk_loading=result.risk_loading,
+        coverage_loading=result.coverage_loading,
+        deductible_discount=result.deductible_discount,
+        premium_breakdown=result.premium_breakdown,
     )

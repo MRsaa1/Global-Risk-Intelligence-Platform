@@ -18,6 +18,7 @@ import {
   ArrowPathIcon,
   ExclamationTriangleIcon,
   ShieldCheckIcon,
+  DocumentPlusIcon,
 } from '@heroicons/react/24/outline'
 
 // Types
@@ -38,7 +39,8 @@ interface GraphEdge {
   weight: number
 }
 
-interface CascadeResult {
+/** Cascade simulation result - can be added to report */
+export interface CascadeResult {
   trigger_node: string
   trigger_severity: number
   simulation_steps: number
@@ -224,9 +226,15 @@ const sectorIcons: Record<string, (ctx: CanvasRenderingContext2D, x: number, y: 
 export interface CascadeVisualizerProps {
   cityId?: string
   scenarioId?: string
+  /** Embed mode: hide controls, auto-run simulate+vulnerability, fixed height, show metrics+tables under graph */
+  embed?: boolean
+  /** Graph height in embed mode; default 500 */
+  height?: number
+  /** Callback when user clicks "Add to Report" - receives current simulation result */
+  onAddToReport?: (data: CascadeResult) => void
 }
 
-export default function CascadeVisualizer({ cityId, scenarioId }: CascadeVisualizerProps = {}) {
+export default function CascadeVisualizer({ cityId, scenarioId, embed = false, height: embedHeight = 500, onAddToReport }: CascadeVisualizerProps = {}) {
   const graphRef = useRef<ForceGraphMethods>()
   const containerRef = useRef<HTMLDivElement>(null)
   const [dimensions, setDimensions] = useState({ width: 1200, height: 896 })
@@ -270,12 +278,15 @@ export default function CascadeVisualizer({ cityId, scenarioId }: CascadeVisuali
         body: JSON.stringify({ city_id: cityId!, scenario_id: scenarioId! }),
       })
       if (!res.ok) throw new Error('Failed to build graph from context')
-      return res.json() as Promise<{ nodes: GraphNode[]; edges: GraphEdge[] }>
+      return res.json() as Promise<{ status?: string; nodes: GraphNode[]; edges: GraphEdge[] }>
     },
     onSuccess: (data) => {
-      setGraphData({ nodes: data.nodes, edges: data.edges })
-      if (data.nodes.length > 0) setTriggerNode(data.nodes[0].id)
+      setGraphData({ nodes: data.nodes || [], edges: data.edges || [] })
+      if (data.nodes?.length > 0) setTriggerNode(data.nodes[0].id)
       simulateMutation.reset()
+      if (embed && data.nodes?.length) {
+        simulateMutation.mutate({ trigger_node_id: data.nodes[0].id, trigger_severity: 0.8 })
+      }
     },
   })
   
@@ -291,15 +302,15 @@ export default function CascadeVisualizer({ cityId, scenarioId }: CascadeVisuali
     }
   }
   
-  // Simulate cascade
+  // Simulate cascade; in embed, mutate({ trigger_node_id, trigger_severity }) can be passed
   const simulateMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (vars?: { trigger_node_id?: string; trigger_severity?: number }) => {
       const res = await fetch('/api/v1/whatif/cascade/simulate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          trigger_node_id: triggerNode,
-          trigger_severity: triggerSeverity,
+          trigger_node_id: vars?.trigger_node_id ?? triggerNode,
+          trigger_severity: vars?.trigger_severity ?? triggerSeverity,
           max_steps: 10,
           propagation_threshold: 0.1,
         }),
@@ -307,6 +318,7 @@ export default function CascadeVisualizer({ cityId, scenarioId }: CascadeVisuali
       if (!res.ok) throw new Error('Failed to simulate cascade')
       return res.json() as Promise<CascadeResult>
     },
+    onSuccess: () => { if (embed) vulnerabilityMutation.mutate() },
   })
   
   // Vulnerability analysis
@@ -449,7 +461,7 @@ export default function CascadeVisualizer({ cityId, scenarioId }: CascadeVisuali
     // Label with background - just number
     const label = node.id.replace('asset_', '')
     const labelFontSize = 11
-    ctx.font = `600 ${labelFontSize}px Inter, system-ui, sans-serif`
+    ctx.font = `600 ${labelFontSize}px "Space Grotesk", system-ui, sans-serif`
     const textWidth = ctx.measureText(label).width
     const padding = 6
     const labelY = y + size + 18
@@ -551,7 +563,8 @@ export default function CascadeVisualizer({ cityId, scenarioId }: CascadeVisuali
     <div className="space-y-4">
       {/* Graph Container - FULL WIDTH */}
       <div className="glass rounded-2xl p-4">
-        {/* Header */}
+        {/* Header - hidden in embed */}
+        {!embed && (
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <ShareIcon className="w-5 h-5 text-purple-400" />
@@ -587,12 +600,13 @@ export default function CascadeVisualizer({ cityId, scenarioId }: CascadeVisuali
             </button>
           </div>
         </div>
+        )}
         
-        {/* Main Graph - LARGER */}
+        {/* Main Graph - LARGER; fixed height in embed */}
         <div 
           ref={containerRef}
           className="bg-[#050a12] rounded-xl border border-white/10 overflow-hidden relative"
-          style={{ height: dimensions.height }}
+          style={{ height: embed ? embedHeight : dimensions.height }}
         >
           {/* Grid background */}
           <div 
@@ -620,7 +634,7 @@ export default function CascadeVisualizer({ cityId, scenarioId }: CascadeVisuali
               ref={graphRef}
               graphData={forceGraphData}
               width={dimensions.width}
-              height={dimensions.height}
+              height={embed ? embedHeight : dimensions.height}
               backgroundColor="transparent"
               nodeCanvasObject={nodeCanvasObject}
               nodePointerAreaPaint={(node, color, ctx) => {
@@ -680,9 +694,83 @@ export default function CascadeVisualizer({ cityId, scenarioId }: CascadeVisuali
             </div>
           ))}
         </div>
+
+        {/* Embed: metrics and tables (from simulate / vulnerability) */}
+        {embed && simulateMutation.data && (
+          <div className="mt-4 space-y-4">
+            <p className="text-white/40 text-[10px]">Cascade metrics from simulation. Critical nodes and containment from Cascade simulate/vulnerability.</p>
+            <div className="grid grid-cols-4 gap-3">
+              <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+                <div className="text-white/50 text-[10px] uppercase">Affected nodes</div>
+                <div className="text-white text-lg font-medium">{simulateMutation.data.affected_count}</div>
+              </div>
+              <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+                <div className="text-white/50 text-[10px] uppercase">Est. cascade loss</div>
+                <div className="text-amber-400 text-lg font-medium">{formatCurrency(simulateMutation.data.total_loss)}</div>
+              </div>
+              <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+                <div className="text-white/50 text-[10px] uppercase">Critical path</div>
+                <div className="text-red-400/90 text-lg font-medium">{simulateMutation.data.critical_nodes?.length ?? 0}</div>
+              </div>
+              <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+                <div className="text-white/50 text-[10px] uppercase">Containment points</div>
+                <div className="text-green-400/90 text-lg font-medium">{simulateMutation.data.containment_points?.length ?? 0}</div>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-white/5 rounded-lg border border-white/10 overflow-hidden">
+                <div className="text-white/70 text-xs uppercase tracking-wider px-3 py-2 border-b border-white/10">Critical nodes</div>
+                <div className="max-h-32 overflow-y-auto">
+                  {(simulateMutation.data.critical_nodes?.length ? simulateMutation.data.critical_nodes : (vulnerabilityMutation.data?.most_critical_nodes?.slice(0, 5).map(x => x.node_id) ?? [])).map((id) => {
+                    const n = graphData.nodes.find(nn => nn.id === id)
+                    const imp = simulateMutation.data?.node_impacts?.[id]
+                    const crit = vulnerabilityMutation.data?.most_critical_nodes?.find(m => m.node_id === id)?.criticality
+                    return (
+                      <div key={id} className="px-3 py-1.5 flex justify-between text-xs border-b border-white/5">
+                        <span className="text-white/80">{n?.name ?? id}</span>
+                        <span className="text-white/50">{(imp != null ? `${(imp * 100).toFixed(0)}%` : crit != null ? `${(crit * 100).toFixed(0)}%` : '—')} · {n?.sector ?? '—'}</span>
+                      </div>
+                    )
+                  })}
+                  {(!simulateMutation.data.critical_nodes?.length && !vulnerabilityMutation.data?.most_critical_nodes?.length) && (
+                    <div className="px-3 py-2 text-white/40 text-xs">None identified</div>
+                  )}
+                </div>
+              </div>
+              <div className="bg-white/5 rounded-lg border border-white/10 overflow-hidden">
+                <div className="text-white/70 text-xs uppercase tracking-wider px-3 py-2 border-b border-white/10">Containment points</div>
+                <div className="max-h-32 overflow-y-auto">
+                  {(simulateMutation.data.containment_points ?? []).map((id) => {
+                    const n = graphData.nodes.find(nn => nn.id === id)
+                    return (
+                      <div key={id} className="px-3 py-1.5 flex justify-between text-xs border-b border-white/5">
+                        <span className="text-white/80">{n?.name ?? id}</span>
+                        <span className="text-white/50">{n?.sector ?? '—'}</span>
+                      </div>
+                    )
+                  })}
+                  {(simulateMutation.data.containment_points?.length ?? 0) === 0 && (
+                    <div className="px-3 py-2 text-white/40 text-xs">None identified</div>
+                  )}
+                </div>
+              </div>
+            </div>
+            {onAddToReport && (
+              <button
+                type="button"
+                onClick={() => onAddToReport(simulateMutation.data!)}
+                className="mt-4 w-full py-2.5 bg-primary-500/20 hover:bg-primary-500/30 border border-primary-500/40 text-primary-300 rounded-lg text-sm font-medium flex items-center justify-center gap-2"
+              >
+                <DocumentPlusIcon className="w-4 h-4" />
+                Add to Report
+              </button>
+            )}
+          </div>
+        )}
       </div>
       
-      {/* Controls Row */}
+      {/* Controls Row - hidden in embed */}
+      {!embed && (
       <div className="grid grid-cols-4 gap-4">
         {/* Simulation Controls */}
         <div className="glass rounded-xl p-4 space-y-4">
@@ -795,6 +883,19 @@ export default function CascadeVisualizer({ cityId, scenarioId }: CascadeVisuali
           
           {simulateMutation.data ? (
             <div className="space-y-3">
+              {/* Summary: what happened and how to read the graph */}
+              <div className="p-3 bg-white/5 rounded-lg border border-white/10 text-xs text-white/70 space-y-1">
+                <div className="font-medium text-white/90">What happened</div>
+                <p>
+                  The simulation started from node <span className="text-amber-400 font-medium">{simulateMutation.data.trigger_node}</span> at {(simulateMutation.data.trigger_severity * 100).toFixed(0)}% severity. Over {simulateMutation.data.simulation_steps} step(s), <span className="text-red-400 font-medium">{simulateMutation.data.affected_count}</span> node(s) were affected, with total loss of <span className="text-accent-400 font-medium">{formatCurrency(simulateMutation.data.total_loss)}</span>.
+                  {simulateMutation.data.containment_points.length > 0 && (
+                    <> Containment points: {simulateMutation.data.containment_points.map(p => p.replace('asset_', 'A')).join(', ')}.</>
+                  )}
+                </p>
+                <p className="text-white/50 pt-1">
+                  On the graph: <span className="text-[#8a4a4a]">red/brown</span> = trigger node, <span className="text-white/60">darkened</span> = affected, <span className="text-[#4a7a5a]">green</span> = containment.
+                </p>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="text-center p-3 bg-white/5 rounded-lg border border-white/10">
                   <div className="text-2xl font-bold text-white/80">
@@ -821,6 +922,16 @@ export default function CascadeVisualizer({ cityId, scenarioId }: CascadeVisuali
                     ))}
                   </div>
                 </div>
+              )}
+              {onAddToReport && (
+                <button
+                  type="button"
+                  onClick={() => onAddToReport(simulateMutation.data!)}
+                  className="w-full mt-3 py-2.5 bg-primary-500/20 hover:bg-primary-500/30 border border-primary-500/40 text-primary-300 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors"
+                >
+                  <DocumentPlusIcon className="w-4 h-4" />
+                  Add to Report
+                </button>
               )}
             </div>
           ) : (
@@ -876,6 +987,7 @@ export default function CascadeVisualizer({ cityId, scenarioId }: CascadeVisuali
           )}
         </div>
       </div>
+      )}
     </div>
   )
 }

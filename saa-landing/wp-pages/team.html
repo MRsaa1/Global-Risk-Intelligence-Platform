@@ -1,0 +1,547 @@
+<!-- Paste into Elementor HTML widget (it supports <style>). -->
+<!-- Team page in the same corporate style as the landing (dark + gold). -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+  .saa-wp-bleed{
+    position:relative;
+    left:50%;
+    margin-left:-50vw;
+    width:100vw;
+    max-width:100vw;
+    background:#000;
+    overflow:hidden;
+  }
+
+  .saa-wp{
+    --bg-void:#000000;
+    --bg-deep:#0a0908;
+    --bg-surface:#0f0e0a;
+    --bg-elevated:#141310;
+    --bg-card:#1a1815;
+
+    --text-primary:#e4e4e7;
+    --text-secondary:#9a9a9a;
+    --text-muted:#6b6b6b;
+
+    --accent-primary:#C9A962;
+    --accent-primary-hover:#D4AF37;
+    --accent-primary-glow:rgba(201,169,98,0.3);
+
+    --border-subtle:rgba(255,255,255,0.06);
+    --border-light:rgba(255,255,255,0.1);
+
+    --font-sans:'Space Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    --font-display:'Space Grotesk',-apple-system,BlinkMacSystemFont,sans-serif;
+    --font-mono:'JetBrains Mono','SF Mono','Consolas',monospace;
+
+    --text-xs:11px;
+    --text-sm:12px;
+    --text-base:14px;
+    --text-lg:16px;
+    --text-xl:18px;
+    --text-2xl:24px;
+    --text-3xl:32px;
+
+    color:var(--text-primary);
+    font-family:var(--font-sans) !important;
+    line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+    text-rendering:optimizeLegibility;
+    font-weight:400;
+    letter-spacing:-0.01em !important;
+    font-feature-settings:'cv02','cv03','cv04','cv11';
+    font-optical-sizing:auto;
+  }
+
+  .saa-wp *{box-sizing:border-box}
+  .saa-wp a{color:var(--accent-primary);text-decoration:none}
+  .saa-wp a:hover{color:var(--accent-primary-hover);text-decoration:underline}
+  .saa-wp .mono{font-family:var(--font-mono)}
+
+  /* Ensure Elementor/theme typography doesn't override the premium stack */
+  .saa-wp .content,
+  .saa-wp .content *{
+    font-family:var(--font-sans) !important;
+    font-feature-settings:inherit !important;
+    font-optical-sizing:inherit !important;
+    letter-spacing:inherit !important;
+  }
+  .saa-wp .mono,
+  .saa-wp .mono *{
+    font-family:var(--font-mono) !important;
+    letter-spacing:0.02em;
+  }
+
+  /* Unified font and size for body text (same as Privacy Policy / Terms) */
+  .saa-wp .content{
+    font-family:var(--font-sans) !important;
+    font-size:14px !important;
+    font-weight:400 !important;
+    letter-spacing:-0.01em !important;
+    line-height:1.6 !important;
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+    text-rendering:optimizeLegibility;
+    font-feature-settings:'cv02','cv03','cv04','cv11';
+    font-optical-sizing:auto;
+  }
+  .saa-wp .content p,
+  .saa-wp .content p *,
+  .saa-wp .content li,
+  .saa-wp .content ul,
+  .saa-wp .content .card,
+  .saa-wp .content .card *,
+  .saa-wp .content .tagline,
+  .saa-wp .content .kpi div:not(.dot){
+    font-family:var(--font-sans) !important;
+    font-size:14px !important;
+    font-weight:400 !important;
+    letter-spacing:-0.01em !important;
+    line-height:1.6 !important;
+  }
+  .saa-wp .content .lead{font-size:var(--text-lg) !important}
+  .saa-wp .content strong{font-weight:600 !important;font-size:14px !important}
+
+  .saa-wp .bg{
+    position:absolute;
+    inset:-50%;
+    background:
+      radial-gradient(ellipse at 30% 20%, rgba(201, 169, 98, 0.05) 0%, transparent 50%),
+      radial-gradient(ellipse at 70% 80%, rgba(201, 169, 98, 0.03) 0%, transparent 50%);
+    animation:saaGradientMove 20s ease-in-out infinite;
+    pointer-events:none;
+    z-index:0;
+  }
+  @keyframes saaGradientMove{
+    0%,100%{transform:translate(0,0) scale(1)}
+    33%{transform:translate(2%,2%) scale(1.05)}
+    66%{transform:translate(-2%,-2%) scale(0.95)}
+  }
+
+  .saa-wp .content{
+    position:relative;
+    z-index:1;
+    max-width:1200px;
+    margin:0 auto;
+    padding:48px 24px 72px;
+  }
+
+  .saa-wp .topbar{
+    position:sticky;
+    top:0;
+    z-index:2;
+    background:rgba(10,9,8,0.85);
+    backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--border-subtle);
+  }
+  .saa-wp .topbar-inner{
+    max-width:1200px;
+    margin:0 auto;
+    padding:16px 24px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+  }
+  .saa-wp .brand{display:flex;align-items:center;gap:12px;text-decoration:none}
+  .saa-wp .brand-mark{
+    width:36px;height:36px;border:1px solid var(--accent-primary);border-radius:8px;
+    display:flex;align-items:center;justify-content:center;
+    font-family:var(--font-mono);font-size:12px;font-weight:600;color:var(--accent-primary);
+  }
+  .saa-wp .brand-text{color:var(--text-primary);font-size:13px;font-weight:500}
+  .saa-wp .nav{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+  .saa-wp .nav a{
+    font-size:13px;color:var(--text-secondary);
+    padding:8px 10px;border-radius:8px;border:1px solid transparent;
+  }
+  .saa-wp .nav a:hover{color:var(--text-primary);border-color:var(--border-light);text-decoration:none}
+
+  .saa-wp .eyebrow{
+    font-size:var(--text-xs);
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+    color:var(--text-muted);
+    font-family:var(--font-mono) !important;
+  }
+
+  .saa-wp h1{
+    margin:12px 0 10px;
+    font-size:var(--text-3xl);
+    font-weight:700;
+    letter-spacing:-0.02em;
+    line-height:1.15;
+    font-family:var(--font-display) !important;
+    background:linear-gradient(135deg, var(--text-primary) 0%, var(--accent-primary) 50%, var(--text-primary) 100%);
+    background-size:200% auto;
+    -webkit-background-clip:text;
+    -webkit-text-fill-color:transparent;
+    background-clip:text;
+    animation:saaTitleShift 8s ease infinite;
+  }
+  @keyframes saaTitleShift{0%,100%{background-position:0% center}50%{background-position:200% center}}
+  .saa-wp h2{
+    margin:28px 0 12px;
+    font-size:var(--text-xl);
+    font-weight:600;
+    letter-spacing:-0.01em;
+    font-family:var(--font-display) !important;
+    color:var(--text-primary);
+  }
+  .saa-wp h3{
+    margin:0 0 6px;
+    font-size:var(--text-base);
+    font-weight:600;
+    color:var(--text-primary);
+    font-family:var(--font-display) !important;
+    letter-spacing:-0.01em;
+  }
+  /* Paragraphs: increase specificity to beat Elementor global typography */
+  .saa-wp .content p,
+  .saa-wp .content p *{
+    font-family:var(--font-sans) !important;
+    margin:10px 0;
+    color:var(--text-secondary) !important;
+    font-size:var(--text-base) !important;
+    font-weight:400 !important;
+    letter-spacing:-0.01em !important;
+    text-transform:none !important;
+  }
+  .saa-wp .lead{font-size:var(--text-lg);color:var(--text-secondary);max-width:92ch}
+  .saa-wp .muted{color:var(--text-muted)}
+
+  .saa-wp .grid{display:grid;gap:16px}
+  @media (min-width: 900px){ .saa-wp .grid.cols-2{grid-template-columns:1fr 1fr} }
+  @media (min-width: 1100px){ .saa-wp .grid.cols-3{grid-template-columns:1fr 1fr 1fr} }
+
+  .saa-wp .card{
+    background:var(--bg-elevated);
+    border:1px solid var(--border-subtle);
+    border-radius:12px;
+    padding:16px;
+    transition:all .25s ease;
+  }
+  .saa-wp .card:hover{border-color:rgba(201,169,98,.28);box-shadow:0 12px 30px rgba(0,0,0,.35);transform:translateY(-2px)}
+
+  .saa-wp .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+  .saa-wp .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:10px;
+    padding:10px 14px;
+    border-radius:10px;
+    border:1px solid var(--border-light);
+    background:transparent;
+    color:var(--text-primary);
+    font-size:13px;
+    font-weight:500;
+    cursor:pointer;
+    transition:all .2s ease;
+  }
+  .saa-wp .btn:hover{border-color:var(--accent-primary);color:var(--accent-primary);text-decoration:none}
+  .saa-wp .btn.primary{background:var(--accent-primary);border-color:var(--accent-primary);color:#000}
+  .saa-wp .btn.primary:hover{background:var(--accent-primary-hover);border-color:var(--accent-primary-hover);color:#000}
+
+  /* Lists: must match landing typography */
+  .saa-wp ul,
+  .saa-wp ol{
+    margin:16px 0;
+    padding-left:24px;
+    color:var(--text-secondary);
+    line-height:1.8 !important;
+    list-style-type:disc !important;
+    font-size:var(--text-base) !important;
+    font-weight:400 !important;
+  }
+  .saa-wp .content ul li,
+  .saa-wp .content ol li{
+    margin:0 0 8px;
+    font-size:var(--text-base) !important;
+    font-weight:400 !important;
+    letter-spacing:-0.01em !important;
+  }
+
+  /* Elementor sometimes overrides <div>/<span>/<strong> text styles */
+  .saa-wp .content div,
+  .saa-wp .content span,
+  .saa-wp .content strong,
+  .saa-wp .content em,
+  .saa-wp .content a{
+    font-family:var(--font-sans) !important;
+    letter-spacing:-0.01em !important;
+  }
+
+  .saa-wp .hr{height:1px;background:var(--border-subtle);margin:20px 0}
+  .saa-wp .pill{
+    display:inline-flex;align-items:center;gap:8px;
+    padding:6px 10px;
+    border:1px solid var(--border-subtle);
+    border-radius:999px;
+    background:rgba(255,255,255,0.02);
+    color:var(--text-secondary);
+    font-size:12px;
+    font-family:var(--font-mono) !important;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    margin:6px 8px 0 0;
+  }
+
+  .saa-wp .profile{
+    display:flex;
+    gap:16px;
+    align-items:flex-start;
+  }
+  .saa-wp .avatar{
+    width:92px;height:92px;border-radius:16px;
+    border:1px solid rgba(201,169,98,.22);
+    background:rgba(255,255,255,0.02);
+    overflow:hidden;
+    flex:0 0 auto;
+  }
+  .saa-wp .avatar img{width:100%;height:100%;object-fit:cover;display:block}
+  .saa-wp .title{
+    font-size:12px;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    color:var(--text-muted);
+    font-family:var(--font-mono) !important;
+    margin-top:2px;
+  }
+  .saa-wp .name{
+    font-size:18px;
+    font-weight:650;
+    letter-spacing:-0.02em;
+    color:var(--text-primary);
+    margin:0;
+  }
+  .saa-wp .tagline{
+    margin-top:6px;
+    color:var(--text-secondary);
+  }
+  .saa-wp .page-footer{ margin-top:24px;padding-top:20px;border-top:1px solid var(--border-subtle);display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:20px }
+  .saa-wp .page-footer-copy{ color:var(--text-muted);font-size:12px }
+  .saa-wp .page-footer-legal{ display:flex;align-items:center;gap:8px;flex-wrap:wrap }
+  .saa-wp .page-footer-legal a{ color:var(--text-muted);font-size:12px;text-decoration:none }
+  .saa-wp .page-footer-legal a:hover{ color:var(--text-secondary) }
+  .saa-wp .page-footer-badge img{ height:32px;width:auto;display:block }
+  .saa-wp .page-footer-badge:hover img{ opacity:0.9 }
+</style>
+
+<div class="saa-wp-bleed">
+  <div class="saa-wp">
+    <div class="bg" aria-hidden="true"></div>
+
+    <div class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="/" aria-label="SAA Alliance home">
+          <div class="brand-mark">SAA</div>
+          <div class="brand-text">Scientific Analytics Alliance</div>
+        </a>
+        <nav class="nav" aria-label="SAA navigation">
+          <a href="/about/">About</a>
+          <a href="/platform/">Platform</a>
+          <a href="/how-it-works/">How it works</a>
+          <a href="/team/">Team</a>
+          <a href="/contact/">Contact</a>
+        </nav>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="eyebrow">Scientific Analytics Alliance</div>
+      <h1>Team</h1>
+      <p class="lead">
+        Publicly verifiable team information (founder profile + professional links).
+      </p>
+
+      <div class="grid cols-2" style="margin-top:16px;">
+        <div class="card">
+          <div class="profile">
+            <div class="avatar" aria-label="Founder photo">
+              <img src="https://saa-alliance.com/wp-content/uploads/2026/01/photo_2026-01-10-01.17.32.webp" alt="Oleksii Slieptsov" loading="lazy" decoding="async">
+            </div>
+            <div>
+              <div class="title">Founder @ SAA Alliance · NVIDIA Inception Member · Ex‑PrivatBank</div>
+              <div class="name">Oleksii Slieptsov</div>
+              <div class="tagline">
+                Principal Industry Architect — Financial AI · Treasury · Liquidity · Risk Systems
+              </div>
+              <div class="muted" style="margin-top:8px;">
+                EU / Global (remote) · Senior Treasury & Liquidity Executive (2005–2024)
+              </div>
+            </div>
+          </div>
+
+          <div class="btns" style="margin-top:14px;">
+            <a class="btn primary" href="mailto:o.slieptsov@saa-alliance.com">Email</a>
+            <a class="btn" href="https://www.linkedin.com/in/oleksii-slieptsov-92213939/" target="_blank" rel="noopener">LinkedIn</a>
+            <a class="btn" href="https://github.com/MRsaa1" target="_blank" rel="noopener">GitHub</a>
+            <a class="btn" href="https://papers.ssrn.com/author/7753421" target="_blank" rel="noopener">SSRN</a>
+            <a class="btn" href="https://orcid.org/0009-0003-8242-2484" target="_blank" rel="noopener">ORCID</a>
+            <a class="btn" href="https://scholar.google.com/citations?user=2ECmg-sAAAAJ" target="_blank" rel="noopener">Google Scholar</a>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Summary</h3>
+          <p>
+            Principal Industry Architect specializing in AI-driven financial infrastructure for Tier‑1 banks and systemically important financial institutions.
+            Nearly 20 years of executive banking experience across treasury operations, liquidity management, interbank markets, and central bank coordination,
+            combined with applied AI system design and delivery.
+          </p>
+          <p>
+            At PrivatBank (Ukraine’s largest systemically important bank), led national-scale treasury and cash operations, managed 30+ regional cash centers,
+            and directed interbank liquidity flows exceeding $50M in daily turnover. Responsible for crisis liquidity frameworks, interbank settlement infrastructure,
+            and delegated operational functions during periods of extreme volatility and wartime disruption.
+          </p>
+          <p>
+            Over the past two years, focused on building AI-driven financial systems: liquidity forecasting engines, GPU-ready simulation platforms,
+            algorithmic trading infrastructure, and real-time financial intelligence systems — emphasizing architecture, data design, risk logic,
+            and end‑to‑end delivery.
+          </p>
+        </div>
+      </div>
+
+      <h2>Core competencies</h2>
+      <div class="grid cols-3">
+        <div class="card">
+          <h3>AI & engineering</h3>
+          <ul>
+            <li>AI systems architecture · agentic AI · RAG · LLM/SLM integration</li>
+            <li>Financial ML · risk modeling · GNNs · forecasting models</li>
+            <li>Python · Go · FastAPI · TypeScript · Streamlit</li>
+            <li>ETL/ML pipelines · Docker · Kubernetes · cloud deployment</li>
+            <li>Algorithmic trading · high-frequency analytics</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Financial domain</h3>
+          <ul>
+            <li>Liquidity planning · treasury operations · interbank markets</li>
+            <li>Cash infrastructure optimization (32 centers)</li>
+            <li>Stress testing · VaR/CVaR · scenario & systemic risk models</li>
+            <li>Operational risk · compliance & reporting</li>
+            <li>13‑week cash flow modeling</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Leadership</h3>
+          <ul>
+            <li>Managed a 64‑person national treasury division</li>
+            <li>Directed critical liquidity & cash operations at national scale</li>
+            <li>Enterprise program execution · executive communication</li>
+            <li>Crisis management during regional and wartime disruptions</li>
+          </ul>
+        </div>
+      </div>
+
+      <h2>Selected achievements (PrivatBank)</h2>
+      <div class="grid cols-2">
+        <div class="card">
+          <h3>National-scale operations</h3>
+          <ul>
+            <li>Operational and strategic leadership for national-scale liquidity, treasury, and risk infrastructure.</li>
+            <li>Directed liquidity operations, interbank settlements, reserve management, and national vault logistics.</li>
+            <li>Maintained 24/7 resilience of mission-critical financial infrastructure.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Automation & analytics</h3>
+          <ul>
+            <li>Built an automated deal-confirmation system reducing cycle time by ~90%.</li>
+            <li>Contributed to risk dashboards, liquidity forecasting, and decision-support systems.</li>
+            <li>Implemented analytics for ATM cash optimization to reduce costs and improve liquidity efficiency.</li>
+          </ul>
+        </div>
+      </div>
+
+      <h2>Selected AI & fintech projects</h2>
+      <div class="grid cols-2">
+        <div class="card">
+          <h3>ARIN Platform — Autonomous Risk Intelligence Network</h3>
+          <p class="muted">Multi-agent AI system for financial risk intelligence.</p>
+          <ul>
+            <li>Production-ready architecture with six specialized agents (credit, market, liquidity, operational, regulatory, systemic).</li>
+            <li>Integrated LLM reasoning with ML models (GNN systemic risk propagation, credit scoring).</li>
+            <li>Cloud-native deployment (Docker/K8s), observability, caching, and compliance modules.</li>
+          </ul>
+          <div class="btns">
+            <a class="btn primary" href="https://arin.saa-alliance.com/dashboard" target="_blank" rel="noopener">Open ARIN</a>
+            <a class="btn" href="https://mrsaa1.github.io/portfolio-dashboard/saa-platform.html" target="_blank" rel="noopener">Platform overview</a>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Global Risk Intelligence Platform</h3>
+          <p class="muted">Institutional-grade risk analytics engine (multi-factor, stress testing, explainability, audit trail).</p>
+          <div class="btns">
+            <a class="btn primary" href="https://risk.saa-alliance.com" target="_blank" rel="noopener">Open platform</a>
+            <a class="btn" href="https://risk.saa-alliance.com/command" target="_blank" rel="noopener">Command Center</a>
+          </div>
+          <div class="hr"></div>
+          <h3>News Analytics Portal</h3>
+          <p class="muted">LLM-enabled narrative analytics, automated digests, and sector exposure mapping.</p>
+          <div class="btns">
+            <a class="btn" href="https://news.saa-alliance.com/dashboard?lang=en" target="_blank" rel="noopener">Open News Analytics</a>
+          </div>
+        </div>
+      </div>
+
+      <h2>Credentials & research</h2>
+      <div class="grid cols-2">
+        <div class="card">
+          <h3>Certifications</h3>
+          <ul>
+            <li>CFA (member)</li>
+            <li>AFP (member)</li>
+            <li>CBDA / DACFP — Certified in Blockchain & Digital Assets</li>
+            <li>Broker‑Dealer Specialist</li>
+            <li>CTP — Certified Treasury Professional (in progress, 2026)</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Publications</h3>
+          <p class="muted">11 research papers on liquidity infrastructure, systemic risk, banking resilience, operational risk, and finance innovation.</p>
+          <div class="btns">
+            <a class="btn primary" href="https://papers.ssrn.com/author/7753421" target="_blank" rel="noopener">SSRN author page</a>
+            <a class="btn" href="https://scholar.google.com/citations?user=2ECmg-sAAAAJ" target="_blank" rel="noopener">Google Scholar</a>
+            <a class="btn" href="https://orcid.org/0009-0003-8242-2484" target="_blank" rel="noopener">ORCID</a>
+          </div>
+        </div>
+      </div>
+
+      <h2>Current focus</h2>
+      <div class="card">
+        <ul>
+          <li>AI-driven treasury, liquidity, and risk systems</li>
+          <li>GPU-accelerated financial simulations</li>
+          <li>Multi-agent AI coordination for decision intelligence</li>
+          <li>Real-time financial analytics and monitoring</li>
+          <li>Applied research in Treasury & Liquidity Management</li>
+        </ul>
+        <div class="btns">
+          <a class="btn primary" href="/platform/">Explore SAA platforms</a>
+          <a class="btn" href="/contact/">Contact</a>
+        </div>
+      </div>
+
+      <div class="hr"></div>
+      <p class="muted">
+        Note: Team information is provided for verification purposes. Platform demos are public evaluation entry points.
+      </p>
+      <footer class="page-footer" role="contentinfo">
+        <span class="page-footer-copy">© 2025 Scientific Analytics Alliance • Premium Research & Wealth Intelligence</span>
+        <div class="page-footer-legal">
+          <a href="/privacy-policy/">Privacy Policy</a>
+          <span class="muted" style="font-size:12px">•</span>
+          <a href="/terms/">Terms of Use</a>
+        </div>
+        <a href="https://www.nvidia.com/en-us/startups/" target="_blank" rel="noopener" class="page-footer-badge" aria-label="NVIDIA Inception Program">
+          <img src="https://saa-alliance.com/wp-content/uploads/2026/01/nvidia-inception-program-badge-rgb-1c-blk-for-screen.png" alt="NVIDIA Inception Program Member" loading="lazy" decoding="async">
+        </a>
+      </footer>
+    </div>
+  </div>
+</div>
+

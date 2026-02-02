@@ -41,6 +41,17 @@ class GeoDataService:
         self._cached_scores: Dict[str, CityRiskScore] = {}
         self._cache_time: Optional[datetime] = None
         self._cache_ttl_hours = 24
+        self._calc_lock = asyncio.Lock()
+
+    def invalidate_cache(self) -> None:
+        """
+        Invalidate cached city risk scores.
+
+        Use when underlying city parameters (exposure, known risks, regions) change
+        and the API should reflect updates immediately.
+        """
+        self._cached_scores = {}
+        self._cache_time = None
     
     def _get_calculator(self) -> CityRiskCalculator:
         """Get or create risk calculator with API clients."""
@@ -62,16 +73,36 @@ class GeoDataService:
             and self._cached_scores):
             return self._cached_scores
         
-        # Calculate all city risks
-        calculator = self._get_calculator()
-        scores = await calculator.calculate_all_cities(force_recalculate)
-        
-        # Cache results
-        self._cached_scores = {s.city_id: s for s in scores}
-        self._cache_time = now
-        
-        logger.info(f"Calculated risk scores for {len(scores)} cities")
-        return self._cached_scores
+        # Prevent stampede on cold start
+        async with self._calc_lock:
+            # Check cache again after acquiring lock
+            if (not force_recalculate
+                and self._cache_time
+                and (now - self._cache_time).total_seconds() < self._cache_ttl_hours * 3600
+                and self._cached_scores):
+                return self._cached_scores
+
+            # Default: fast scoring (no external APIs). External calls are slow and can
+            # cause the first page load to time out (frontend falls back to demo hotspots).
+            use_external_data = bool(force_recalculate)
+
+            calculator = self._get_calculator()
+            scores = await calculator.calculate_all_cities(
+                force_recalculate=force_recalculate,
+                use_external_data=use_external_data,
+                max_concurrency=25,
+            )
+
+            # Cache results
+            self._cached_scores = {s.city_id: s for s in scores}
+            self._cache_time = now
+
+            logger.info(
+                "Calculated risk scores for %s cities (external=%s)",
+                len(scores),
+                use_external_data,
+            )
+            return self._cached_scores
 
     def get_risk_hotspots_geojson(
         self,
