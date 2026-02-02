@@ -393,7 +393,7 @@ Ensure the API server is running on port 9002. See [QUICK_START.md](QUICK_START.
 
 ## Support
 
-[support@saa-alliance.com](mailto:support@saa-alliance.com)
+[support@saa-alliance.com](mailto:o.slieptsov@saa-alliance.com)
 
 ---
 
