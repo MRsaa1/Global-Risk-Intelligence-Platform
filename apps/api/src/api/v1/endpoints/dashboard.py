@@ -100,6 +100,7 @@ async def _fetch_news_signals() -> List[SignalSource]:
             query="risk OR crisis OR disruption OR conflict OR disaster",
             max_records=10,
             timespan="1day",
+            request_timeout=3.0,
         )
         if result.success and result.articles:
             sorted_articles = sorted(
@@ -149,13 +150,13 @@ async def _fetch_climate_signals(db: AsyncSession) -> List[SignalSource]:
     signals: List[SignalSource] = []
     try:
         from src.services.climate_anomalies_service import climate_anomalies_service
-        # Get distinct cities from active assets
+        # Get distinct cities from active assets (limit 1 for today-card to keep signals fast)
         result = await db.execute(
             select(Asset.city, Asset.latitude, Asset.longitude)
             .where(Asset.status == "active")
             .where(Asset.city.is_not(None))
             .distinct()
-            .limit(3)
+            .limit(1)
         )
         cities = result.all()
         for city_row in cities:
@@ -222,10 +223,10 @@ async def _generate_morning_brief(
         return None
 
 
-# Today-card cache (3 min TTL) to reduce load and avoid Overseer flagging slow endpoint
+# Today-card cache (5 min TTL) to reduce load and avoid Overseer flagging slow endpoint
 _TODAY_CARD_CACHE: Optional[Dict[str, Any]] = None
 _TODAY_CARD_CACHE_TS: float = 0
-_TODAY_CARD_CACHE_TTL: float = 180.0
+_TODAY_CARD_CACHE_TTL: float = 300.0
 
 
 # ==================== ENDPOINTS ====================
@@ -306,7 +307,7 @@ async def get_today_card(db: AsyncSession = Depends(get_db)):
     RiskMirror: One card for the day enriched with news, climate, and market signals.
     Returns focus, top risk, don't touch, main reason, morning brief, and signal sources.
     Used by Dashboard and Command Center as the single "start of day" view.
-    Cached 60s to reduce latency and external/LLM load on repeated calls.
+    Cached 5 min to reduce latency and external/LLM load on repeated calls.
     """
     global _TODAY_CARD_CACHE, _TODAY_CARD_CACHE_TS
     if _TODAY_CARD_CACHE is not None and (time.time() - _TODAY_CARD_CACHE_TS) < _TODAY_CARD_CACHE_TTL:

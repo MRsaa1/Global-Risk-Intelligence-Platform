@@ -31,9 +31,10 @@ async def oversee_middleware(request: Request, call_next):
     - Response status code
     - Duration in milliseconds
     - Success/error status
+    - Prometheus metrics (http_requests_total, http_request_duration_seconds)
     """
-    # Skip health checks and static files
-    if request.url.path.startswith(("/health", "/docs", "/openapi", "/favicon", "/metrics", "/")):
+    # Skip health checks, docs and static files (do NOT include bare "/" — every path starts with it)
+    if request.url.path.startswith(("/health", "/docs", "/openapi", "/favicon", "/metrics", "/metrics/json")):
         return await call_next(request)
     
     start_time = time.time()
@@ -42,8 +43,16 @@ async def oversee_middleware(request: Request, call_next):
     try:
         response = await call_next(request)
         duration_ms = (time.time() - start_time) * 1000
+        duration_sec = duration_ms / 1000.0
         status_code = response.status_code
         is_success = 200 <= status_code < 400
+        
+        # Prometheus metrics
+        try:
+            from src.core.metrics import record_request
+            record_request(request.method, request.url.path, status_code, duration_sec)
+        except Exception:
+            pass
         
         # Record metrics
         metrics = _endpoint_metrics[endpoint]
@@ -69,7 +78,15 @@ async def oversee_middleware(request: Request, call_next):
         
     except Exception as e:
         duration_ms = (time.time() - start_time) * 1000
+        duration_sec = duration_ms / 1000.0
         status_code = 500
+        
+        # Prometheus metrics
+        try:
+            from src.core.metrics import record_request
+            record_request(request.method, request.url.path, status_code, duration_sec)
+        except Exception:
+            pass
         
         # Record error
         metrics = _endpoint_metrics[endpoint]
@@ -83,7 +100,7 @@ async def oversee_middleware(request: Request, call_next):
             metrics["avg_duration_ms"] = metrics["total_duration_ms"] / metrics["count"]
             metrics["error_rate"] = metrics["error_count"] / metrics["count"]
         
-        logger.error(f"Overseer middleware: endpoint {endpoint} failed: {e}")
+        logger.error("Overseer middleware: endpoint %s failed: %s", endpoint, e)
         raise
 
 

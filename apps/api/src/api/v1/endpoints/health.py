@@ -15,11 +15,19 @@ logger = logging.getLogger(__name__)
 
 
 async def _check_redis() -> dict:
-    """Check Redis connection."""
+    """Check Redis connection. Returns disabled when Redis is not enabled. Never returns None."""
     try:
-        from src.services.cache import get_cache, cache_stats
+        from src.core.config import settings
+        if not getattr(settings, "enable_redis", True) or not (getattr(settings, "redis_url", "") or "").strip():
+            return {"status": "disabled", "backend": "memory", "message": "Redis disabled (enable_redis=False or REDIS_URL empty)"}
+    except Exception:
+        pass
+    try:
+        from src.services.cache import get_cache
         cache = await get_cache()
-        stats = cache.stats()
+        stats = getattr(cache, "stats", lambda: {})()
+        if stats.get("backend") == "memory" and not stats.get("redis_fallback"):
+            return {"status": "disabled", "backend": "memory"}
         return {
             "status": "connected" if stats.get("backend") == "redis" else "fallback",
             "backend": stats.get("backend", "unknown"),
@@ -28,31 +36,40 @@ async def _check_redis() -> dict:
     except Exception as e:
         logger.warning(f"Redis health check failed: {e}")
         return {"status": "error", "error": str(e)}
+    return {"status": "disabled", "backend": "memory", "message": "Redis check skipped"}
 
 
 async def _check_database() -> dict:
-    """Check database connection (PostgreSQL or SQLite)."""
-    try:
-        from src.core.database import engine
-        from sqlalchemy import text
+    """Check database connection (PostgreSQL or SQLite). Retries briefly to handle startup/transient failures."""
+    from src.core.database import engine
+    from sqlalchemy import text
 
-        async with engine.connect() as conn:
-            await conn.execute(text("SELECT 1"))
-
-        # Optional: get asset count (separate connection to avoid session lifecycle issues with aiosqlite)
+    last_error = None
+    for attempt in range(3):
         try:
-            from src.core.database import AsyncSessionLocal
-            from sqlalchemy import select, func
-            from src.models.asset import Asset
-            async with AsyncSessionLocal() as session:
-                result = await session.execute(select(func.count(Asset.id)).where(Asset.status == "active"))
-                asset_count = result.scalar() or 0
-            return {"status": "connected", "asset_count": asset_count}
-        except Exception:
-            return {"status": "connected"}
-    except Exception as e:
-        logger.warning(f"Database health check failed: {e}")
-        return {"status": "error", "error": str(e)}
+            async with engine.connect() as conn:
+                await conn.execute(text("SELECT 1"))
+            break
+        except Exception as e:
+            last_error = e
+            if attempt < 2:
+                await asyncio.sleep(0.3 * (attempt + 1))
+            continue
+    else:
+        logger.warning("Database health check failed after retries: %s", last_error)
+        return {"status": "error", "error": str(last_error)[:200]}
+
+    # Optional: get asset count (separate connection to avoid session lifecycle issues with aiosqlite)
+    try:
+        from src.core.database import AsyncSessionLocal
+        from sqlalchemy import select, func
+        from src.models.asset import Asset
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(select(func.count(Asset.id)).where(Asset.status == "active"))
+            asset_count = result.scalar() or 0
+        return {"status": "connected", "asset_count": asset_count}
+    except Exception:
+        return {"status": "connected"}
 
 
 async def _check_neo4j() -> dict:
@@ -156,10 +173,13 @@ async def _get_system_metrics() -> dict:
 
 @router.get("")
 async def health():
-    """Basic health check."""
+    """Basic health check. demo_mode=True when ALLOW_SEED_IN_PRODUCTION — frontend opens all strategic modules without auth."""
+    from src.core.config import settings
     return {
         "status": "healthy",
-        "version": "1.5.0",
+        "version": getattr(settings, "app_version", "1.5.0"),
+        "environment": getattr(settings, "environment", "production"),
+        "demo_mode": getattr(settings, "allow_seed_in_production", False),
     }
 
 
@@ -218,7 +238,7 @@ async def health_detailed():
     
     all_healthy = (
         critical_services_healthy and
-        redis_status.get("status") in ("connected", "fallback")
+        redis_status.get("status") in ("connected", "fallback", "disabled")
     )
     
     return {

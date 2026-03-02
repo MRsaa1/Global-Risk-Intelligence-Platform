@@ -8,69 +8,58 @@ import { Link } from 'react-router-dom'
 import { UNIVERSAL_ACTION_PLAN_TEMPLATE } from '../lib/universalActionPlanTemplate'
 import type { SectorActionPlan } from '../lib/universalActionPlanTemplate'
 import { ArrowLeftIcon, DocumentTextIcon } from '@heroicons/react/24/outline'
+import SendToARINButton from '../components/SendToARINButton'
+import ARINVerdictBadge from '../components/ARINVerdictBadge'
 
 const SECTOR_COLORS: Record<string, string> = {
-  '1': 'purple',
-  '2': 'blue',
-  '3': 'emerald',
-  '4': 'cyan',
-  '5': 'orange',
+  '1': 'zinc',
+  '2': 'zinc',
+  '3': 'zinc',
+  '4': 'zinc',
+  '5': 'zinc',
 }
 
 const BORDER_CLASSES: Record<string, string> = {
-  purple: 'border-purple-500/30',
-  blue: 'border-blue-500/30',
-  emerald: 'border-emerald-500/30',
-  cyan: 'border-amber-500/30',
-  orange: 'border-orange-500/30',
-}
-
-const TEXT_CLASSES: Record<string, string> = {
-  purple: 'text-purple-400',
-  blue: 'text-blue-400',
-  emerald: 'text-emerald-400',
-  cyan: 'text-amber-400',
-  orange: 'text-orange-400',
+  zinc: 'border-zinc-800/60',
 }
 
 function SectorDetailCard({ sector }: { sector: SectorActionPlan }) {
-  const color = SECTOR_COLORS[sector.id] ?? 'cyan'
+  const color = SECTOR_COLORS[sector.id] ?? 'zinc'
   const borderCls = BORDER_CLASSES[color]
-  const textCls = TEXT_CLASSES[color]
 
   return (
     <section
-      className={`rounded-xl border ${borderCls} bg-white/[0.02] overflow-hidden`}
+      className={`rounded-md border ${borderCls} bg-zinc-900/50 overflow-hidden`}
       id={`sector-${sector.id}`}
     >
-      <div className={`px-4 py-3 border-b ${borderCls} bg-white/5`}>
-        <h2 className={`text-base font-medium ${textCls}`}>
+      <div className={`px-4 py-3 border-b ${borderCls} bg-zinc-900/80`}>
+        <h2 className={`text-sm font-semibold text-zinc-100`}>
           {sector.id}. {sector.sector}
         </h2>
-        <p className="text-[11px] text-white/50 mt-0.5">
+        <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mt-0.5">
           {sector.responseTime} • Risk reduction target: {sector.riskReductionPercent}%
         </p>
       </div>
       <div className="p-4 space-y-5">
         <div>
-          <h3 className="text-[10px] uppercase tracking-wider text-white/60 mb-2">Focus areas</h3>
-          <div className="rounded-lg border border-white/10 overflow-hidden">
-            <table className="w-full text-[11px] min-w-[320px]">
+          <h3 className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-2">Focus areas</h3>
+          <div className="rounded-md border border-zinc-800/60 overflow-hidden">
+            <table className="w-full text-[11px] min-w-[320px] font-sans">
               <thead>
-                <tr className="bg-white/5">
-                  <th className="text-left px-3 py-2 text-white/50 font-medium">Category</th>
-                  <th className="text-left px-3 py-2 text-white/50 font-medium">Stress scenarios</th>
-                  <th className="text-left px-3 py-2 text-white/50 font-medium">Actions</th>
-                  <th className="text-left px-3 py-2 text-white/50 font-medium">Success metrics</th>
+                <tr className="bg-zinc-900/90 border-b border-zinc-800/60">
+                  <th className="text-left px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-zinc-500">Category</th>
+                  <th className="text-left px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-zinc-500">Stress scenarios</th>
+                  <th className="text-left px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-zinc-500">Actions</th>
+                  <th className="text-left px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-zinc-500">Success metrics</th>
                 </tr>
               </thead>
               <tbody>
                 {sector.focusAreas.map((fa, i) => (
-                  <tr key={i} className="border-t border-white/5">
-                    <td className="px-3 py-2 text-white/80">{fa.category}</td>
-                    <td className="px-3 py-2 text-white/60">{fa.stressScenarios}</td>
-                    <td className="px-3 py-2 text-white/60">{fa.actions}</td>
-                    <td className="px-3 py-2 text-white/50">{fa.successMetrics}</td>
+                  <tr key={i} className="border-t border-zinc-800/60">
+                    <td className="px-3 py-2 text-zinc-200">{fa.category}</td>
+                    <td className="px-3 py-2 text-zinc-400/90">{fa.stressScenarios}</td>
+                    <td className="px-3 py-2 text-zinc-400/90">{fa.actions}</td>
+                    <td className="px-3 py-2 text-zinc-500">{fa.successMetrics}</td>
                   </tr>
                 ))}
               </tbody>
@@ -78,17 +67,17 @@ function SectorDetailCard({ sector }: { sector: SectorActionPlan }) {
           </div>
         </div>
         <div>
-          <h3 className="text-[10px] uppercase tracking-wider text-white/60 mb-2">Phases & actions</h3>
+          <h3 className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-2">Phases & actions</h3>
           <div className="space-y-3">
             {sector.phases.map((phase, pi) => (
-              <div key={pi} className="border border-white/10 rounded-lg overflow-hidden">
-                <div className="px-3 py-2 bg-white/5 text-[11px] font-medium text-white/80 border-b border-white/5">
+              <div key={pi} className="border border-zinc-800/60 rounded-md overflow-hidden bg-zinc-900/30">
+                <div className="px-3 py-2 bg-zinc-900/80 border-b border-zinc-800/60 font-mono text-[10px] uppercase tracking-widest text-zinc-500">
                   {phase.name}
                 </div>
                 <ul className="px-3 py-2 space-y-1">
                   {phase.items.map((item, ii) => (
-                    <li key={ii} className="flex items-start gap-2 text-[11px] text-white/70">
-                      <span className="text-white/40 mt-0.5">├</span>
+                    <li key={ii} className="flex items-start gap-2 text-[11px] text-zinc-300/90 font-sans">
+                      <span className="text-zinc-500 mt-0.5 font-mono">├</span>
                       <span>{item}</span>
                     </li>
                   ))}
@@ -106,30 +95,57 @@ export default function ActionPlansPage() {
   const template = UNIVERSAL_ACTION_PLAN_TEMPLATE
 
   return (
-    <div className="h-full flex flex-col bg-[#0a0e17]">
-      <header className="shrink-0 px-6 py-4 border-b border-white/10 bg-[#0a0f18]">
-        <div className="flex items-center gap-4">
+    <div className="min-h-full bg-zinc-950 p-6 font-sans" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+      <div className="w-full max-w-[1920px] mx-auto">
+        <header className="mb-6 flex items-center gap-4">
           <Link
             to="/command"
-            className="p-2 rounded-lg text-white/50 hover:text-white hover:bg-white/5"
+            className="p-2 rounded-md text-zinc-500 hover:text-zinc-100 hover:bg-zinc-800/80 border border-transparent hover:border-zinc-700"
             aria-label="Back to Command Center"
           >
             <ArrowLeftIcon className="w-5 h-5" />
           </Link>
-          <div className="flex items-center gap-2">
-            <DocumentTextIcon className="w-6 h-6 text-amber-400" />
-            <div>
-              <h1 className="text-lg font-medium text-white">{template.title}</h1>
-              <p className="text-[11px] text-white/50">
-                Detailed sector plans • {template.dateCreated}
-              </p>
+          <div className="flex items-center justify-between gap-4 flex-1">
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-md bg-zinc-900/80 border border-zinc-800/60">
+                <DocumentTextIcon className="w-5 h-5 text-zinc-400/80" />
+              </div>
+              <div>
+                <h1 className="text-lg font-display font-semibold text-zinc-100 tracking-tight">{template.title}</h1>
+                <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mt-0.5">
+                  Detailed sector plans • {template.dateCreated}
+                </p>
+              </div>
             </div>
+            <SendToARINButton
+              sourceModule="action_plans"
+              objectType="scenario"
+              objectId="universal-action-plan"
+              inputData={{
+                sectors_count: template.sectors?.length ?? 0,
+                title: template.title,
+                dateCreated: template.dateCreated,
+              }}
+              exportEntityId="portfolio_global"
+              exportEntityType="portfolio"
+              exportAnalysisType="compliance_check"
+              exportData={{
+                risk_score: 45,
+                risk_level: 'MEDIUM',
+                summary: `${template.title}: ${template.sectors?.length ?? 0} sectors, ${template.dateCreated}.`,
+                recommendations: ['Execute sector plans', 'Monitor metrics'],
+                indicators: {
+                  sectors_count: template.sectors?.length ?? 0,
+                  date_created: template.dateCreated,
+                },
+              }}
+              size="sm"
+            />
+            <ARINVerdictBadge entityId="portfolio_global" compact />
           </div>
-        </div>
-      </header>
+        </header>
 
-      <div className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-4xl mx-auto space-y-6">
+        <div className="space-y-6">
           {template.sectors.map((sector) => (
             <SectorDetailCard
               key={sector.id}

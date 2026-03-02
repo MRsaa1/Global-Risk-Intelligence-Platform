@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>USGS Data Sources</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 1rem auto; padding: 0 1rem; line-height: 1.5; }
+    pre { white-space: pre-wrap; word-wrap: break-word; }
+    a { color: #3b82f6; }
+  </style>
+</head>
+<body>
+  <p><a href="/docs/USGS_SOURCES.md">View raw markdown (UTF-8)</a></p>
+  <pre id="content">Loading…</pre>
+  <script>
+    fetch('/docs/USGS_SOURCES.md')
+      .then(function (r) { return r.arrayBuffer(); })
+      .then(function (buf) { document.getElementById('content').textContent = new TextDecoder('utf-8').decode(buf); })
+      .catch(function () { document.getElementById('content').textContent = 'Failed to load. Open /docs/USGS_SOURCES.md with UTF-8 encoding.'; });
+  </script>
+</body>
+</html>

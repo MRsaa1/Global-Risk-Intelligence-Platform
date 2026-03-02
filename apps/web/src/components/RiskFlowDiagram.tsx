@@ -14,7 +14,6 @@
 
 import { useMemo, useState, useCallback, useRef } from 'react'
 import Plot from 'react-plotly.js'
-import { motion, AnimatePresence } from 'framer-motion'
 import html2canvas from 'html2canvas'
 import { chartColors } from '../lib/chartColors'
 
@@ -343,10 +342,71 @@ export default function RiskFlowDiagram({
     return { nodes: filteredNodes, links: filteredLinks }
   }, [flowData, filterType])
 
+  // Summary metrics computed from flow data
+  const summaryMetrics = useMemo(() => {
+    const totalExposure = filteredFlowData.links
+      .filter(l => filteredFlowData.nodes.find(n => n.id === l.source)?.category === 'event')
+      .reduce((sum, l) => sum + l.value, 0)
+    const sectors = filteredFlowData.nodes.filter(n => n.category === 'sector')
+    const events = filteredFlowData.nodes.filter(n => n.category === 'event')
+    
+    // Per-sector exposure
+    const sectorExposure: Record<string, number> = {}
+    for (const link of filteredFlowData.links) {
+      const targetNode = filteredFlowData.nodes.find(n => n.id === link.target)
+      if (targetNode?.category === 'sector') {
+        sectorExposure[link.target] = (sectorExposure[link.target] || 0) + link.value
+      }
+    }
+    const peakSector = Object.entries(sectorExposure).sort((a, b) => b[1] - a[1])[0]
+    const peakSectorNode = peakSector ? filteredFlowData.nodes.find(n => n.id === peakSector[0]) : null
+
+    // Per-impact category total
+    const impactTotals: Record<string, number> = {}
+    for (const link of filteredFlowData.links) {
+      const targetNode = filteredFlowData.nodes.find(n => n.id === link.target)
+      if (targetNode?.category === 'impact') {
+        impactTotals[link.target] = (impactTotals[link.target] || 0) + link.value
+      }
+    }
+
+    return {
+      totalExposure,
+      sectorCount: sectors.length,
+      eventCount: events.length,
+      peakSectorName: peakSectorNode?.label || '-',
+      peakSectorExposure: peakSector?.[1] || 0,
+      impactTotals,
+    }
+  }, [filteredFlowData])
+
   // Convert to Plotly format
   const plotData = useMemo(() => {
     const nodeMap = new Map(filteredFlowData.nodes.map((n, i) => [n.id, i]))
     
+    // Compute total outflow per node for percentage display
+    const totalOutflow = new Map<string, number>()
+    for (const l of filteredFlowData.links) {
+      totalOutflow.set(l.source, (totalOutflow.get(l.source) || 0) + l.value)
+    }
+
+    // Build richer labels with values
+    const enrichedLabels = filteredFlowData.nodes.map(n => {
+      const outVal = totalOutflow.get(n.id) || 0
+      // Sum inflows for impact nodes
+      const inVal = filteredFlowData.links
+        .filter(l => l.target === n.id)
+        .reduce((s, l) => s + l.value, 0)
+      const val = n.category === 'impact' ? inVal : outVal
+      if (val > 0 && !stressTestName) {
+        return `${n.label}<br>€${val.toFixed(1)}B`
+      }
+      if (val > 0) {
+        return `${n.label}<br>€${val.toFixed(1)}B`
+      }
+      return n.label
+    })
+
     return [{
       type: 'sankey' as const,
       orientation: 'h' as const,
@@ -358,9 +418,8 @@ export default function RiskFlowDiagram({
           color: 'rgba(255, 255, 255, 0.3)',
           width: 1,
         },
-        label: filteredFlowData.nodes.map(n => n.label),
+        label: enrichedLabels,
         color: filteredFlowData.nodes.map(n => {
-          // Highlight selected node
           if (selectedNode === n.id) {
             return n.color.replace(/[\d.]+\)$/, '1)')
           }
@@ -373,21 +432,25 @@ export default function RiskFlowDiagram({
         target: filteredFlowData.links.map(l => nodeMap.get(l.target) ?? 0),
         value: filteredFlowData.links.map(l => l.value),
         color: filteredFlowData.links.map(l => {
-          // Highlight links connected to selected node
           if (selectedNode && (l.source === selectedNode || l.target === selectedNode)) {
             return l.color?.replace(/[\d.]+\)$/, '0.7)') || 'rgba(255, 255, 255, 0.7)'
           }
           return l.color || 'rgba(255, 255, 255, 0.1)'
         }),
-        hovertemplate: '<b>%{source.label}</b> → <b>%{target.label}</b><br>Exposure: €%{value:.1f}B<extra></extra>',
+        customdata: filteredFlowData.links.map(l => {
+          const totalSrc = totalOutflow.get(l.source) || 1
+          const pct = ((l.value / totalSrc) * 100).toFixed(0)
+          return `${pct}% of source`
+        }),
+        hovertemplate: '<b>%{source.label}</b> → <b>%{target.label}</b><br>Exposure: €%{value:.1f}B (%{customdata})<extra></extra>',
       },
     }]
-  }, [filteredFlowData, selectedNode])
+  }, [filteredFlowData, selectedNode, stressTestName])
 
   const layout = useMemo(() => ({
     font: {
-      family: '"Space Grotesk", system-ui, sans-serif',
-      size: 12,
+      family: '"JetBrains Mono", monospace',
+      size: 10,
       color: chartColors.text.secondary,
     },
     paper_bgcolor: 'transparent',
@@ -407,134 +470,73 @@ export default function RiskFlowDiagram({
     scrollZoom: false,
   }), [])
 
+  const criticalPct = summaryMetrics.totalExposure > 0
+    ? (((summaryMetrics.impactTotals['critical'] || 0) / summaryMetrics.totalExposure) * 100).toFixed(1)
+    : '0.0'
+
   return (
-    <motion.div
+    <div
       ref={containerRef}
-      className="relative w-full bg-black/40 backdrop-blur-sm rounded-xl border border-white/10 overflow-hidden"
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
+      className="relative w-full bg-zinc-900/50 border border-zinc-800/60 rounded-md overflow-hidden"
     >
-      {/* Loading overlay */}
-      <AnimatePresence>
-        {isLoading && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="absolute inset-0 flex items-center justify-center bg-black/60 z-20"
-          >
-            <div className="flex flex-col items-center gap-2">
-              <motion.div
-                className="w-8 h-8 border-2 border-blue-500/30 border-t-blue-500 rounded-full"
-                animate={{ rotate: 360 }}
-                transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-              />
-              <span className="text-white/40 text-xs">Analyzing risk flows...</span>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-      
-      {/* Header */}
-      <div className="px-4 py-3 border-b border-white/10">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-white text-sm font-medium">
-              {stressTestName ? `Risk Flow: ${stressTestName}` : 'Risk Flow Analysis'}
-            </h3>
-            <p className="text-white/40 text-xs mt-0.5">
-              How risk events cascade through sectors to impact levels
-            </p>
-          </div>
-          
-          <div className="flex items-center gap-3">
-            {/* Filter controls */}
-            {showControls && onFilterChange && (
-              <div className="flex bg-white/5 rounded-lg p-0.5">
-                {(['all', 'critical', 'high', 'medium', 'low'] as const).map(f => (
-                  <button
-                    key={f}
-                    onClick={() => onFilterChange(f)}
-                    className={`px-2 py-1 text-xs rounded transition-all capitalize ${
-                      filterType === f
-                        ? 'bg-white/10 text-white'
-                        : 'text-white/40 hover:text-white/60'
-                    }`}
-                  >
-                    {f}
-                  </button>
-                ))}
-              </div>
-            )}
-            
-            {/* Action buttons */}
-            {showControls && (
-              <div className="flex gap-1">
+      {isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-zinc-950/70 z-20">
+          <span className="text-zinc-500 text-[10px] font-mono tracking-wide">LOADING...</span>
+        </div>
+      )}
+
+      {/* Single-line metrics strip */}
+      <div className="px-4 py-2 border-b border-zinc-800/60 flex items-center gap-1 flex-wrap text-[10px] font-mono">
+        <span className="uppercase tracking-widest text-zinc-500 mr-2">
+          {stressTestName ? `FLOW: ${stressTestName}` : 'EXPOSURE FLOW'}
+        </span>
+        <span className="text-zinc-500">Total</span>
+        <span className="text-zinc-200 tabular-nums">€{summaryMetrics.totalExposure.toFixed(1)}B</span>
+        <span className="text-zinc-700 mx-1">|</span>
+        <span className="text-zinc-500">{stressTestName ? 'Regions' : 'Sectors'}</span>
+        <span className="text-zinc-200 tabular-nums">{summaryMetrics.sectorCount}</span>
+        <span className="text-zinc-700 mx-1">|</span>
+        <span className="text-zinc-500">Peak:</span>
+        <span className="text-zinc-200">{summaryMetrics.peakSectorName}</span>
+        <span className="text-zinc-400 tabular-nums">€{summaryMetrics.peakSectorExposure.toFixed(1)}B</span>
+        <span className="text-zinc-700 mx-1">|</span>
+        <span className="text-zinc-500">Critical</span>
+        <span className="text-red-400/80 tabular-nums">€{(summaryMetrics.impactTotals['critical'] || 0).toFixed(1)}B ({criticalPct}%)</span>
+
+        <div className="ml-auto flex items-center gap-1">
+          {showControls && onFilterChange && (
+            <div className="flex bg-zinc-800/60 rounded p-0.5 mr-1">
+              {(['all', 'critical', 'high', 'medium', 'low'] as const).map(f => (
                 <button
-                  onClick={handleResetView}
-                  className="p-1.5 rounded bg-white/5 hover:bg-white/10 text-white/40 hover:text-white/60 transition-all"
-                  title="Reset View"
+                  key={f}
+                  onClick={() => onFilterChange(f)}
+                  className={`px-1.5 py-0.5 text-[9px] font-mono rounded transition-colors uppercase ${
+                    filterType === f ? 'bg-zinc-700 text-zinc-200' : 'text-zinc-600 hover:text-zinc-400'
+                  }`}
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
+                  {f}
                 </button>
-                
-                {showExport && (
-                  <button
-                    onClick={handleExport}
-                    disabled={isExporting}
-                    className="p-1.5 rounded bg-white/5 hover:bg-white/10 text-white/40 hover:text-white/60 transition-all disabled:opacity-50"
-                    title="Export as PNG"
-                  >
-                    {isExporting ? (
-                      <motion.svg
-                        className="w-4 h-4"
-                        animate={{ rotate: 360 }}
-                        transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </motion.svg>
-                    ) : (
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                      </svg>
-                    )}
-                  </button>
-                )}
-              </div>
-            )}
-            
-            {/* Legend */}
-            <div className="flex items-center gap-3 text-[10px] text-white/40 ml-2">
-              <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: chartColors.risk.critical }} />
-                <span>Critical</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: chartColors.risk.high }} />
-                <span>High</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: chartColors.risk.medium }} />
-                <span>Medium</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: chartColors.risk.low }} />
-                <span>Low</span>
-              </div>
+              ))}
             </div>
-          </div>
+          )}
+          {showControls && (
+            <>
+              <button onClick={handleResetView} className="p-1 rounded bg-zinc-800/60 hover:bg-zinc-700 text-zinc-500 hover:text-zinc-400 transition-colors" title="Reset">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+              </button>
+              {showExport && (
+                <button onClick={handleExport} disabled={isExporting} className="p-1 rounded bg-zinc-800/60 hover:bg-zinc-700 text-zinc-500 hover:text-zinc-400 transition-colors disabled:opacity-50" title="Export PNG">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                </button>
+              )}
+            </>
+          )}
         </div>
       </div>
 
-      {/* Sankey Diagram */}
-      <div className="p-2">
+      <div className="p-1">
         <Plot
+          key={`sankey-${revision}-${stressTestName ?? 'default'}-${(riskZones?.length ?? 0)}`}
           data={plotData}
           layout={layout}
           config={config}
@@ -552,35 +554,16 @@ export default function RiskFlowDiagram({
         />
       </div>
 
-      {/* Footer with explanation */}
-      <div className="px-4 py-3 border-t border-white/10 bg-white/5">
-        <div className="flex items-start gap-6 text-[10px] text-white/40">
-          <div>
-            <span className="text-white/60 font-medium">Left Column:</span> Risk Events
-          </div>
-          <div>
-            <span className="text-white/60 font-medium">Middle Column:</span> {stressTestName ? 'Affected Regions' : 'Sectors'}
-          </div>
-          <div>
-            <span className="text-white/60 font-medium">Right Column:</span> Impact Severity
-          </div>
-          <div className="ml-auto flex items-center gap-4">
-            <span>
-              <span className="text-white/60 font-medium">Flow Width:</span> Exposure (€B)
-            </span>
-            {selectedNode && (
-              <motion.span
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="text-blue-400"
-              >
-                Selected: {filteredFlowData.nodes.find(n => n.id === selectedNode)?.label}
-              </motion.span>
-            )}
-          </div>
-        </div>
+      {/* Compressed footer */}
+      <div className="px-4 py-1.5 border-t border-zinc-800/60 flex items-center gap-4 text-[9px] font-mono text-zinc-600">
+        <span>{stressTestName ? 'Trigger' : 'Events'} → {stressTestName ? 'Regions' : 'Sectors'} → Impact</span>
+        <span className="text-zinc-700">|</span>
+        <span>Width = Exposure (EUR B)</span>
+        {selectedNode && (
+          <span className="ml-auto text-zinc-400">SEL: {filteredFlowData.nodes.find(n => n.id === selectedNode)?.label}</span>
+        )}
       </div>
-    </motion.div>
+    </div>
   )
 }
 
@@ -704,7 +687,7 @@ export function RiskFlowMini({
         },
       }]}
       layout={{
-        font: { family: '"Space Grotesk"', size: 10, color: 'rgba(255,255,255,0.7)' },
+        font: { family: '"JetBrains Mono", monospace', size: 10, color: 'rgba(255,255,255,0.7)' },
         paper_bgcolor: 'transparent',
         plot_bgcolor: 'transparent',
         margin: { l: 5, r: 5, t: 5, b: 5 },

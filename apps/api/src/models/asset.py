@@ -167,7 +167,16 @@ class Asset(Base):
         Float,
         comment="AI-suggested annual insurance premium",
     )
-    
+    # Base credit parameters for regime-aware twin (used when set; else regime default 3% PD, 45% LGD)
+    probability_of_default: Mapped[Optional[float]] = mapped_column(
+        Float,
+        comment="Base PD 0..1 for stress/regime overlay (e.g. from credit model)",
+    )
+    loss_given_default: Mapped[Optional[float]] = mapped_column(
+        Float,
+        comment="Base LGD 0..1 for stress/regime overlay",
+    )
+
     # Extra Data
     extra_data: Mapped[Optional[str]] = mapped_column(Text)  # JSON as text for SQLite
     tags: Mapped[Optional[str]] = mapped_column(Text)  # JSON as text for SQLite

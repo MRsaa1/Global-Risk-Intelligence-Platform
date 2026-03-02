@@ -1,6 +1,7 @@
 /**
- * Portfolios Page - REIT and Fund Management
- * Displays list of portfolios with REIT metrics
+ * Portfolios & REIT — Fund and REIT management with NAV, FFO, and yield analytics.
+ * Unified Corporate Style: zinc palette, section labels font-mono text-[10px]
+ * uppercase tracking-widest text-zinc-500, rounded-md only, no glass/blur. See Implementation Audit.
  */
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -41,12 +42,12 @@ const typeLabels: Record<string, string> = {
 }
 
 const typeColors: Record<string, string> = {
-  fund: 'bg-primary-500/20 text-primary-300',
-  reit: 'bg-purple-500/20 text-purple-300',
-  pension: 'bg-blue-500/20 text-blue-300',
-  insurance: 'bg-amber-500/20 text-amber-300',
-  sovereign: 'bg-green-500/20 text-green-300',
-  custom: 'bg-white/10 text-white/70',
+  fund: 'bg-zinc-700 text-zinc-300',
+  reit: 'bg-zinc-700 text-zinc-300',
+  pension: 'bg-zinc-700 text-zinc-300',
+  insurance: 'bg-zinc-700 text-zinc-300',
+  sovereign: 'bg-zinc-700 text-zinc-300',
+  custom: 'bg-zinc-700 text-zinc-300',
 }
 
 export default function Portfolios() {
@@ -99,64 +100,69 @@ export default function Portfolios() {
   }
 
   const getRiskColor = (score: number | null) => {
-    if (score === null) return 'text-dark-muted'
-    if (score < 30) return 'text-green-400'
-    if (score < 60) return 'text-amber-400'
-    return 'text-red-400'
+    if (score === null) return 'text-zinc-500'
+    if (score < 30) return 'text-green-400/80'
+    if (score < 60) return 'text-amber-400/80'
+    return 'text-red-400/80'
   }
 
   return (
-    <div className="h-full overflow-auto p-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-display font-bold text-white flex items-center gap-2">
-            <BuildingOfficeIcon className="w-8 h-8 text-emerald-400" />
-            Portfolios & REIT
-          </h1>
-          <p className="text-dark-muted text-sm mt-1">
-            Fund and REIT management with NAV, FFO, and yield analytics
-          </p>
+    <div className="min-h-full p-6 bg-zinc-950 pb-16">
+      <div className="w-full max-w-[1920px] mx-auto">
+        {/* Header — Unified Corporate Style */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-zinc-800 rounded-md border border-zinc-700">
+              <BuildingOfficeIcon className="w-8 h-8 text-zinc-400" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-display font-semibold text-zinc-100">
+                Portfolios & REIT
+              </h1>
+              <p className="text-zinc-500 text-sm mt-1 font-sans">
+                Fund and REIT management with NAV, FFO, and yield analytics
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={fetchPortfolios}
+              className="p-2 rounded-md bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-100 transition-colors"
+              title="Refresh"
+            >
+              <ArrowPathIcon className="w-5 h-5" />
+            </button>
+            <button
+              onClick={() => navigate('/portfolios/new')}
+              className="flex items-center gap-2 px-4 py-2 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-100 font-medium hover:bg-zinc-700 transition-colors font-sans"
+            >
+              <PlusIcon className="w-5 h-5" />
+              New Portfolio
+            </button>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={fetchPortfolios}
-            className="p-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 text-white/70 hover:text-white transition-colors"
-            title="Refresh"
-          >
-            <ArrowPathIcon className="w-5 h-5" />
-          </button>
-          <button
-            onClick={() => navigate('/portfolios/new')}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary-500 text-white font-medium hover:bg-primary-600 transition-colors"
-          >
-            <PlusIcon className="w-5 h-5" />
-            New Portfolio
-          </button>
-        </div>
-      </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <div className="glass rounded-2xl p-4 border border-white/5">
-          <p className="text-dark-muted text-xs">Total Portfolios</p>
-          <p className="text-xl font-bold text-white">{portfolios.length}</p>
-        </div>
-        <div className="glass rounded-2xl p-4 border border-white/5">
-          <p className="text-dark-muted text-xs">Total NAV</p>
-          <p className="text-xl font-bold text-white">
-            {formatCurrency(portfolios.reduce((sum, p) => sum + (p.nav || 0), 0), 'EUR')}
-          </p>
-        </div>
-        <div className="glass rounded-2xl p-4 border border-white/5">
-          <p className="text-dark-muted text-xs">Total Assets</p>
-          <p className="text-xl font-bold text-white">
-            {portfolios.reduce((sum, p) => sum + p.asset_count, 0)}
-          </p>
-        </div>
-        <div className="glass rounded-2xl p-4 border border-white/5">
-          <p className="text-dark-muted text-xs">Avg Yield</p>
-          <p className="text-xl font-bold text-green-400">
+        {/* Summary Cards — corp: bg-zinc-900, no glass */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="rounded-md p-4 border border-zinc-800 bg-zinc-900">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Total Portfolios</p>
+            <p className="text-xl font-semibold font-mono tabular-nums text-zinc-100 mt-0.5">{portfolios.length}</p>
+          </div>
+          <div className="rounded-md p-4 border border-zinc-800 bg-zinc-900">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Total NAV</p>
+            <p className="text-xl font-semibold font-mono tabular-nums text-zinc-100 mt-0.5">
+              {formatCurrency(portfolios.reduce((sum, p) => sum + (p.nav || 0), 0), 'EUR')}
+            </p>
+          </div>
+          <div className="rounded-md p-4 border border-zinc-800 bg-zinc-900">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Total Assets</p>
+            <p className="text-xl font-semibold font-mono tabular-nums text-zinc-100 mt-0.5">
+              {portfolios.reduce((sum, p) => sum + p.asset_count, 0)}
+            </p>
+          </div>
+          <div className="rounded-md p-4 border border-zinc-800 bg-zinc-900">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Avg Yield</p>
+            <p className="text-xl font-semibold font-mono tabular-nums text-green-400/80 mt-0.5">
             {formatPercent(
               portfolios.filter((p) => p.yield_pct).length > 0
                 ? portfolios.reduce((sum, p) => sum + (p.yield_pct || 0), 0) /
@@ -167,109 +173,114 @@ export default function Portfolios() {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="glass rounded-2xl p-4 border border-white/5 mb-6 flex flex-wrap gap-3">
-        <input
-          type="text"
-          placeholder="Search portfolios..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white placeholder-white/40 min-w-[200px] focus:outline-none focus:ring-2 focus:ring-primary-500/50"
-        />
-        <select
-          value={typeFilter}
-          onChange={(e) => setTypeFilter(e.target.value)}
-          className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white min-w-[150px] focus:outline-none focus:ring-2 focus:ring-primary-500/50"
-        >
-          <option value="">All Types</option>
-          {Object.entries(typeLabels).map(([value, label]) => (
-            <option key={value} value={value} className="bg-dark-card">
-              {label}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Loading */}
-      {loading && (
-        <div className="h-1 rounded-full bg-white/10 overflow-hidden mb-6">
-          <div className="h-full w-1/3 bg-primary-500 animate-pulse" />
+        {/* Filters — corp: bg-zinc-900, section labels */}
+        <div className="rounded-md p-4 border border-zinc-800 bg-zinc-900 mb-6 flex flex-wrap items-center gap-4">
+          <div className="flex-1 min-w-[200px]">
+            <input
+              type="text"
+              placeholder="Search portfolios..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full px-4 py-2 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-zinc-600 font-sans"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Type:</span>
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              className="px-3 py-1.5 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-100 text-xs font-medium focus:outline-none focus:border-zinc-600 font-sans min-w-[150px]"
+            >
+              <option value="">All Types</option>
+              {Object.entries(typeLabels).map(([value, label]) => (
+                <option key={value} value={value} className="bg-zinc-900">
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
-      )}
 
-      {/* Portfolios Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredPortfolios.map((portfolio) => (
-          <div
-            key={portfolio.id}
-            onClick={() => navigate(`/portfolios/${portfolio.id}`)}
-            className="glass rounded-2xl p-5 border border-white/5 hover:border-primary-500/30 cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-lg"
-          >
-            <div className="flex justify-between items-start mb-3">
-              <div className="min-w-0">
-                <h3 className="font-semibold text-white truncate">{portfolio.name}</h3>
-                <p className="text-dark-muted text-sm font-mono">{portfolio.code}</p>
-              </div>
-              <span
-                className={`shrink-0 text-xs px-2 py-0.5 rounded-full ${
-                  typeColors[portfolio.portfolio_type] || 'bg-white/10 text-white/70'
-                }`}
-              >
+        {/* Loading */}
+        {loading && (
+          <div className="h-1 rounded-full bg-zinc-700 overflow-hidden mb-6">
+            <div className="h-full w-1/3 bg-zinc-500 animate-pulse" />
+          </div>
+        )}
+
+        {/* Portfolios Grid — corp: bg-zinc-900, no glass, rounded-md */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredPortfolios.map((portfolio) => (
+            <div
+              key={portfolio.id}
+              onClick={() => navigate(`/portfolios/${portfolio.id}`)}
+              className="rounded-md p-5 border border-zinc-700 bg-zinc-900 hover:border-zinc-600 cursor-pointer transition-all"
+            >
+              <div className="flex justify-between items-start mb-3">
+                <div className="min-w-0">
+                  <h3 className="font-display font-semibold text-zinc-100 truncate">{portfolio.name}</h3>
+                  <p className="font-mono text-[10px] uppercase tracking-wider text-zinc-500 mt-0.5">{portfolio.code}</p>
+                </div>
+                <span
+                  className={`shrink-0 text-xs px-2 py-0.5 rounded-md font-mono ${
+                    typeColors[portfolio.portfolio_type] || 'bg-zinc-700 text-zinc-300'
+                  }`}
+                >
                 {typeLabels[portfolio.portfolio_type] || portfolio.portfolio_type}
               </span>
             </div>
 
             <div className="grid grid-cols-2 gap-2 mb-4">
-              <div className="p-2 rounded-lg bg-white/5">
-                <p className="text-dark-muted text-xs">NAV</p>
-                <p className="font-semibold text-white">
-                  {formatCurrency(portfolio.nav, portfolio.base_currency)}
+              <div className="p-2 rounded-md bg-zinc-800 border border-zinc-700/60">
+                <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">NAV</p>
+                <p className="font-semibold font-mono tabular-nums text-zinc-100 text-sm mt-0.5">
+                  {portfolio.asset_count === 0 ? '-' : formatCurrency(portfolio.nav, portfolio.base_currency)}
                 </p>
               </div>
-              <div className="p-2 rounded-lg bg-white/5">
-                <p className="text-dark-muted text-xs">FFO</p>
-                <p className="font-semibold text-white">
-                  {formatCurrency(portfolio.ffo, portfolio.base_currency)}
+              <div className="p-2 rounded-md bg-zinc-800 border border-zinc-700/60">
+                <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">FFO</p>
+                <p className="font-semibold font-mono tabular-nums text-zinc-100 text-sm mt-0.5">
+                  {portfolio.asset_count === 0 ? '-' : formatCurrency(portfolio.ffo, portfolio.base_currency)}
                 </p>
               </div>
             </div>
 
             <div className="flex justify-between text-sm mb-3">
               <div className="text-center">
-                <p className="text-dark-muted text-xs">Yield</p>
-                <p className="font-semibold text-green-400">{formatPercent(portfolio.yield_pct)}</p>
+                <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Yield</p>
+                <p className="font-semibold font-mono text-green-400/80 text-sm mt-0.5">{portfolio.asset_count === 0 ? '-' : formatPercent(portfolio.yield_pct)}</p>
               </div>
               <div className="text-center">
-                <p className="text-dark-muted text-xs">D/E</p>
-                <p className="font-semibold text-white">
-                  {portfolio.debt_to_equity?.toFixed(2) || '-'}
+                <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">D/E</p>
+                <p className="font-semibold font-mono text-zinc-100 text-sm mt-0.5">
+                  {portfolio.asset_count === 0 ? '-' : (portfolio.debt_to_equity?.toFixed(2) || '-')}
                 </p>
               </div>
               <div className="text-center">
-                <p className="text-dark-muted text-xs">Occupancy</p>
-                <p className="font-semibold text-white">
-                  {portfolio.occupancy ? `${(portfolio.occupancy * 100).toFixed(0)}%` : '-'}
+                <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Occupancy</p>
+                <p className="font-semibold font-mono text-zinc-100 text-sm mt-0.5">
+                  {portfolio.asset_count === 0 ? '-' : (portfolio.occupancy ? `${(portfolio.occupancy * 100).toFixed(0)}%` : '-')}
                 </p>
               </div>
               <div className="text-center">
-                <p className="text-dark-muted text-xs">Assets</p>
-                <p className="font-semibold text-white">{portfolio.asset_count}</p>
+                <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Assets</p>
+                <p className="font-semibold font-mono tabular-nums text-zinc-100 text-sm mt-0.5">{portfolio.asset_count}</p>
               </div>
             </div>
 
-            <div className="flex justify-between items-center pt-2 border-t border-white/10">
+            <div className="flex justify-between items-center pt-2 border-t border-zinc-800">
               <div className="flex items-center gap-1">
-                <span className="text-dark-muted text-xs">Climate Risk:</span>
-                <span className={`font-semibold text-sm ${getRiskColor(portfolio.climate_risk_score)}`}>
+                <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Climate Risk:</span>
+                <span className={`font-semibold font-mono text-sm ${getRiskColor(portfolio.climate_risk_score)}`}>
                   {portfolio.climate_risk_score?.toFixed(0) || '-'}
                 </span>
               </div>
               {portfolio.ytd_return !== null && (
                 <span
-                  className={`text-xs px-2 py-0.5 rounded-full border ${
+                  className={`text-xs px-2 py-0.5 rounded-md font-mono border ${
                     portfolio.ytd_return >= 0
-                      ? 'border-green-500/30 text-green-400 bg-green-500/10'
-                      : 'border-red-500/30 text-red-400 bg-red-500/10'
+                      ? 'border-green-500/30 text-green-400/80 bg-green-500/10'
+                      : 'border-red-500/30 text-red-400/80 bg-red-500/10'
                   }`}
                 >
                   <ArrowTrendingUpIcon className="w-3.5 h-3.5 inline -mr-0.5" />
@@ -279,53 +290,54 @@ export default function Portfolios() {
             </div>
 
             {portfolio.manager_name && (
-              <p className="text-dark-muted text-xs mt-2">Manager: {portfolio.manager_name}</p>
+              <p className="font-mono text-[10px] uppercase tracking-wider text-zinc-500 mt-2">Manager: {portfolio.manager_name}</p>
             )}
-          </div>
-        ))}
-      </div>
-
-      {/* Empty State */}
-      {!loading && filteredPortfolios.length === 0 && (
-        <div className="text-center py-16">
-          <ChartBarIcon className="w-16 h-16 mx-auto text-dark-muted/50 mb-4" />
-          <h3 className="text-lg font-semibold text-white/80 mb-2">No portfolios found</h3>
-          <p className="text-dark-muted mb-4">Create your first portfolio or load sample data for demos</p>
-          <div className="flex flex-wrap items-center justify-center gap-3">
-            <button
-              onClick={async () => {
-                setSeedError(null)
-                setSeedLoading(true)
-                try {
-                  await seedApi.seedSampleData()
-                  await fetchPortfolios()
-                } catch (e: unknown) {
-                  setSeedError(e instanceof Error ? e.message : 'Failed to load sample data')
-                } finally {
-                  setSeedLoading(false)
-                }
-              }}
-              disabled={seedLoading}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 text-white font-medium hover:bg-white/15 transition-colors border border-white/20 disabled:opacity-50"
-            >
-              {seedLoading ? (
-                <ArrowPathIcon className="w-5 h-5 animate-spin" />
-              ) : (
-                <ArrowPathIcon className="w-5 h-5" />
-              )}
-              Load sample data
-            </button>
-            <button
-              onClick={() => navigate('/portfolios/new')}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary-500 text-white font-medium hover:bg-primary-600 transition-colors"
-            >
-              <PlusIcon className="w-5 h-5" />
-              Create Portfolio
-            </button>
-          </div>
-          {seedError && <p className="text-amber-400 text-sm mt-3">{seedError}</p>}
+            </div>
+          ))}
         </div>
-      )}
+
+        {/* Empty State — corp */}
+        {!loading && filteredPortfolios.length === 0 && (
+          <div className="text-center py-16">
+            <ChartBarIcon className="w-16 h-16 mx-auto text-zinc-600 mb-4" />
+            <h3 className="text-lg font-display font-semibold text-zinc-200 mb-2">No portfolios found</h3>
+            <p className="text-zinc-500/90 font-sans mb-4">Create your first portfolio or load sample data for demos</p>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <button
+                onClick={async () => {
+                  setSeedError(null)
+                  setSeedLoading(true)
+                  try {
+                    await seedApi.seedSampleData()
+                    await fetchPortfolios()
+                  } catch (e: unknown) {
+                    setSeedError(e instanceof Error ? e.message : 'Failed to load sample data')
+                  } finally {
+                    setSeedLoading(false)
+                  }
+                }}
+                disabled={seedLoading}
+                className="flex items-center gap-2 px-4 py-2 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-100 font-medium hover:bg-zinc-700 transition-colors font-sans disabled:opacity-50"
+              >
+                {seedLoading ? (
+                  <ArrowPathIcon className="w-5 h-5 animate-spin" />
+                ) : (
+                  <ArrowPathIcon className="w-5 h-5" />
+                )}
+                Load sample data
+              </button>
+              <button
+                onClick={() => navigate('/portfolios/new')}
+                className="flex items-center gap-2 px-4 py-2 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-100 font-medium hover:bg-zinc-700 transition-colors font-sans"
+              >
+                <PlusIcon className="w-5 h-5" />
+                Create Portfolio
+              </button>
+            </div>
+            {seedError && <p className="text-amber-400/80 text-sm mt-3 font-sans">{seedError}</p>}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

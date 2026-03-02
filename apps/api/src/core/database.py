@@ -19,8 +19,9 @@ from sqlalchemy.orm import DeclarativeBase
 from .config import settings
 
 
-# Detect database mode
-USE_SQLITE = os.environ.get("USE_SQLITE", "true").lower() == "true"
+# Single source of truth for DB mode: read from settings (which reads USE_SQLITE env var).
+# Default is False (PostgreSQL) unless USE_SQLITE=true is set in the environment.
+USE_SQLITE = settings.use_sqlite
 
 
 def get_database_url() -> str:
@@ -33,9 +34,12 @@ def get_database_url() -> str:
     3. settings.database_url → PostgreSQL from config
     """
     if USE_SQLITE:
-        # SQLite (dev or production). Allow override via DATABASE_URL.
-        default_db_path = os.path.join(os.path.dirname(__file__), "..", "..", "dev.db")
-        db_url = os.environ.get("DATABASE_URL") or f"sqlite:///{default_db_path}"
+        # SQLite: same default as alembic/env.py (prod.db first, then dev.db) so migrations apply to the same file.
+        _api_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        default_path = os.path.join(_api_root, "prod.db")
+        if not os.path.exists(default_path):
+            default_path = os.path.join(_api_root, "dev.db")
+        db_url = os.environ.get("DATABASE_URL") or f"sqlite:///{default_path}"
 
         # Ensure async driver for SQLAlchemy async engine
         if db_url.startswith("sqlite://") and "+aiosqlite" not in db_url:
@@ -90,6 +94,20 @@ AsyncSessionLocal = async_sessionmaker(
     class_=AsyncSession,
     expire_on_commit=False,
 )
+
+# TimescaleDB (time-series risk data). Created only when enable_timescale=True and timescale_url is set.
+timescale_engine = None
+if getattr(settings, "enable_timescale", False) and getattr(settings, "timescale_url", None):
+    _ts_url = settings.timescale_url.strip()
+    if _ts_url.startswith("postgresql://") and "+asyncpg" not in _ts_url:
+        _ts_url = _ts_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    timescale_engine = create_async_engine(
+        _ts_url,
+        echo=settings.debug,
+        pool_size=5,
+        max_overflow=10,
+        pool_pre_ping=True,
+    )
 
 
 class Base(DeclarativeBase):
@@ -188,13 +206,45 @@ def _sqlite_sync_assets_columns(sync_conn):
             pass
 
 
+def _ensure_digital_twins_regime_context(sync_conn):
+    """Add regime_context to digital_twins if missing (so API works without running alembic)."""
+    from sqlalchemy import text
+    try:
+        r = sync_conn.execute(text("PRAGMA table_info(digital_twins)"))
+        existing = {row[1] for row in r}
+    except Exception:
+        return
+    if "regime_context" in existing:
+        return
+    try:
+        sync_conn.execute(text('ALTER TABLE digital_twins ADD COLUMN regime_context TEXT'))
+    except Exception:
+        pass
+
+
+def _ensure_digital_twins_regime_context_pg(sync_conn):
+    """PostgreSQL: add regime_context to digital_twins if missing."""
+    from sqlalchemy import text
+    try:
+        sync_conn.execute(text(
+            "ALTER TABLE digital_twins ADD COLUMN IF NOT EXISTS regime_context TEXT"
+        ))
+    except Exception:
+        pass
+
+
 async def init_databases():
     """Initialize database connections and create tables."""
+    # Register Cross-Track models so create_all creates their tables
+    from src.models.field_observation import FieldObservation, CalibrationResult  # noqa: F401
     # Create SQLite/PostgreSQL tables
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         if is_sqlite:
             await conn.run_sync(_sqlite_sync_assets_columns)
+            await conn.run_sync(_ensure_digital_twins_regime_context)
+        else:
+            await conn.run_sync(_ensure_digital_twins_regime_context_pg)
     
     # Skip Neo4j verification in development
     if not isinstance(neo4j_driver, MockNeo4jDriver):

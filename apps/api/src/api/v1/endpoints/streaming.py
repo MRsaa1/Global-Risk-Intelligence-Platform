@@ -12,13 +12,12 @@ Designed for GPU-client rendering.
 """
 import asyncio
 import json
-from typing import Set
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from typing import Optional, Set
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 from pydantic import BaseModel
 from enum import Enum
 import structlog
 from datetime import datetime
-import random
 
 logger = structlog.get_logger()
 router = APIRouter()
@@ -43,21 +42,24 @@ class StreamMessage(BaseModel):
 # ==============================================
 
 class ConnectionManager:
-    """Manage WebSocket connections."""
+    """Manage WebSocket connections. Optional JWT token for user identity (ACL-ready)."""
     
     def __init__(self):
         self.active_connections: Set[WebSocket] = set()
         self.subscriptions: dict[WebSocket, set[str]] = {}
+        self.connection_user_id: dict[WebSocket, Optional[str]] = {}
     
-    async def connect(self, websocket: WebSocket):
+    async def connect(self, websocket: WebSocket, user_id: Optional[str] = None):
         await websocket.accept()
         self.active_connections.add(websocket)
         self.subscriptions[websocket] = set()
-        logger.info("WebSocket connected", total_connections=len(self.active_connections))
+        self.connection_user_id[websocket] = user_id
+        logger.info("WebSocket connected", total_connections=len(self.active_connections), user_id=user_id is not None)
     
     def disconnect(self, websocket: WebSocket):
         self.active_connections.discard(websocket)
         self.subscriptions.pop(websocket, None)
+        self.connection_user_id.pop(websocket, None)
         logger.info("WebSocket disconnected", total_connections=len(self.active_connections))
     
     def subscribe(self, websocket: WebSocket, stream_type: str):
@@ -101,15 +103,20 @@ manager = ConnectionManager()
 # ==============================================
 
 @router.websocket("/ws/stream")
-async def websocket_endpoint(websocket: WebSocket):
+async def websocket_endpoint(
+    websocket: WebSocket,
+    token: Optional[str] = Query(default=None, description="JWT token for authenticated connections"),
+):
     """
     Main WebSocket endpoint for real-time streaming.
-    
+    Optional token: if provided, user_id is resolved and attached to the connection (ACL-ready).
     Protocol:
     - Client sends: {"action": "subscribe", "streams": ["risk_update", "alert"]}
     - Server sends: {"type": "risk_update", "timestamp": "...", "data": {...}}
     """
-    await manager.connect(websocket)
+    from src.core.security import resolve_user_id_from_token
+    user_id = resolve_user_id_from_token(token)
+    await manager.connect(websocket, user_id=user_id)
     
     try:
         # Start background tasks
@@ -148,12 +155,10 @@ async def websocket_endpoint(websocket: WebSocket):
 
 async def send_risk_updates(websocket: WebSocket):
     """
-    Send periodic risk updates.
-    
-    Emits one RiskUpdate-shaped message per tick:
-    {"type":"risk_update","hotspot_id":"...","risk_score":0.7,"previous_score":0.65,"timestamp":"..."}
-
-    In production, replace the generator with real data (DB/Redis/events).
+    Send risk updates only when a city is marked dirty (e.g. after parameter change).
+    Does NOT continuously recalculate random cities — that caused risk to "drift" on the
+    globe (critical→high) without real-world changes. Data is not analyzed live; use
+    cached/periodic recalculation from geodata instead.
     """
     from src.data.cities import get_all_cities, get_city
     from src.services.city_risk_calculator import get_city_risk_calculator
@@ -162,11 +167,15 @@ async def send_risk_updates(websocket: WebSocket):
     from src.models.asset import Asset
     from sqlalchemy import select, func
 
-    # City universe for streaming updates (same IDs as /geodata/hotspots)
     cities = get_all_cities()
     city_ids = [c.id for c in cities]
     if not city_ids:
         city_ids = ["tokyo", "newyork", "london"]
+
+    from src.core.config import get_settings
+    settings = get_settings()
+    use_v2 = getattr(settings, "risk_model_version", 2) == 2
+    use_external_data = True
 
     calc = get_city_risk_calculator()
     last: dict[str, float] = {}
@@ -182,27 +191,31 @@ async def send_risk_updates(websocket: WebSocket):
 
     while True:
         try:
-            # Pick one city per tick to keep traffic low but continuous
-            city_id = await pop_dirty_city() or random.choice(city_ids)
-            score = await calc.calculate_risk(city_id, force_recalculate=True, use_external_data=False)
+            # Only push updates for cities explicitly marked dirty (e.g. parameter update).
+            # No random recalculation — avoids drift (critical→high) when data is not live.
+            city_id = await pop_dirty_city()
+            if not city_id:
+                await asyncio.sleep(30)
+                continue
+
+            score = await calc.calculate_risk(
+                city_id,
+                force_recalculate=True,
+                use_external_data=use_external_data,
+                use_risk_model_v2=use_v2,
+            )
             if not score:
                 await asyncio.sleep(2)
                 continue
 
             base = float(score.risk_score)
 
-            # ------------------------------------------------------------------
-            # Real asset-driven adjustments (DB-backed):
-            # If assets/digital twins in this city change their risk scores (e.g. from sensors),
-            # the city risk should react and the city should move between zones on the globe.
-            # ------------------------------------------------------------------
             city = get_city(city_id)
             candidates: set[str] = {city_id}
             if city:
                 candidates.add(city.name)
                 if city.name.lower().endswith(" city"):
                     candidates.add(city.name[:-5])
-            # Also add a no-space variant to match DB values like "NewYork"
             candidates = {c for c in candidates if c}
             candidates |= {c.replace(" ", "") for c in candidates if " " in c}
             candidates_lower = [c.lower() for c in candidates]
@@ -235,7 +248,6 @@ async def send_risk_updates(websocket: WebSocket):
             except Exception:
                 asset_risk = None
 
-            # Combine base city risk (macro) with asset risk (micro / sensors).
             if asset_risk is not None:
                 new = max(0.0, min(1.0, base * 0.7 + asset_risk * 0.3))
             else:
@@ -244,11 +256,11 @@ async def send_risk_updates(websocket: WebSocket):
             prev = float(last.get(city_id, new))
             last[city_id] = new
 
-            # Only emit when there is a meaningful change OR a zone transition
+            new_zone_raw = (score.zone or "").strip().upper()
+            new_zone = new_zone_raw.lower() if new_zone_raw in ("LOW", "MEDIUM", "HIGH", "CRITICAL") else _zone_level(new)
             prev_zone = _zone_level(prev)
-            new_zone = _zone_level(new)
             if abs(new - prev) < 0.002 and prev_zone == new_zone:
-                await asyncio.sleep(5)
+                await asyncio.sleep(2)
                 continue
 
             await websocket.send_json(
@@ -263,7 +275,7 @@ async def send_risk_updates(websocket: WebSocket):
                 }
             )
 
-            await asyncio.sleep(5)  # Update every 5 seconds
+            await asyncio.sleep(2)
         
         except asyncio.CancelledError:
             break

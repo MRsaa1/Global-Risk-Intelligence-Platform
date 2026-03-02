@@ -122,7 +122,7 @@ export default function AgentMonitoringWidget({ compact = false }: AgentMonitori
   })
 
   const profiles = data?.profiles || {}
-  const agents = ['SENTINEL', 'ANALYST', 'ADVISOR', 'REPORTER'] as const
+  const agents = ['SENTINEL', 'ANALYST', 'ADVISOR', 'REPORTER', 'ETHICIST'] as const
 
   // Calculate overall health (average of all agents)
   const overallHealth = agents.reduce((sum, name) => {
@@ -141,12 +141,12 @@ export default function AgentMonitoringWidget({ compact = false }: AgentMonitori
     }).length
 
     return (
-      <div className="group flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-black/25 border border-white/5">
+      <div className="group flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-zinc-900/50 border border-zinc-800/60">
         <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${overallCfg.bg} ${overallStatus !== 'healthy' ? 'animate-pulse' : ''}`} />
-        <span className="text-white/25 text-[10px] uppercase tracking-widest">Agents</span>
-        <span className="text-white/20">·</span>
-        {isLoading && <span className="text-white/20 text-[10px]">—</span>}
-        {error && <span className="text-white/30 text-[10px]">Error</span>}
+        <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Agents</span>
+        <span className="text-zinc-700">·</span>
+        {isLoading && <span className="text-zinc-700 text-[10px]">—</span>}
+        {error && <span className="text-zinc-600 text-[10px]">Error</span>}
         {!isLoading && !error && (
           <>
             <span className={`text-[10px] ${overallCfg.color}`}>
@@ -154,7 +154,7 @@ export default function AgentMonitoringWidget({ compact = false }: AgentMonitori
             </span>
             {overallStatus !== 'healthy' && (
               <>
-                <span className="text-white/20">·</span>
+                <span className="text-zinc-700">·</span>
                 <span className={`text-[10px] ${overallCfg.color}`}>
                   {overallStatus === 'degraded' ? 'Degraded' : 'Critical'}
                 </span>
@@ -170,33 +170,33 @@ export default function AgentMonitoringWidget({ compact = false }: AgentMonitori
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="glass rounded-2xl p-6 border border-white/5"
+      className="rounded-md p-6 border border-zinc-800/60 bg-zinc-900/50"
     >
       <div className="flex items-start justify-between gap-4 mb-4">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 mb-2">
-            <CpuChipIcon className="w-5 h-5 text-white/50" />
-            <h2 className="text-sm font-display font-semibold text-white/80">AI Agents (NeMo)</h2>
+            <CpuChipIcon className="w-5 h-5 text-zinc-500" />
+            <h2 className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">AI Agents (NeMo)</h2>
             <div className={`flex items-center gap-1.5 ${overallCfg.color}`}>
               <div className={`w-2 h-2 rounded-full ${overallCfg.bg} ${overallStatus !== 'healthy' ? 'animate-pulse' : ''}`} />
-              <span className="text-xs font-medium">
+              <span className="text-[10px] font-mono uppercase tracking-wider">
                 {overallStatus === 'healthy' ? 'All Healthy' : 
                  overallStatus === 'degraded' ? 'Degraded' : 'Critical'}
               </span>
             </div>
-            <div className={`flex items-center gap-1.5 ml-2 ${isRunning ? 'text-emerald-400' : 'text-amber-400'}`}>
+            <div className={`flex items-center gap-1.5 ml-2 ${isRunning ? 'text-emerald-400/80' : 'text-amber-400/80'}`}>
               <div className={`w-2 h-2 rounded-full ${isRunning ? 'bg-emerald-500' : 'bg-amber-500'} ${isRunning ? 'animate-pulse' : ''}`} />
-              <span className="text-xs font-medium">
+              <span className="text-[10px] font-mono uppercase tracking-wider">
                 {isRunning ? 'Running' : 'Stopped'}
               </span>
             </div>
           </div>
 
           {isLoading && (
-            <p className="text-sm text-white/40">Loading agent status…</p>
+            <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Loading agent status…</p>
           )}
           {error && (
-            <p className="text-sm text-amber-400">
+            <p className="text-sm text-amber-400/80 font-sans">
               Unable to load. <button type="button" onClick={() => refetch()} className="underline">Retry</button>
             </p>
           )}
@@ -206,13 +206,13 @@ export default function AgentMonitoringWidget({ compact = false }: AgentMonitori
           {!isLoading && !error && (
         <div className="space-y-3">
           {/* Start/Stop Agents Button */}
-          <div className="p-3 rounded-lg bg-purple-500/10 border border-purple-500/20">
+          <div className="p-3 rounded-md bg-zinc-900/80 border border-zinc-800/60">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-purple-300 font-medium mb-1">
+                <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-1">
                   {isRunning ? 'Agents are running' : 'Agents are stopped'}
                 </p>
-                <p className="text-[10px] text-purple-400/70">
+                <p className="text-[10px] text-zinc-500/90 font-sans">
                   {isRunning 
                     ? 'SENTINEL is monitoring in the background. Alerts will be generated automatically.'
                     : 'Start agents to begin 24/7 monitoring and alert generation.'}
@@ -223,7 +223,7 @@ export default function AgentMonitoringWidget({ compact = false }: AgentMonitori
                   <button
                     onClick={() => stopMutation.mutate()}
                     disabled={stopMutation.isPending}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 text-xs transition-colors disabled:opacity-50"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-red-500/20 hover:bg-red-500/30 text-red-300 text-xs transition-colors disabled:opacity-50"
                   >
                     <StopIcon className="w-4 h-4" />
                     {stopMutation.isPending ? 'Stopping...' : 'Stop Agents'}
@@ -232,7 +232,7 @@ export default function AgentMonitoringWidget({ compact = false }: AgentMonitori
                   <button
                     onClick={() => startMutation.mutate()}
                     disabled={startMutation.isPending}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-xs transition-colors disabled:opacity-50"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-xs transition-colors disabled:opacity-50"
                   >
                     <PlayIcon className="w-4 h-4" />
                     {startMutation.isPending ? 'Starting...' : 'Start Agents'}
@@ -242,27 +242,29 @@ export default function AgentMonitoringWidget({ compact = false }: AgentMonitori
             </div>
           </div>
 
-          {/* Test Button - only show if no metrics yet */}
-          {Object.values(profiles).every(p => p.total_calls === 0) && (
-            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-amber-300 font-medium mb-1">No agent activity yet</p>
-                  <p className="text-[10px] text-amber-400/70">
-                    Agents haven't been called. Click "Test Agents" to generate sample metrics.
-                  </p>
-                </div>
-                <button
-                  onClick={() => testMutation.mutate()}
-                  disabled={testMutation.isPending}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs transition-colors disabled:opacity-50"
-                >
-                  <ArrowPathIcon className={`w-4 h-4 ${testMutation.isPending ? 'animate-spin' : ''}`} />
-                  {testMutation.isPending ? 'Testing...' : 'Test Agents'}
-                </button>
+          {/* Test Agents - always show so user can run and see real metrics */}
+          <div className="p-3 rounded-md bg-zinc-900/80 border border-zinc-800/60">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-1">
+                  {Object.values(profiles).every(p => p.total_calls === 0)
+                    ? 'No agent activity yet'
+                    : 'Run agents again to add more metrics'}
+                </p>
+                <p className="text-[10px] text-zinc-500/90 font-sans">
+                  Test Agents runs SENTINEL, ANALYST, ADVISOR, REPORTER, ETHICIST once and records latency/success. Start Agents runs SENTINEL monitoring in the background.
+                </p>
               </div>
+              <button
+                onClick={() => testMutation.mutate()}
+                disabled={testMutation.isPending}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs transition-colors disabled:opacity-50"
+              >
+                <ArrowPathIcon className={`w-4 h-4 ${testMutation.isPending ? 'animate-spin' : ''}`} />
+                {testMutation.isPending ? 'Testing...' : 'Test Agents'}
+              </button>
             </div>
-          )}
+          </div>
 
           {agents.map((agentName) => {
             const profile = profiles[agentName]
@@ -275,42 +277,42 @@ export default function AgentMonitoringWidget({ compact = false }: AgentMonitori
             return (
               <div
                 key={agentName}
-                className="p-3 rounded-lg bg-black/30 border border-white/5"
+                className="p-3 rounded-md bg-zinc-900/80 border border-zinc-800/60"
               >
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <Icon className={`w-4 h-4 ${cfg.color}`} />
-                    <span className="text-xs font-medium text-white/80">{agentName}</span>
+                    <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">{agentName}</span>
                   </div>
-                  <div className="flex items-center gap-3 text-xs">
-                    <span className="text-white/40">
+                  <div className="flex items-center gap-3 font-mono text-[10px] tabular-nums">
+                    <span className="text-zinc-500">
                       Health: <span className={cfg.color}>{Math.round(profile.health_score * 100)}%</span>
                     </span>
                     {profile.last_call_at && (
-                      <span className="text-white/30">
+                      <span className="text-zinc-500">
                         {new Date(profile.last_call_at).toLocaleTimeString()}
                       </span>
                     )}
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2 text-[10px] text-white/50">
+                <div className="grid grid-cols-3 gap-2 font-mono text-[10px] text-zinc-400 tabular-nums">
                   <div>
-                    <span className="text-white/30">Calls:</span> {profile.total_calls}
+                    <span className="text-zinc-500 uppercase tracking-wider">Calls:</span> {profile.total_calls}
                   </div>
                   <div>
-                    <span className="text-white/30">Latency:</span> {Math.round(profile.avg_latency_ms)}ms
+                    <span className="text-zinc-500 uppercase tracking-wider">Latency:</span> {Math.round(profile.avg_latency_ms)}ms
                   </div>
                   <div>
-                    <span className="text-white/30">Success:</span>{' '}
-                    <span className={profile.success_rate >= 0.95 ? 'text-emerald-400' : 'text-amber-400'}>
+                    <span className="text-zinc-500 uppercase tracking-wider">Success:</span>{' '}
+                    <span className={profile.success_rate >= 0.95 ? 'text-emerald-400/80' : 'text-amber-400/80'}>
                       {Math.round(profile.success_rate * 100)}%
                     </span>
                   </div>
                 </div>
 
                 {profile.total_errors > 0 && (
-                  <div className="mt-2 text-[10px] text-amber-400">
+                  <div className="mt-2 text-[10px] text-amber-400/80">
                     ⚠ {profile.total_errors} error{profile.total_errors !== 1 ? 's' : ''}
                   </div>
                 )}
@@ -321,7 +323,7 @@ export default function AgentMonitoringWidget({ compact = false }: AgentMonitori
           <button
             type="button"
             onClick={() => setDetailsOpen((o) => !o)}
-            className="mt-2 flex items-center gap-1 text-xs text-white/40 hover:text-white/60"
+            className="mt-2 flex items-center gap-1 font-mono text-[10px] uppercase tracking-widest text-zinc-500 hover:text-zinc-400"
           >
             {detailsOpen ? <ChevronUpIcon className="w-4 h-4" /> : <ChevronDownIcon className="w-4 h-4" />}
             {detailsOpen ? 'Hide' : 'Show'} detailed metrics
@@ -342,27 +344,27 @@ export default function AgentMonitoringWidget({ compact = false }: AgentMonitori
                   return (
                     <div
                       key={agentName}
-                      className="p-3 rounded-lg bg-black/40 border border-white/5 text-xs"
+                      className="p-3 rounded-md bg-zinc-900/80 border border-zinc-800/60"
                     >
-                      <div className="font-medium text-white/70 mb-2">{agentName} Metrics</div>
-                      <div className="grid grid-cols-2 gap-2 text-white/50">
+                      <div className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-2">{agentName} Metrics</div>
+                      <div className="grid grid-cols-2 gap-2 font-mono text-[10px] text-zinc-400 tabular-nums">
                         <div>
-                          <span className="text-white/30">P50 Latency:</span> {Math.round(profile.p50_latency_ms)}ms
+                          <span className="text-zinc-500 uppercase tracking-wider">P50 Latency:</span> {Math.round(profile.p50_latency_ms)}ms
                         </div>
                         <div>
-                          <span className="text-white/30">P95 Latency:</span> {Math.round(profile.p95_latency_ms)}ms
+                          <span className="text-zinc-500 uppercase tracking-wider">P95 Latency:</span> {Math.round(profile.p95_latency_ms)}ms
                         </div>
                         <div>
-                          <span className="text-white/30">P99 Latency:</span> {Math.round(profile.p99_latency_ms)}ms
+                          <span className="text-zinc-500 uppercase tracking-wider">P99 Latency:</span> {Math.round(profile.p99_latency_ms)}ms
                         </div>
                         <div>
-                          <span className="text-white/30">Total Tokens:</span> {profile.total_tokens.toLocaleString()}
+                          <span className="text-zinc-500 uppercase tracking-wider">Total Tokens:</span> {profile.total_tokens.toLocaleString()}
                         </div>
                         <div>
-                          <span className="text-white/30">Total Cost:</span> ${profile.total_cost_usd.toFixed(4)}
+                          <span className="text-zinc-500 uppercase tracking-wider">Total Cost:</span> ${profile.total_cost_usd.toFixed(4)}
                         </div>
                         <div>
-                          <span className="text-white/30">Errors:</span> {profile.total_errors}
+                          <span className="text-zinc-500 uppercase tracking-wider">Errors:</span> {profile.total_errors}
                         </div>
                       </div>
                     </div>

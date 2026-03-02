@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://platform.example/schemas/municipal-climate-risk-disclosure-v1.json",
+  "title": "Municipal / sub-sovereign climate risk disclosure",
+  "description": "De facto standard format for disclosing municipal climate risk to insurers, reinsurers, and regulators.",
+  "type": "object",
+  "required": ["identity", "hazards", "exposure", "provenance"],
+  "properties": {
+    "identity": {
+      "type": "object",
+      "required": ["municipality_id", "period"],
+      "properties": {
+        "municipality_id": { "type": "string", "description": "Unique municipality/community identifier" },
+        "municipality_name": { "type": "string" },
+        "period": { "type": "string", "description": "Reporting period, e.g. 2026-01-01 to 2026-12-31" },
+        "schema_version": { "type": "string", "const": "1.0" }
+      }
+    },
+    "hazards": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string" },
+          "score": { "type": "number" },
+          "level": { "type": "string" },
+          "source": { "type": "string" }
+        }
+      }
+    },
+    "exposure": {
+      "type": "object",
+      "properties": {
+        "annual_expected_loss_m": { "type": "number" },
+        "loss_100_year_m": { "type": "number" },
+        "projected_2050_m": { "type": "number" }
+      }
+    },
+    "governance": {
+      "type": "object",
+      "properties": {
+        "frameworks": { "type": "array", "items": { "type": "string" } },
+        "sections": { "type": "integer" }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["data_sources", "updated_at"],
+      "properties": {
+        "data_sources": { "type": "array", "items": { "type": "string" } },
+        "updated_at": { "type": "string", "format": "date-time" },
+        "model_versions": { "type": "object" }
+      }
+    },
+    "insurability": { "type": "object" },
+    "roi_evidence": { "type": "object" }
+  }
+}

@@ -146,7 +146,7 @@ class RegulatoryRequirements(BaseModel):
 
 class CalculationConfig(BaseModel):
     """Calculation configuration."""
-    monte_carlo_simulations: int = Field(10000, ge=1000, le=100000, description="Number of MC simulations")
+    monte_carlo_simulations: int = Field(100000, ge=1000, le=500000, description="Number of MC simulations")
     confidence_levels: List[float] = Field(default_factory=lambda: [0.90, 0.95, 0.99], description="Confidence levels")
     time_horizons: List[str] = Field(default_factory=lambda: ["1d", "1w", "1m", "1y"], description="Time horizons")
     cascade_iterations: int = Field(10, ge=1, le=50, description="Max cascade iterations")

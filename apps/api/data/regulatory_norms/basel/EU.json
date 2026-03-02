@@ -1,0 +1,18 @@
+{
+  "title": "Basel III/IV and CRR/CRR2 — EU",
+  "source_url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32013R0575",
+  "chunks": [
+    {
+      "article_id": "CRR Art. 92",
+      "content": "Own funds requirements. Institutions shall at all times satisfy the following minimum capital ratios: (a) Common Equity Tier 1 (CET1) ratio of 4.5%; (b) Tier 1 capital ratio of 6%; (c) Total capital ratio of 8%. Capital conservation buffer and countercyclical buffer apply in addition."
+    },
+    {
+      "article_id": "CRR Art. 411-428",
+      "content": "Liquidity Coverage Ratio (LCR). The LCR shall require credit institutions to maintain an adequate level of high-quality liquid assets (HQLA) that can be converted into cash to meet their liquidity needs over a 30-day stress scenario. LCR = HQLA / Total net cash outflows over 30 days >= 100%."
+    },
+    {
+      "article_id": "CRR2 Art. 428a",
+      "content": "Net Stable Funding Ratio (NSFR). Institutions shall maintain a stable funding profile in relation to the composition of their assets and off-balance-sheet exposures. NSFR = Available stable funding / Required stable funding >= 100% over a one-year horizon."
+    }
+  ]
+}

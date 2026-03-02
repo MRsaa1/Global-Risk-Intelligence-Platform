@@ -1,0 +1,33 @@
+# Harm Prevention — Ethics rail
+# Colang equivalent: define flow harm_prevention; block lethal / mass harm / irreversible x-risk
+name: harm_prevention
+description: Prevent recommendations that could cause physical or existential harm
+version: "1.0"
+
+rules:
+  - id: no_autonomous_lethal
+    condition: recommendation_implies_lethal_actions
+    action: block
+    message: "Recommendation implies lethal or autonomous lethal actions; blocked by harm_prevention."
+  - id: no_mass_harm
+    condition: affected_population_above_threshold
+    threshold: 10000
+    action: require_escalation
+    message: "Mass population affected; human review required."
+  - id: irreversible_x_risk
+    condition: reversibility_eq_irreversible AND severity_above_threshold
+    severity_threshold: 0.5
+    action: apply_precautionary
+    message: "Irreversible harm risk; precautionary principle applied."
+  - id: existential_scenario
+    condition: scenario_type_in_existential
+    existential_keywords: ["nuclear_exchange", "agi_unaligned", "engineered_pandemic", "nuclear_winter", "extinction"]
+    action: max_caution
+    message: "Existential risk scenario; maximum caution and human review required."
+
+triggers:
+  - severity
+  - reversibility
+  - scenario_type
+  - affected_population
+  - recommended_actions

@@ -113,13 +113,13 @@ function getRiskLevel(risk: number): 'critical' | 'high' | 'medium' | 'low' {
 function getRiskBadgeStyle(level: 'critical' | 'high' | 'medium' | 'low') {
   switch (level) {
     case 'critical':
-      return 'bg-white/10 text-white/80 border-white/20'
+      return 'bg-zinc-700 text-zinc-200 border-zinc-600'
     case 'high':
-      return 'bg-white/5 text-white/70 border-white/10'
+      return 'bg-zinc-800 text-zinc-300 border-zinc-700'
     case 'medium':
-      return 'bg-white/5 text-white/60 border-white/10'
+      return 'bg-zinc-800 text-zinc-400 border-zinc-700'
     default:
-      return 'bg-white/5 text-white/50 border-white/10'
+      return 'bg-zinc-800 text-zinc-400 border-zinc-700'
   }
 }
 
@@ -141,14 +141,14 @@ async function fetchWeatherForecast(lat: number, lon: number): Promise<{ data: W
 function getRiskStyle(level: string) {
   switch (level) {
     case 'extreme':
-      return { color: 'text-white/80', bg: 'bg-white/5', border: 'border-white/20' }
+      return { color: 'text-zinc-200', bg: 'bg-zinc-800', border: 'border-zinc-600' }
     case 'high':
-      return { color: 'text-accent-400', bg: 'bg-accent-500/10', border: 'border-accent-500/20' }
+      return { color: 'text-zinc-300', bg: 'bg-zinc-800', border: 'border-zinc-700' }
     case 'elevated':
-      return { color: 'text-accent-300', bg: 'bg-accent-500/5', border: 'border-accent-500/10' }
+      return { color: 'text-zinc-300', bg: 'bg-zinc-800/50', border: 'border-zinc-700/50' }
     case 'normal':
     default:
-      return { color: 'text-primary-400', bg: 'bg-primary-500/10', border: 'border-primary-500/20' }
+      return { color: 'text-zinc-400', bg: 'bg-zinc-800', border: 'border-zinc-700' }
   }
 }
 
@@ -234,27 +234,49 @@ export default function ClimateWidget() {
   // Get current weather from first forecast point
   const currentWeather = forecastData?.data?.[0]
   
+  // Risk level -> gradient (same map as PieChart hero)
+  const riskBarGradient = (level: string) => {
+    const map: Record<string, [string, string]> = {
+      extreme: ['#ef4444', '#b91c1c'],
+      high: ['#f97316', '#c2410c'],
+      elevated: ['#eab308', '#a16207'],
+      normal: ['#22c55e', '#15803d'],
+    }
+    const [start, end] = map[level] ?? map.normal
+    return `linear-gradient(90deg, ${start}, ${end})`
+  }
+  const overallRiskGradient = (level: string) => {
+    const map: Record<string, string> = {
+      extreme: 'bg-gradient-to-r from-red-600 to-red-500',
+      high: 'bg-gradient-to-r from-orange-600 to-orange-500',
+      elevated: 'bg-gradient-to-r from-amber-600 to-amber-500',
+      normal: 'bg-gradient-to-r from-emerald-600 to-emerald-500',
+    }
+    return map[level] ?? map.normal
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="glass rounded-2xl p-6"
-    >
+      className="rounded-md bg-zinc-900 border border-zinc-800 hover-glow"
+      >
+      <div className="rounded-md p-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <div className="p-1.5 bg-primary-500/10 rounded-lg">
-            <CloudIcon className="w-4 h-4 text-primary-400" />
+          <div className="p-1.5 bg-zinc-800 rounded-md">
+            <CloudIcon className="w-4 h-4 text-zinc-400" />
           </div>
-          <h2 className="text-sm font-display font-semibold text-white/90">Climate Risk Monitor</h2>
-          <span className="text-[10px] px-1.5 py-0.5 bg-primary-500/10 text-primary-400 rounded border border-primary-500/20">LIVE</span>
+          <h2 className="text-sm font-display font-semibold text-zinc-100">Climate Risk Monitor</h2>
+          <span className="text-[10px] px-1.5 py-0.5 bg-zinc-800 text-zinc-400 rounded border border-zinc-700">LIVE</span>
         </div>
         <button 
           onClick={() => refetch()}
-          className="p-1.5 hover:bg-white/5 rounded-lg transition-colors"
+          className="p-1.5 hover:bg-zinc-800 rounded-md transition-colors"
           title="Refresh data"
         >
-          <ArrowPathIcon className={`w-4 h-4 text-white/40 ${climateLoading ? 'animate-spin' : ''}`} />
+          <ArrowPathIcon className={`w-4 h-4 text-zinc-500 ${climateLoading ? 'animate-spin' : ''}`} />
         </button>
       </div>
       
@@ -262,20 +284,20 @@ export default function ClimateWidget() {
       <div className="mb-4 space-y-2">
         {/* Search input */}
         <div className="relative">
-          <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+          <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
           <input
             type="text"
             placeholder="Search cities..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-white/20"
+            className="w-full pl-9 pr-3 py-2 bg-zinc-800 border border-zinc-700 rounded-md text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-zinc-600"
           />
         </div>
         
         {/* City buttons */}
         {hotspotsLoading ? (
           <div className="flex items-center justify-center py-4">
-            <div className="w-4 h-4 border-2 border-white/20 border-t-white/60 rounded-full animate-spin" />
+            <div className="w-4 h-4 border-2 border-zinc-600 border-t-zinc-400 rounded-full animate-spin" />
           </div>
         ) : (
           <div className="flex gap-2 overflow-x-auto pb-2">
@@ -286,21 +308,21 @@ export default function ClimateWidget() {
                 <button
                   key={hotspot.id}
                   onClick={() => setLocation({ lat: hotspot.lat, lon: hotspot.lng, name: hotspot.name })}
-                  className={`px-3 py-1.5 rounded-lg text-xs whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+                  className={`px-3 py-1.5 rounded-md text-xs whitespace-nowrap transition-colors flex items-center gap-1.5 ${
                     isSelected
-                      ? 'bg-white/10 text-white border border-white/20' 
-                      : 'bg-white/5 text-white/60 hover:bg-white/10 border border-white/10'
+                      ? 'bg-zinc-700 text-zinc-100 border border-zinc-600 ring-1 ring-white/20 shadow-[0_0_8px_rgba(255,255,255,0.1)]'
+                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 border border-zinc-700'
                   }`}
                 >
                   <span>{hotspot.name}</span>
-                  <span className={`px-1 py-0.5 rounded text-[10px] border ${getRiskBadgeStyle(riskLevel)}`}>
-                    {riskLevel === 'critical' ? 'C' : riskLevel === 'high' ? 'H' : 'M'}
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] border ${getRiskBadgeStyle(riskLevel)}`}>
+                    {riskLevel === 'critical' ? 'CRIT' : riskLevel === 'high' ? 'HIGH' : 'MED'}
                   </span>
                 </button>
               )
             })}
             {searchQuery && sortedHotspots.length > 15 && (
-              <div className="px-3 py-1.5 text-xs text-white/40 whitespace-nowrap">
+              <div className="px-3 py-1.5 text-xs text-zinc-500 whitespace-nowrap">
                 +{sortedHotspots.length - 15} more
               </div>
             )}
@@ -310,40 +332,40 @@ export default function ClimateWidget() {
       
       {/* Current Weather */}
       {currentWeather && (
-        <div className="mb-4 p-3 bg-dark-panel/50 rounded-xl border border-white/5 flex items-center justify-between">
+        <div className="mb-4 p-3 bg-dark-panel/50 rounded-md border border-zinc-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-accent-500/10 rounded-lg">
-              <SunIcon className="w-6 h-6 text-accent-400" />
+            <div className="p-2 bg-zinc-800 rounded-md">
+              <SunIcon className="w-6 h-6 text-zinc-400" />
             </div>
             <div>
-              <div className="text-2xl font-display font-bold text-white">{currentWeather.temperature_c.toFixed(1)}°C</div>
-              <div className="text-xs text-white/50">{location.name}</div>
+              <div className="text-3xl font-display font-bold gradient-text">{currentWeather.temperature_c.toFixed(1)}°C</div>
+              <div className="text-xs text-zinc-400">{location.name}</div>
             </div>
           </div>
-          <div className="text-right text-xs text-white/50 space-y-1">
+          <div className="text-right text-xs text-zinc-400 space-y-1">
             <div className="flex items-center justify-end gap-1.5">
               <span>Humidity</span>
-              <span className="text-white/80">{currentWeather.humidity_percent}%</span>
+              <span className="text-zinc-200">{currentWeather.humidity_percent}%</span>
             </div>
             <div className="flex items-center justify-end gap-1.5">
               <span>Wind</span>
-              <span className="text-white/80">{(currentWeather.wind_speed_ms * 3.6).toFixed(0)} km/h</span>
+              <span className="text-zinc-200">{(currentWeather.wind_speed_ms * 3.6).toFixed(0)} km/h</span>
             </div>
             <div className="flex items-center justify-end gap-1.5">
               <span>Precip</span>
-              <span className="text-white/80">{currentWeather.precipitation_mm} mm</span>
+              <span className="text-zinc-200">{currentWeather.precipitation_mm} mm</span>
             </div>
           </div>
         </div>
       )}
       
       {/* Overall Risk */}
-      <div className={`mb-4 p-3 rounded-xl border ${overallRiskStyle.bg} ${overallRiskStyle.border} flex items-center justify-between`}>
+      <div className={`mb-4 p-3 rounded-md border ${overallRiskStyle.border} flex items-center justify-between ${climateData?.overall_risk ? overallRiskGradient(climateData.overall_risk) : 'bg-zinc-800'} text-zinc-100`}>
         <div className="flex items-center gap-2">
-          <ExclamationTriangleIcon className={`w-4 h-4 ${overallRiskStyle.color}`} />
-          <span className="text-xs font-medium text-white/70">Overall Risk Level</span>
+          <ExclamationTriangleIcon className="w-4 h-4 opacity-90" />
+          <span className="text-xs font-medium">Overall Risk Level</span>
         </div>
-        <span className={`text-sm font-display font-semibold uppercase ${overallRiskStyle.color}`}>
+        <span className="text-sm font-display font-semibold uppercase">
           {climateData?.overall_risk || 'Loading...'}
         </span>
       </div>
@@ -351,10 +373,10 @@ export default function ClimateWidget() {
       {/* Risk Indicators */}
       {climateLoading ? (
         <div className="flex items-center justify-center py-8">
-          <div className="w-6 h-6 border-2 border-primary-500/30 border-t-primary-500 rounded-full animate-spin" />
+          <div className="w-6 h-6 border-2 border-zinc-600 border-t-zinc-400 rounded-full animate-spin" />
         </div>
       ) : climateError ? (
-        <div className="text-center py-8 text-white/50">
+        <div className="text-center py-8 text-zinc-400">
           Failed to load climate data
         </div>
       ) : (
@@ -364,10 +386,10 @@ export default function ClimateWidget() {
             return (
               <div 
                 key={indicator.name}
-                className={`p-3 rounded-lg border ${style.bg} ${style.border}`}
+                className={`p-3 rounded-md border ${style.bg} ${style.border}`}
               >
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs text-white/60">
+                  <span className="text-xs text-zinc-400">
                     {indicatorNames[indicator.name] || indicator.name}
                   </span>
                   <span className={style.color}>{getIndicatorIcon(indicator.name)}</span>
@@ -376,24 +398,20 @@ export default function ClimateWidget() {
                   <span className={`text-lg font-display font-bold ${style.color}`}>
                     {indicator.value.toFixed(1)}
                   </span>
-                  <span className="text-xs text-white/40">{indicator.unit}</span>
+                  <span className="text-xs text-zinc-500">{indicator.unit}</span>
                 </div>
                 <div className="mt-2">
-                  <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                  <div className="h-1 bg-zinc-800 rounded-full overflow-hidden">
                     <div 
-                      className={`h-full rounded-full transition-all ${
-                        indicator.risk_level === 'extreme' ? 'bg-white/60' :
-                        indicator.risk_level === 'high' ? 'bg-accent-500/70' :
-                        indicator.risk_level === 'elevated' ? 'bg-accent-500/50' :
-                        'bg-primary-500/50'
-                      }`}
+                      className="h-full rounded-full transition-all"
                       style={{ 
-                        width: `${Math.min(100, (indicator.value / (indicator.threshold || 100)) * 100)}%` 
+                        width: `${Math.min(100, (indicator.value / (indicator.threshold || 100)) * 100)}%`,
+                        background: riskBarGradient(indicator.risk_level),
                       }}
                     />
                   </div>
                   {indicator.threshold && (
-                    <div className="text-[10px] text-white/30 mt-1">
+                    <div className="text-[10px] text-zinc-500 mt-1">
                       Threshold: {indicator.threshold.toFixed(1)} {indicator.unit}
                     </div>
                   )}
@@ -405,9 +423,10 @@ export default function ClimateWidget() {
       )}
       
       {/* Data source */}
-      <div className="mt-4 pt-3 border-t border-white/5 text-xs text-white/40 flex items-center justify-between">
+      <div className="mt-4 pt-3 border-t border-zinc-800 text-xs text-zinc-500 flex items-center justify-between">
         <span>Source: Open-Meteo API</span>
         <span>Updated: {new Date().toLocaleTimeString()}</span>
+      </div>
       </div>
     </motion.div>
   )

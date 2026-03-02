@@ -77,7 +77,7 @@ echo ""
 
 # ========================== STEP 1: ARCHIVE ==========================
 
-echo -e "${BLUE}📦 Step 1/13: Creating deployment tarball...${NC}"
+echo -e "${BLUE}📦 Step 1/14: Creating deployment tarball...${NC}"
 DEPLOY_TAR="/tmp/pfrp-deploy-$(date +%Y%m%d_%H%M%S).tar.gz"
 COPYFILE_DISABLE=1 tar --exclude='node_modules' \
     --exclude='.git' \
@@ -117,7 +117,7 @@ CORS_ORIGINS_ESC=$(printf '%s' "$CORS_ORIGINS" | sed "s/'/'\\\\''/g")
 
 # ========================== STEP 2: BACKUP ON SERVER ==========================
 
-echo -e "${YELLOW}📋 Step 2/13: Server backup — .env, databases, keys...${NC}"
+echo -e "${YELLOW}📋 Step 2/14: Server backup — .env, databases, keys...${NC}"
 ssh $SSH_OPTS $SSH_PORT_OPT $SSH_TARGET "export PROJ='$PROJECT_DIR_ESC'; bash -s" << 'ENDSSH'
 PRESERVE_DIR="$HOME/pfrp-preserve"
 mkdir -p "$PRESERVE_DIR"
@@ -150,13 +150,13 @@ ENDSSH
 
 # ========================== STEP 3: UPLOAD ==========================
 
-echo -e "${YELLOW}📤 Step 3/13: Uploading package to server...${NC}"
+echo -e "${YELLOW}📤 Step 3/14: Uploading package to server...${NC}"
 scp $SSH_OPTS $SCP_PORT_OPT "$DEPLOY_TAR" $SSH_TARGET:/tmp/grp-deploy.tar.gz
 echo -e "${GREEN}   ✅ Uploaded${NC}"
 
 # ========================== STEP 4: EXTRACT + RESTORE ==========================
 
-echo -e "${YELLOW}📂 Step 4/13: Extract and restore .env + databases...${NC}"
+echo -e "${YELLOW}📂 Step 4/14: Extract and restore .env + databases...${NC}"
 ssh $SSH_OPTS $SSH_PORT_OPT $SSH_TARGET "export PROJ='$PROJECT_DIR_ESC'; bash -s" << 'ENDSSH'
 PRESERVE_DIR="$HOME/pfrp-preserve"
 rm -rf "$PROJ" 2>/dev/null || true
@@ -188,7 +188,7 @@ ENDSSH
 
 # ========================== STEP 5: STATIC ASSETS ==========================
 
-echo -e "${YELLOW}📁 Step 5/13: Rsync static assets (models, samples, xeokit-data)...${NC}"
+echo -e "${YELLOW}📁 Step 5/14: Rsync static assets (models, samples, xeokit-data)...${NC}"
 [ -d "apps/web/public/models" ] && rsync -az --progress -e "ssh $SSH_OPTS $SSH_PORT_OPT" \
     apps/web/public/models/ "$SSH_TARGET:$PROJECT_DIR/apps/web/public/models/" && echo -e "${GREEN}   ✅ models/ synced${NC}"
 [ -d "apps/web/public/samples" ] && rsync -az --progress -e "ssh $SSH_OPTS $SSH_PORT_OPT" \
@@ -198,7 +198,7 @@ echo -e "${YELLOW}📁 Step 5/13: Rsync static assets (models, samples, xeokit-d
 
 # ========================== STEP 5: ENV FILE ==========================
 
-echo -e "${YELLOW}🔐 Step 6/13: Environment file — preserve or create...${NC}"
+echo -e "${YELLOW}🔐 Step 6/14: Environment file — preserve or create...${NC}"
 ssh $SSH_OPTS $SSH_PORT_OPT $SSH_TARGET "export PROJ='$PROJECT_DIR_ESC'; export CORS='$CORS_ORIGINS_ESC'; bash -s" << 'ENDSSH'
 cd "$PROJ/apps/api"
 if [ ! -f ".env" ]; then
@@ -248,7 +248,7 @@ ENDSSH
 
 # ========================== STEP 6: BACKEND DEPS ==========================
 
-echo -e "${YELLOW}🐍 Step 7/13: Backend dependencies (~1-2 min)...${NC}"
+echo -e "${YELLOW}🐍 Step 7/14: Backend dependencies (~1-2 min)...${NC}"
 if ! ssh $SSH_OPTS $SSH_PORT_OPT $SSH_TARGET "export PROJ='$PROJECT_DIR_ESC'; bash -s" << 'ENDSSH'
 cd "$PROJ/apps/api"
 if [ ! -d ".venv" ]; then
@@ -270,7 +270,7 @@ fi
 
 # ========================== STEP 7: MIGRATIONS ==========================
 
-echo -e "${YELLOW}🗄️  Step 8/13: Database migrations...${NC}"
+echo -e "${YELLOW}🗄️  Step 8/14: Database migrations...${NC}"
 if ! ssh $SSH_OPTS $SSH_PORT_OPT $SSH_TARGET "export PROJ='$PROJECT_DIR_ESC'; bash -s" << 'ENDSSH'
 cd "$PROJ/apps/api"
 source .venv/bin/activate
@@ -297,7 +297,7 @@ fi
 
 # ========================== STEP 8: FRONTEND BUILD ==========================
 
-echo -e "${YELLOW}🏗️  Step 9/13: Frontend build (3-5 min)...${NC}"
+echo -e "${YELLOW}🏗️  Step 9/14: Frontend build (3-5 min)...${NC}"
 DOMAIN_ESC=$(printf '%s' "$DOMAIN" | sed "s/'/'\\\\''/g")
 CESIUM_TOKEN_ESC=$(printf '%s' "${VITE_CESIUM_ION_TOKEN:-}" | sed "s/'/'\\\\''/g")
 ssh $SSH_OPTS $SSH_PORT_OPT $SSH_TARGET "export PROJ='$PROJECT_DIR_ESC'; export DEPLOY_DOMAIN='$DOMAIN_ESC'; export VITE_CESIUM_ION_TOKEN='$CESIUM_TOKEN_ESC'; bash -s" << 'ENDSSH'
@@ -323,7 +323,7 @@ ENDSSH
 
 # ========================== STEP 9: STOP SERVICES ==========================
 
-echo -e "${YELLOW}🔄 Step 10/13: Stopping old services...${NC}"
+echo -e "${YELLOW}🔄 Step 10/14: Stopping old services...${NC}"
 ssh $SSH_OPTS $SSH_PORT_OPT $SSH_TARGET "bash -s" << 'ENDSSH'
 pkill -f "uvicorn src.main:app" 2>/dev/null || true
 pkill -f "serve -s dist" 2>/dev/null || true
@@ -343,7 +343,7 @@ ENDSSH
 
 # ========================== STEP 10: START SERVICES ==========================
 
-echo -e "${YELLOW}🚀 Step 11/13: Starting services...${NC}"
+echo -e "${YELLOW}🚀 Step 11/14: Starting services...${NC}"
 ssh $SSH_OPTS $SSH_PORT_OPT $SSH_TARGET "export PROJ='$PROJECT_DIR_ESC'; bash -s" << 'ENDSSH'
 cd "$PROJ/apps/api"
 source .venv/bin/activate
@@ -363,7 +363,7 @@ ENDSSH
 
 # ========================== STEP 12: HEALTH CHECK ==========================
 
-echo -e "${YELLOW}🏥 Step 12/13: Health check + verify endpoints...${NC}"
+echo -e "${YELLOW}🏥 Step 12/14: Health check + verify endpoints...${NC}"
 ssh -T $SSH_OPTS $SSH_PORT_OPT $SSH_TARGET "export PROJ='$PROJECT_DIR_ESC'; bash -s" << 'ENDSSH'
 echo "   Waiting for API to start..."
 sleep 10
@@ -410,7 +410,7 @@ ENDSSH
 
 # ========================== STEP 13: SEED ==========================
 
-echo -e "${YELLOW}🌱 Step 13/13: Seed demo data...${NC}"
+echo -e "${YELLOW}🌱 Step 13/14: Seed demo data...${NC}"
 ssh -T $SSH_OPTS $SSH_PORT_OPT $SSH_TARGET "export PROJ='$PROJECT_DIR_ESC'; bash -s" << 'ENDSSH'
 cd "$PROJ/apps/api" 2>/dev/null || true
 if grep -q "ALLOW_SEED_IN_PRODUCTION=true" .env 2>/dev/null; then
@@ -431,6 +431,36 @@ if grep -q "ALLOW_SEED_IN_PRODUCTION=true" .env 2>/dev/null; then
         echo "   ✅ Agent monitoring started" || true
 else
     echo "   ⚠️  Seed skipped (ALLOW_SEED_IN_PRODUCTION not true)"
+fi
+exit 0
+ENDSSH
+
+# ========================== STEP 14: SETUP LOGROTATE + HEALTH CHECK CRON ==========================
+
+echo -e "${YELLOW}📋 Step 14/14: Setup logrotate and health-check cron on server...${NC}"
+ssh $SSH_OPTS $SSH_PORT_OPT $SSH_TARGET "export PROJ='$PROJECT_DIR_ESC'; bash -s" << 'ENDSSH'
+cd "$PROJ" 2>/dev/null || true
+# Logrotate: copy config to /etc/logrotate.d (may require sudo once)
+if [ -f scripts/setup-logrotate-on-server.sh ]; then
+  chmod +x scripts/setup-logrotate-on-server.sh 2>/dev/null || true
+  if bash scripts/setup-logrotate-on-server.sh 2>&1; then
+    echo "   ✅ Logrotate config installed"
+  else
+    echo "   ⚠️  Logrotate: run on server manually if needed: sudo cp $PROJ/infra/logrotate/pfrp-api.conf /etc/logrotate.d/pfrp-api"
+  fi
+else
+  echo "   ⚠️  scripts/setup-logrotate-on-server.sh not found"
+fi
+# Health-check cron: every 5 min (idempotent)
+if [ -f scripts/setup-health-check-cron.sh ]; then
+  chmod +x scripts/setup-health-check-cron.sh 2>/dev/null || true
+  if bash scripts/setup-health-check-cron.sh 2>&1; then
+    echo "   ✅ Health-check cron installed (every 5 min)"
+  else
+    echo "   ⚠️  Health-check cron: run on server manually if needed: cd $PROJ && ./scripts/setup-health-check-cron.sh"
+  fi
+else
+  echo "   ⚠️  scripts/setup-health-check-cron.sh not found"
 fi
 exit 0
 ENDSSH

@@ -28,6 +28,7 @@ class AgentType(str, Enum):
     ANALYST = "ANALYST"
     ADVISOR = "ADVISOR"
     REPORTER = "REPORTER"
+    ETHICIST = "ETHICIST"
     SYSTEM_OVERSEER = "SYSTEM_OVERSEER"
 
 
@@ -140,9 +141,10 @@ class NeMoAgentToolkit:
         self.workflows: Dict[UUID, Workflow] = {}
         self.executions: Dict[UUID, WorkflowExecution] = {}
         
-        # Initialize profiles for all agents
+        # Initialize profiles for all agents (exclude SYSTEM_OVERSEER from display)
         for agent in AgentType:
-            self.profiles[agent.value] = AgentProfile(agent_name=agent.value)
+            if agent != AgentType.SYSTEM_OVERSEER:
+                self.profiles[agent.value] = AgentProfile(agent_name=agent.value)
     
     def track_agent(
         self,
@@ -366,6 +368,9 @@ class NeMoAgentToolkit:
         elif step.agent == AgentType.REPORTER:
             from src.layers.agents.reporter import reporter_agent
             agent = reporter_agent
+        elif step.agent == AgentType.ETHICIST:
+            from src.layers.agents.ethicist import ethicist_agent
+            agent = ethicist_agent
         else:
             raise ValueError(f"Unknown agent type: {step.agent}")
         

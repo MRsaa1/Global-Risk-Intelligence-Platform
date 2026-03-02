@@ -243,12 +243,10 @@ async def get_agent_dashboard(
 
 @router.get("/workflows", response_model=List[WorkflowResponse])
 async def get_workflows():
-    """Get all workflows."""
+    """Get all workflows (toolkit + orchestrator templates report, assessment, remediation)."""
     toolkit = get_nemo_agent_toolkit()
-    
     workflows = toolkit.get_all_workflows()
-    
-    return [
+    result = [
         WorkflowResponse(
             workflow_id=str(w.workflow_id),
             name=w.name,
@@ -260,6 +258,23 @@ async def get_workflows():
         )
         for w in workflows
     ]
+    # Orchestrator templates (run via POST /agents/run-chain)
+    from src.services.agentic_orchestrator import WORKFLOW_TEMPLATES
+    for name in ("report", "assessment", "remediation"):
+        if name in WORKFLOW_TEMPLATES:
+            steps_count = len(WORKFLOW_TEMPLATES[name])
+            result.append(
+                WorkflowResponse(
+                    workflow_id=f"orchestrator:{name}",
+                    name=name,
+                    description=f"Orchestrator workflow: {name}. Run via POST /agents/run-chain.",
+                    steps_count=steps_count,
+                    schedule=None,
+                    enabled=True,
+                    created_at=datetime.utcnow().isoformat(),
+                )
+            )
+    return result
 
 
 @router.post("/workflows", response_model=WorkflowResponse)
@@ -463,6 +478,7 @@ async def test_all_agents():
     from src.layers.agents.analyst import analyst_agent
     from src.layers.agents.advisor import advisor_agent
     from src.layers.agents.reporter import reporter_agent
+    from src.layers.agents.ethicist import ethicist_agent
     from uuid import uuid4
     
     results = {}
@@ -548,6 +564,19 @@ async def test_all_agents():
         }
     except Exception as e:
         results["REPORTER"] = {"status": "error", "error": str(e)}
+    
+    try:
+        # Test ETHICIST
+        assess_result = await ethicist_agent.assess({
+            "severity": 0.5,
+            "context": "Test stress scenario for ethics check",
+        })
+        results["ETHICIST"] = {
+            "status": "success",
+            "assessment": bool(assess_result),
+        }
+    except Exception as e:
+        results["ETHICIST"] = {"status": "error", "error": str(e)}
     
     return {
         "message": "All agents tested. Check /api/v1/agents/monitoring/dashboard for updated metrics.",

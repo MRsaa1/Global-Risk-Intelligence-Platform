@@ -31,6 +31,132 @@ from src.services.pdf_report import HAS_PDF
 router = APIRouter()
 
 
+@router.get("/messages/{workflow_id}")
+async def get_workflow_messages(workflow_id: str, limit: int = 200):
+    """
+    Get message log for a workflow run (AgentMessageBus history by correlation_id).
+    Path: GET /api/v1/agents/messages/{workflow_id}
+    """
+    try:
+        from src.services.agent_message_bus import message_bus
+    except ImportError:
+        raise HTTPException(status_code=503, detail="Message bus not available")
+    messages = message_bus.get_history(correlation_id=workflow_id, limit=min(limit, 500))
+    return {"workflow_id": workflow_id, "messages": messages, "count": len(messages)}
+
+
+@router.get("/audit")
+async def get_agents_audit(
+    source: Optional[str] = None,
+    agent_id: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Persistent agent audit log with filters and pagination.
+    Returns records from agent_audit_log; optionally merge with in-memory recent entries.
+    """
+    from datetime import datetime
+    from src.models.agent_audit_log import AgentAuditLog
+    q = select(AgentAuditLog).order_by(AgentAuditLog.timestamp.desc())
+    if source:
+        q = q.where(AgentAuditLog.source == source)
+    if agent_id:
+        q = q.where(AgentAuditLog.agent_id == agent_id)
+    if date_from:
+        try:
+            dt = datetime.fromisoformat(date_from.replace("Z", "+00:00"))
+            q = q.where(AgentAuditLog.timestamp >= dt)
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            dt = datetime.fromisoformat(date_to.replace("Z", "+00:00"))
+            q = q.where(AgentAuditLog.timestamp <= dt)
+        except ValueError:
+            pass
+    q = q.offset(offset).limit(min(limit, 200))
+    r = await db.execute(q)
+    rows = r.scalars().all()
+    entries = [
+        {
+            "id": x.id,
+            "source": x.source,
+            "agent_id": x.agent_id,
+            "action_type": x.action_type,
+            "input_summary": (x.input_summary or "")[:500],
+            "result_summary": (x.result_summary or "")[:500],
+            "timestamp": x.timestamp.isoformat() if x.timestamp else None,
+            "meta": x.meta,
+        }
+        for x in rows
+    ]
+    return {"entries": entries, "count": len(entries), "offset": offset}
+
+
+@router.get("/audit-log")
+async def get_agents_audit_log(limit: int = 50, source: Optional[str] = None):
+    """
+    Unified audit log of agent actions (Overseer, agentic_orchestrator, optionally ARIN).
+    source: overseer | agentic_orchestrator | arin | omit for all.
+    """
+    try:
+        from src.services.agent_actions_log import get_recent
+        entries = get_recent(limit=min(limit, 200), source_filter=source)
+        return {"entries": entries, "count": len(entries)}
+    except Exception as e:
+        logger.warning("Agents audit-log failed: %s", e)
+        return {"entries": [], "count": 0}
+
+
+class RunChainRequest(BaseModel):
+    """Request to run a named workflow chain with shared context."""
+    workflow_name: str = Field(..., description="assessment | report | remediation")
+    context: Optional[Dict[str, Any]] = None
+
+
+class RunChainResponse(BaseModel):
+    """Response: answer and context snapshot (no secrets)."""
+    answer: str
+    context_snapshot: Dict[str, Any] = Field(default_factory=dict)
+    actions_completed: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+@router.post("/run-chain", response_model=RunChainResponse)
+async def run_chain(body: RunChainRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Run a named workflow (report, assessment, remediation) with shared context.
+    Returns the orchestrator answer and a context snapshot (alert_id, assessment_result, etc.; no secrets).
+    Agent actions are persisted to agent_audit_log when DB is available.
+    """
+    from src.services.agentic_orchestrator import run_workflow, WORKFLOW_TEMPLATES
+    if body.workflow_name not in WORKFLOW_TEMPLATES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown workflow_name. Use one of: {list(WORKFLOW_TEMPLATES.keys())}",
+        )
+    result = await run_workflow(template_name=body.workflow_name, context=body.context or {}, db=db)
+    # Snapshot without secrets: drop keys that might hold tokens or PII
+    ctx = result.shared_context or {}
+    safe_keys = {"alert_id", "assessment_result", "last_step_output", "recent_alerts", "last_arin_decision", "overseer_status"}
+    context_snapshot = {k: ctx[k] for k in safe_keys if k in ctx}
+    if "overseer_status" in context_snapshot and isinstance(context_snapshot["overseer_status"], dict):
+        # Keep summary only, not full config
+        os_ = context_snapshot["overseer_status"]
+        context_snapshot["overseer_status"] = {
+            "executive_summary": os_.get("executive_summary"),
+            "system_alerts_count": len(os_.get("system_alerts") or []),
+        }
+    return RunChainResponse(
+        answer=result.answer,
+        context_snapshot=context_snapshot,
+        actions_completed=[{"step": r.step, "success": r.success, "output": (r.output or "")[:500]} for r in (result.actions_completed or [])],
+    )
+
+
 # ==================== SCHEMAS ====================
 
 class AlertResponse(BaseModel):
@@ -238,6 +364,39 @@ async def analyze_asset(
 
 # ==================== ADVISOR ENDPOINTS ====================
 
+@router.get("/recommendations/{asset_id}/decision-object")
+async def get_recommendations_decision_object(
+    asset_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get ARIN Decision Object for an asset (Risk & Intelligence OS).
+    Multi-agent risk assessment with consensus and dissent.
+    """
+    result = await db.execute(select(Asset).where(Asset.id == str(asset_id)))
+    asset = result.scalar_one_or_none()
+    if not asset:
+        raise HTTPException(status_code=404, detail="Asset not found")
+    try:
+        from src.services.arin_orchestrator import get_arin_orchestrator
+        orch = get_arin_orchestrator()
+        do = await orch.assess(
+            source_module="advisor",
+            object_type="asset",
+            object_id=str(asset.id),
+            input_data={
+                "climate_risk_score": asset.climate_risk_score or 40,
+                "physical_risk_score": asset.physical_risk_score or 20,
+                "network_risk_score": asset.network_risk_score or 30,
+                "valuation": asset.current_valuation,
+            },
+            shared_context={"portfolio_id": str(getattr(asset, "portfolio_id", None) or asset.id), "source": "advisor"},
+        )
+        return do.model_dump(mode="json")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/recommendations/{asset_id}", response_model=list[RecommendationResponse])
 async def get_recommendations(
     asset_id: str,
@@ -252,6 +411,7 @@ async def get_recommendations(
     - Analysis results
     
     Each recommendation includes multiple options with NPV/ROI analysis.
+    For Decision Object (multi-agent assessment), use GET /recommendations/{asset_id}/decision-object.
     """
     # Get asset
     result = await db.execute(
@@ -398,9 +558,31 @@ async def alert_analyze_and_recommend(
         except Exception as e:
             logger.debug("Alert explanation LLM failed: %s", e)
 
+        # Validation summary for UI (Guardrails + Morpheus)
+        validation_summary = {"guardrails_passed": True, "morpheus_passed": True, "violations": []}
+        try:
+            from src.services.nemo_guardrails import get_nemo_guardrails_service, GuardrailViolation
+            guardrails = get_nemo_guardrails_service()
+            if getattr(guardrails, "enabled", True):
+                rec_text = " ".join(
+                    (r.recommended_option or "") + " " + (r.recommendation_reason or "")
+                    for r in recommendations[:5]
+                )
+                val_result = await guardrails.validate(
+                    response=rec_text[:8000],
+                    context={"asset_id": asset_id_ctx, "input": alert.message or ""},
+                    agent_type="ADVISOR",
+                )
+                validation_summary["guardrails_passed"] = val_result.passed
+                validation_summary["violations"] = [v.value for v in val_result.violations]
+                validation_summary["morpheus_passed"] = GuardrailViolation.MORPHEUS not in val_result.violations
+        except Exception as e:
+            logger.debug("Validation summary failed: %s", e)
+
         return {
             "alert_id": alert_id,
             "explanation": explanation or None,
+            "validation": validation_summary,
             "analysis": {
                 "analysis_id": str(analysis.analysis_id),
                 "root_causes": analysis.root_causes,

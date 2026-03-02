@@ -1,380 +1,116 @@
-<!-- Paste into Elementor HTML widget (it supports <style>). -->
-<!-- Platform page in the same corporate style as the landing (dark + gold). -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<!-- Paste into Elementor HTML widget. Platform: dark + gold, JetBrains Mono. -->
 
 <style>
-  .saa-wp-bleed{
-    position:relative;
-    left:50%;
-    margin-left:-50vw;
-    width:100vw;
-    max-width:100vw;
-    background:#000;
-    overflow:hidden;
-  }
-
-  .saa-wp{
-    --bg-void:#000000;
-    --bg-deep:#0a0908;
-    --bg-surface:#0f0e0a;
-    --bg-elevated:#141310;
-    --bg-card:#1a1815;
-
-    --text-primary:#e4e4e7;
-    --text-secondary:#9a9a9a;
-    --text-muted:#6b6b6b;
-
-    --accent-primary:#C9A962;
-    --accent-primary-hover:#D4AF37;
-    --accent-primary-glow:rgba(201,169,98,0.3);
-
-    --border-subtle:rgba(255,255,255,0.06);
-    --border-light:rgba(255,255,255,0.1);
-
-    --font-sans:'Space Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-    --font-display:'Space Grotesk',-apple-system,BlinkMacSystemFont,sans-serif;
-    --font-mono:'JetBrains Mono','SF Mono','Consolas',monospace;
-
-    --text-xs:11px;
-    --text-sm:12px;
-    --text-base:14px;
-    --text-lg:16px;
-    --text-xl:18px;
-    --text-2xl:24px;
-    --text-3xl:32px;
-
-    color:var(--text-primary);
-    font-family:var(--font-sans) !important;
-    line-height:1.6;
-    -webkit-font-smoothing:antialiased;
-    -moz-osx-font-smoothing:grayscale;
-    text-rendering:optimizeLegibility;
-    font-weight:400;
-    letter-spacing:-0.01em !important;
-    font-feature-settings:'cv02','cv03','cv04','cv11';
-    font-optical-sizing:auto;
-  }
-
-  .saa-wp *{box-sizing:border-box}
-  .saa-wp a{color:var(--accent-primary);text-decoration:none}
-  .saa-wp a:hover{color:var(--accent-primary-hover);text-decoration:underline}
-  .saa-wp .mono{font-family:var(--font-mono)}
-
-  /* Ensure Elementor/theme typography doesn't override the premium stack */
-  .saa-wp .content,
-  .saa-wp .content *{
-    font-family:var(--font-sans) !important;
-    font-feature-settings:inherit !important;
-    font-optical-sizing:inherit !important;
-    letter-spacing:inherit !important;
-  }
-  .saa-wp .mono,
-  .saa-wp .mono *{
-    font-family:var(--font-mono) !important;
-    letter-spacing:0.02em;
-  }
-
-  .saa-wp .bg{
-    position:absolute;
-    inset:-50%;
-    background:
-      radial-gradient(ellipse at 30% 20%, rgba(201, 169, 98, 0.05) 0%, transparent 50%),
-      radial-gradient(ellipse at 70% 80%, rgba(201, 169, 98, 0.03) 0%, transparent 50%);
-    animation:saaGradientMove 20s ease-in-out infinite;
-    pointer-events:none;
-    z-index:0;
-  }
-  @keyframes saaGradientMove{
-    0%,100%{transform:translate(0,0) scale(1)}
-    33%{transform:translate(2%,2%) scale(1.05)}
-    66%{transform:translate(-2%,-2%) scale(0.95)}
-  }
-
-  .saa-wp .content{
-    position:relative;
-    z-index:1;
-    max-width:1200px;
-    margin:0 auto;
-    padding:48px 24px 72px;
-  }
-
-  .saa-wp .topbar{
-    position:sticky;
-    top:0;
-    z-index:2;
-    background:rgba(10,9,8,0.85);
-    backdrop-filter:blur(10px);
-    border-bottom:1px solid var(--border-subtle);
-  }
-  .saa-wp .topbar-inner{
-    max-width:1200px;
-    margin:0 auto;
-    padding:16px 24px;
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-    gap:12px;
-  }
-  .saa-wp .brand{display:flex;align-items:center;gap:12px;text-decoration:none}
-  .saa-wp .brand-mark{
-    width:36px;height:36px;border:1px solid var(--accent-primary);border-radius:8px;
-    display:flex;align-items:center;justify-content:center;
-    font-family:var(--font-mono);font-size:12px;font-weight:600;color:var(--accent-primary);
-  }
-  .saa-wp .brand-text{color:var(--text-primary);font-size:13px;font-weight:500}
-  .saa-wp .nav{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}
-  .saa-wp .nav a{
-    font-size:13px;color:var(--text-secondary);
-    padding:8px 10px;border-radius:8px;border:1px solid transparent;
-  }
-  .saa-wp .nav a:hover{color:var(--text-primary);border-color:var(--border-light);text-decoration:none}
-
-  .saa-wp .eyebrow{
-    font-size:var(--text-xs);
-    letter-spacing:0.12em;
-    text-transform:uppercase;
-    color:var(--text-muted);
-    font-family:var(--font-mono) !important;
-  }
-  .saa-wp h1{
-    margin:12px 0 10px;
-    font-size:var(--text-3xl);
-    font-weight:700;
-    letter-spacing:-0.02em;
-    line-height:1.15;
-    font-family:var(--font-display) !important;
-    background:linear-gradient(135deg, var(--text-primary) 0%, var(--accent-primary) 50%, var(--text-primary) 100%);
-    background-size:200% auto;
-    -webkit-background-clip:text;
-    -webkit-text-fill-color:transparent;
-    background-clip:text;
-    animation:saaTitleShift 8s ease infinite;
-  }
-  @keyframes saaTitleShift{0%,100%{background-position:0% center}50%{background-position:200% center}}
-  .saa-wp h2{
-    margin:28px 0 12px;
-    font-size:var(--text-xl);
-    font-weight:600;
-    letter-spacing:-0.01em;
-    font-family:var(--font-display) !important;
-    color:var(--text-primary);
-  }
-  .saa-wp h3{
-    margin:0 0 6px;
-    font-size:var(--text-base);
-    font-weight:600;
-    color:var(--text-primary);
-    font-family:var(--font-display) !important;
-    letter-spacing:-0.01em;
-  }
-  .saa-wp .content p,
-  .saa-wp .content p *{
-    margin:10px 0;
-    color:var(--text-secondary) !important;
-    font-size:var(--text-base) !important;
-    font-weight:400 !important;
-    letter-spacing:-0.01em !important;
-  }
-  .saa-wp .lead{font-size:var(--text-lg) !important;color:var(--text-secondary);max-width:92ch}
-  .saa-wp .muted{color:var(--text-muted)}
-
-  .saa-wp .grid{display:grid;gap:16px}
-  @media (min-width: 900px){ .saa-wp .grid.cols-2{grid-template-columns:1fr 1fr} }
-  @media (min-width: 1100px){ .saa-wp .grid.cols-3{grid-template-columns:1fr 1fr 1fr} }
-
-  .saa-wp .card{
-    background:var(--bg-elevated);
-    border:1px solid var(--border-subtle);
-    border-radius:12px;
-    padding:16px;
-    transition:all .25s ease;
-  }
-  .saa-wp .card:hover{border-color:rgba(201,169,98,.28);box-shadow:0 12px 30px rgba(0,0,0,.35);transform:translateY(-2px)}
-
-  .saa-wp .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
-  .saa-wp .btn{
-    display:inline-flex;align-items:center;justify-content:center;gap:10px;
-    padding:10px 14px;
-    border-radius:10px;
-    border:1px solid var(--border-light);
-    background:transparent;
-    color:var(--text-primary);
-    font-size:13px;
-    font-weight:500;
-    cursor:pointer;
-    transition:all .2s ease;
-  }
-  .saa-wp .btn:hover{border-color:var(--accent-primary);color:var(--accent-primary);text-decoration:none}
-  .saa-wp .btn.primary{background:var(--accent-primary);border-color:var(--accent-primary);color:#000}
-  .saa-wp .btn.primary:hover{background:var(--accent-primary-hover);border-color:var(--accent-primary-hover);color:#000}
-
-  .saa-wp .hr{height:1px;background:var(--border-subtle);margin:20px 0}
-  .saa-wp .pill{
-    display:inline-flex;align-items:center;gap:8px;
-    padding:6px 10px;
-    border:1px solid var(--border-subtle);
-    border-radius:999px;
-    background:rgba(255,255,255,0.02);
-    color:var(--text-secondary);
-    font-size:12px;
-    font-family:var(--font-mono) !important;
-    letter-spacing:0.06em;
-    text-transform:uppercase;
-    margin:6px 8px 0 0;
-  }
-  .saa-wp .page-footer{ margin-top:24px;padding-top:20px;border-top:1px solid var(--border-subtle);display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:20px }
-  .saa-wp .page-footer-copy{ color:var(--text-muted);font-size:12px }
-  .saa-wp .page-footer-legal{ display:flex;align-items:center;gap:8px;flex-wrap:wrap }
-  .saa-wp .page-footer-legal a{ color:var(--text-muted);font-size:12px;text-decoration:none }
-  .saa-wp .page-footer-legal a:hover{ color:var(--text-secondary) }
-  .saa-wp .page-footer-badge img{ height:32px;width:auto;display:block }
-  .saa-wp .page-footer-badge:hover img{ opacity:0.9 }
-</style>
-
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+  .saa-wp-bleed,.saa-wp-bleed *,.saa-wp-bleed .saa-wp,.saa-wp-bleed .saa-wp *{font-family:'JetBrains Mono',monospace !important}
+  .saa-wp-bleed .brand-logo svg,.saa-wp-bleed .brand-logo svg *{font-family:Georgia,serif !important}
+  .saa-wp-bleed h1,.saa-wp-bleed h2,.saa-wp-bleed h3,.saa-wp-bleed p,.saa-wp-bleed a,.saa-wp-bleed span,.saa-wp-bleed div,.saa-wp-bleed strong,.saa-wp-bleed .btn,.saa-wp-bleed .nav a,.saa-wp-bleed .eyebrow,.saa-wp-bleed .lead,.saa-wp-bleed .muted,.saa-wp-bleed .card,.saa-wp-bleed .pill,.saa-wp-bleed footer,.saa-wp-bleed .page-footer-copy,.saa-wp-bleed .page-footer-legal a{font-family:'JetBrains Mono',monospace !important}
+  .saa-wp-bleed{position:relative;background:#000;overflow:hidden}
+  .saa-wp{position:relative;    --bg-void:#000000;    --bg-deep:#0a0908;    --bg-surface:#0f0e0a;    --bg-elevated:#141310;    --bg-card:#1a1815;    --text-primary:#e4e4e7;    --text-secondary:#9a9a9a;    --text-muted:#6b6b6b;    --accent-primary:#C9A962;    --accent-primary-hover:#D4AF37;    --accent-primary-glow:rgba(201,169,98,0.3);    --border-subtle:rgba(255,255,255,0.06);    --border-light:rgba(255,255,255,0.1);    --font-sans:'JetBrains Mono',monospace;    --font-display:'JetBrains Mono',monospace;    --font-mono:'JetBrains Mono',monospace;    --text-xs:11px;    --text-sm:12px;    --text-base:14px;    --text-lead:15px;    --text-h3:15px;    --text-xl:20px;    --text-2xl:26px;    color:var(--text-primary);    font-family:var(--font-sans);    font-size:var(--text-base);    line-height:1.6;    -webkit-font-smoothing:antialiased;    -moz-osx-font-smoothing:grayscale;    text-rendering:optimizeLegibility;    font-weight:400;    letter-spacing:0.02em;    font-optical-sizing:auto;  }  .saa-wp *{box-sizing:border-box;font-family:inherit}  .saa-wp .content{font-size:var(--text-base)}  .saa-wp .content *{font-family:'JetBrains Mono',monospace !important;font-feature-settings:inherit !important;letter-spacing:inherit}  .saa-wp .mono,.saa-wp .mono *{font-family:var(--font-mono) !important;letter-spacing:0.02em}  .saa-wp a{color:var(--accent-primary);text-decoration:none;font-size:inherit}  .saa-wp a:hover{color:var(--accent-primary-hover);text-decoration:underline}  .saa-wp .bg{    position:absolute;    inset:-50%;    background:      radial-gradient(ellipse at 30% 20%, rgba(201, 169, 98, 0.05) 0%, transparent 50%),      radial-gradient(ellipse at 70% 80%, rgba(201, 169, 98, 0.03) 0%, transparent 50%);    animation:saaGradientMove 20s ease-in-out infinite;    pointer-events:none;    z-index:0;  }  @keyframes saaGradientMove{    0%,100%{transform:translate(0,0) scale(1)}    33%{transform:translate(2%,2%) scale(1.05)}    66%{transform:translate(-2%,-2%) scale(0.95)}  }  .saa-wp .content{    position:relative;    z-index:1;    width:100%;    max-width:92vw;    margin:0 auto;    padding:40px 0;  }  .saa-wp .topbar{    position:sticky;    top:0;    z-index:2;    background:rgba(10,9,8,0.85);    backdrop-filter:blur(10px);    border-bottom:1px solid var(--border-subtle);  }  .saa-wp .topbar-inner{    width:100%;    max-width:92vw;    margin:0 auto;    padding:16px 0;    display:flex;    align-items:center;    justify-content:space-between;    gap:12px;  }  .saa-wp .brand{display:flex;align-items:center;gap:12px;text-decoration:none}  .saa-wp .brand-logo{height:36px;width:auto;display:inline-block;flex-shrink:0}  .saa-wp .brand-logo svg{height:36px;width:auto;display:block;vertical-align:top}  .saa-wp .nav{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}  .saa-wp .nav a{font-size:13px;color:var(--text-secondary);padding:8px 10px;border-radius:8px;border:1px solid transparent}  .saa-wp .nav a:hover{color:var(--text-primary);border-color:var(--border-light);text-decoration:none}  .saa-wp .eyebrow{font-size:var(--text-xs);letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);font-family:var(--font-mono) !important;font-weight:500}  .saa-wp h1{margin:12px 0 10px;font-size:var(--text-2xl);font-weight:700;letter-spacing:-0.02em;line-height:1.25;font-family:var(--font-display) !important;color:var(--text-primary);background:linear-gradient(135deg, var(--text-primary) 0%, var(--accent-primary) 50%, var(--text-primary) 100%);background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:saaTitleShift 8s ease infinite}  @keyframes saaTitleShift{0%,100%{background-position:0% center}50%{background-position:200% center}}  .saa-wp h2{margin:28px 0 10px;font-size:var(--text-xl);font-weight:600;letter-spacing:0.02em;font-family:var(--font-display) !important;color:var(--text-primary);line-height:1.3}  .saa-wp h2:first-of-type{margin-top:24px}  .saa-wp h3{margin:0 0 6px;font-size:var(--text-h3);font-weight:600;letter-spacing:0.02em;color:var(--text-primary);line-height:1.35}  .saa-wp p{margin:10px 0;color:var(--text-secondary);font-size:var(--text-base);line-height:1.6}  .saa-wp .lead{font-size:var(--text-lead);color:var(--text-secondary);max-width:100%;line-height:1.6}  .saa-wp .muted{font-size:var(--text-sm);color:var(--text-muted);line-height:1.5}  .saa-wp .card p{font-size:var(--text-base);line-height:1.6}  .saa-wp .module-hero-canvas{    position:relative;    width:100%;    max-width:100%;    height:280px;    margin-top:20px;    margin-bottom:28px;    border-radius:16px;    border:1px solid var(--border-subtle);    background:linear-gradient(135deg, rgba(212,175,55,0.02) 0%, rgba(10,14,23,0.8) 100%);    overflow:hidden;  }  .saa-wp .module-hero-canvas canvas{width:100%;height:100%;display:block}  .saa-wp .grid{display:grid;gap:16px}  @media (min-width: 900px){ .saa-wp .grid.cols-2{grid-template-columns:1fr 1fr} }  @media (min-width: 1100px){ .saa-wp .grid.cols-3{grid-template-columns:1fr 1fr 1fr} }  .saa-wp .card{    background:var(--bg-elevated);    border:1px solid var(--border-subtle);    border-radius:12px;    padding:16px;    transition:all .25s ease;  }  .saa-wp .card:hover{border-color:rgba(201,169,98,.28);box-shadow:0 12px 30px rgba(0,0,0,.35);transform:translateY(-2px)}  .saa-wp .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}  .saa-wp .btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;padding:10px 14px;border-radius:10px;border:1px solid var(--border-light);background:transparent;color:var(--text-primary);font-size:13px;font-weight:500;cursor:pointer;transition:all .2s ease;font-family:'JetBrains Mono',monospace !important}  .saa-wp .btn:hover{border-color:var(--accent-primary);color:var(--accent-primary);text-decoration:none}  .saa-wp .btn.primary{background:var(--accent-primary);border-color:var(--accent-primary);color:#000}  .saa-wp .btn.primary:hover{background:var(--accent-primary-hover);border-color:var(--accent-primary-hover);color:#000}  .saa-wp .hr{height:1px;background:var(--border-subtle);margin:20px 0}  .saa-wp .pill{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid var(--border-subtle);border-radius:999px;background:rgba(255,255,255,0.02);color:var(--text-secondary);font-size:var(--text-xs);font-family:var(--font-mono);letter-spacing:0.06em;text-transform:uppercase;margin:6px 8px 0 0}  .saa-wp .page-footer{margin-top:24px;padding-top:20px;border-top:1px solid var(--border-subtle);display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:20px}  .saa-wp .page-footer-copy{color:var(--text-muted);font-size:var(--text-sm)}  .saa-wp .page-footer-legal{display:flex;align-items:center;gap:8px;flex-wrap:wrap}  .saa-wp .page-footer-legal a{color:var(--text-muted);font-size:var(--text-sm);text-decoration:none}  .saa-wp .page-footer-legal a:hover{ color:var(--text-secondary) }  .saa-wp .page-footer-badge img{ height:32px;width:auto;display:block }  .saa-wp .page-footer-badge:hover img{ opacity:0.9 }</style>
 <div class="saa-wp-bleed">
   <div class="saa-wp">
     <div class="bg" aria-hidden="true"></div>
-
     <div class="topbar">
-      <div class="topbar-inner">
-        <a class="brand" href="/" aria-label="SAA Alliance home">
-          <div class="brand-mark">SAA</div>
-          <div class="brand-text">Scientific Analytics Alliance</div>
-        </a>
-        <nav class="nav" aria-label="SAA navigation">
-          <a href="/about/">About</a>
+<div class="topbar-inner"><a class="brand" href="/" aria-label="SAA Alliance home">
+<span class="brand-logo" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 200" role="img" aria-label="Scientific Analytics Alliance"><defs><radialGradient id="saa-wp-globe-pf" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#b8962e" stop-opacity="0.2"/><stop offset="100%" stop-color="#b8962e" stop-opacity="0"/></radialGradient><filter id="saa-wp-glow-pf"><feGaussianBlur stdDeviation="2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><rect width="900" height="200" fill="#080808"/><circle cx="100" cy="100" r="72" fill="url(#saa-wp-globe-pf)"/><circle cx="100" cy="100" r="70" fill="none" stroke="#b8962e" stroke-width="0.9" opacity="0.45"/><ellipse cx="100" cy="100" rx="70" ry="15" fill="none" stroke="#b8962e" stroke-width="0.6" opacity="0.28"/><ellipse cx="100" cy="100" rx="61" ry="37" fill="none" stroke="#b8962e" stroke-width="0.6" opacity="0.22"/><ellipse cx="100" cy="100" rx="42" ry="54" fill="none" stroke="#b8962e" stroke-width="0.6" opacity="0.22"/><ellipse cx="100" cy="100" rx="17" ry="67" fill="none" stroke="#b8962e" stroke-width="0.6" opacity="0.22"/><path d="M100,30 Q174,100 100,170" fill="none" stroke="#b8962e" stroke-width="0.6" opacity="0.22"/><path d="M100,30 Q26,100 100,170" fill="none" stroke="#b8962e" stroke-width="0.6" opacity="0.22"/><circle cx="100" cy="38" r="4" fill="#b8962e" filter="url(#saa-wp-glow-pf)"/><circle cx="148" cy="62" r="3" fill="#b8962e" opacity="0.88"/><circle cx="160" cy="108" r="3.5" fill="#b8962e" filter="url(#saa-wp-glow-pf)"/><circle cx="136" cy="150" r="3" fill="#b8962e" opacity="0.85"/><circle cx="64" cy="150" r="3" fill="#b8962e" opacity="0.85"/><circle cx="40" cy="108" r="3.5" fill="#b8962e" filter="url(#saa-wp-glow-pf)"/><circle cx="52" cy="62" r="3" fill="#b8962e" opacity="0.88"/><circle cx="100" cy="100" r="5" fill="#b8962e" filter="url(#saa-wp-glow-pf)"/><g opacity="0.5"><line x1="100" y1="38" x2="148" y2="62" stroke="#b8962e" stroke-width="1.1"/><line x1="148" y1="62" x2="160" y2="108" stroke="#b8962e" stroke-width="1.1"/><line x1="160" y1="108" x2="136" y2="150" stroke="#b8962e" stroke-width="1.1"/><line x1="136" y1="150" x2="64" y2="150" stroke="#b8962e" stroke-width="1.1"/><line x1="64" y1="150" x2="40" y2="108" stroke="#b8962e" stroke-width="1.1"/><line x1="40" y1="108" x2="52" y2="62" stroke="#b8962e" stroke-width="1.1"/><line x1="52" y1="62" x2="100" y2="38" stroke="#b8962e" stroke-width="1.1"/></g><g opacity="0.45"><line x1="100" y1="38" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/><line x1="148" y1="62" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/><line x1="160" y1="108" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/><line x1="136" y1="150" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/><line x1="64" y1="150" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/><line x1="40" y1="108" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/><line x1="52" y1="62" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/></g><g opacity="0.2"><line x1="100" y1="38" x2="160" y2="108" stroke="#b8962e" stroke-width="0.7"/><line x1="148" y1="62" x2="136" y2="150" stroke="#b8962e" stroke-width="0.7"/><line x1="160" y1="108" x2="64" y2="150" stroke="#b8962e" stroke-width="0.7"/><line x1="136" y1="150" x2="40" y2="108" stroke="#b8962e" stroke-width="0.7"/><line x1="64" y1="150" x2="52" y2="62" stroke="#b8962e" stroke-width="0.7"/><line x1="40" y1="108" x2="100" y2="38" stroke="#b8962e" stroke-width="0.7"/></g><line x1="196" y1="30" x2="196" y2="170" stroke="#b8962e" stroke-width="0.8" opacity="0.35"/><text x="375" y="90" font-family="Georgia,serif" font-size="62" font-weight="700" fill="#f0ece0" text-anchor="middle" letter-spacing="10">SAA</text><line x1="240" y1="106" x2="510" y2="106" stroke="#b8962e" stroke-width="1.6"/><text x="375" y="142" font-family="Georgia,serif" font-size="26" font-weight="400" fill="#b8962e" text-anchor="middle" letter-spacing="13">ALLIANCE</text><line x1="556" y1="30" x2="556" y2="170" stroke="#b8962e" stroke-width="0.8" opacity="0.35"/><text x="728" y="88" font-family="Georgia,serif" font-size="13" fill="#f0ece0" opacity="0.85" text-anchor="middle" letter-spacing="3">SCIENTIFIC ANALYTICS ALLIANCE</text><line x1="572" y1="100" x2="884" y2="100" stroke="#b8962e" stroke-width="0.7" opacity="0.4"/><text x="728" y="118" font-family="Georgia,serif" font-size="11" fill="#b8962e" opacity="0.75" text-anchor="middle" letter-spacing="2">AI-Powered Research &amp; Risk Intelligence</text></svg></span>
+</a><nav class="nav" aria-label="SAA navigation"><a href="/about/">About</a>
           <a href="/platform/">Platform</a>
           <a href="/how-it-works/">How it works</a>
           <a href="/team/">Team</a>
-          <a href="/contact/">Contact</a>
-        </nav>
-      </div>
+<a href="/contact/">Contact</a></nav></div>
     </div>
-
     <div class="content">
       <div class="eyebrow">Scientific Analytics Alliance</div>
       <h1>Platform</h1>
-      <p class="lead">
-        SAA Alliance is an institutional-grade AI & financial intelligence ecosystem integrating 8+ production-ready platforms into a unified,
-        GPU-ready research environment. Modules are built for banks, insurers, asset managers, fintech teams, and researchers requiring transparent,
-        auditable analytics.
-      </p>
-
-      <div class="grid cols-2" style="margin-top:16px;">
+<p class="lead">SAA Alliance is a Risk &amp; Intelligence Operating System: six production modules on dedicated domains — risk.saa-alliance.com (Global Risk), analyzer.saa-alliance.com (Risk Analyzer), arin.saa-alliance.com (ARIN), invest.saa-alliance.com (Investment), crypto.saa-alliance.com (Crypto), news.saa-alliance.com (News). Built for banks, insurers, asset managers, and regulators requiring transparent, auditable, real-time analytics. NVIDIA NIM, NeMo Guardrails, and GNN in production.</p>
+<!-- Animation: canvas + platform-hero-canvas.js (подключается плагином SAA Berry Phase Hero на странице Platform). -->
+<div class="module-hero-canvas" aria-hidden="true"><canvas id="heroCanvas"></canvas></div>
+<div class="grid cols-2" style="margin-top: 16px;">
         <div class="card">
           <h3>Core engine</h3>
-          <p>
-            <strong>ARIN Platform</strong> — multi-agent AI system with 6 specialized agents (Credit, Market, Liquidity, Operational, Regulatory, Systemic)
-            for predictive risk intelligence and decision support.
-          </p>
-          <div class="btns">
-            <a class="btn" href="/platform-arin/">View ARIN page</a>
-            <a class="btn primary" href="https://arin.saa-alliance.com/dashboard" target="_blank" rel="noopener">Launch ARIN</a>
-          </div>
+            <strong>ARIN Platform</strong> — multi-agent AI council with 13 specialized agents (Credit, Market, Operational, Liquidity, Regulatory, Systemic, Narrative, Counterparty, Model Risk, ESG, Physical Asset, Sentinel, Ethicist). Single explainable verdict (BUY/SELL/HOLD/AVOID) with consensus, dissent, and confidence. Meta-Decision Governor, Entity Memory, Learning Agent. Full audit trail for regulators.
+<div class="btns"><a class="btn" href="/platform-arin/">View ARIN page</a>
+<a class="btn primary" href="https://arin.saa-alliance.com/dashboard" target="_blank" rel="noopener">Launch ARIN</a></div>
         </div>
         <div class="card">
-          <h3>Research-driven & GPU-ready</h3>
-          <p>
-            Built for high-performance analytics: Monte Carlo simulations (10k–100k paths), graph analytics (Neo4j + GNN),
-            and LLM-based reasoning via NVIDIA-supported APIs.
-          </p>
-          <div class="btns">
-            <a class="btn" href="https://mrsaa1.github.io/portfolio-dashboard/saa-platform.html" target="_blank" rel="noopener">Platform overview</a>
-            <a class="btn" href="https://github.com/MRsaa1" target="_blank" rel="noopener">GitHub</a>
-          </div>
+          <h3>Research-driven &amp; NVIDIA in production</h3>
+            Monte Carlo (10k–100k paths), graph analytics (Neo4j + GNN), LLM reasoning. NVIDIA NIM API, NeMo Guardrails; PyTorch/CUDA GNN for systemic risk; GPU Service (cuDF, CVXPY) in Risk Analyzer. API &lt;400ms avg, 99.8% uptime.
+<div class="btns"><a class="btn" href="https://mrsaa1.github.io/portfolio-dashboard/saa-platform.html" target="_blank" rel="noopener">Platform overview</a>
+<a class="btn" href="https://github.com/MRsaa1" target="_blank" rel="noopener">GitHub</a></div>
         </div>
       </div>
+      <h2>Modules (6 production + research)</h2>
+<p class="muted" style="margin-top: -8px;">Six production modules on separate domains; research initiatives listed below.</p>
 
-      <h2>Modules (public pages)</h2>
       <div class="grid cols-3">
         <div class="card">
-          <h3>Prediction Market</h3>
-          <p class="muted">AI-powered prediction market protocol with crowd wisdom aggregation and decentralized forecasting.</p>
-          <div class="btns">
-            <a class="btn" href="/platform-prediction-market/">View</a>
-          </div>
-        </div>
+          <h3>Global Risk Platform</h3>
+          <p class="muted">The Operating System for the Physical Economy. Command Center, 3D globe (Cesium), 8 strategic modules, Unified Stress Report (280 factors). Physical–financial bridge; AI-Q, System Overseer. risk.saa-alliance.com</p>
 
-        <div class="card">
-          <h3>Investment Dashboard</h3>
-          <p class="muted">Equity analytics with technical + fundamental indicators and automated reporting workflows.</p>
-          <div class="btns">
-            <a class="btn" href="/platform-investment-dashboard/">View</a>
-            <a class="btn primary" href="https://invest.saa-alliance.com/" target="_blank" rel="noopener">Launch</a>
-          </div>
+<div class="btns"><a class="btn" href="https://saa-alliance.com/platform-physical-financial-risk-platform/">View</a>
+<a class="btn primary" href="https://risk.saa-alliance.com" target="_blank" rel="noopener">Launch</a></div>
         </div>
-
-        <div class="card">
-          <h3>Digital Assets Analytics</h3>
-          <p class="muted">Institutional-grade crypto analytics with on-chain metrics and compliance-oriented intelligence.</p>
-          <div class="btns">
-            <a class="btn" href="/platform-digital-assets-analytics/">View</a>
-            <a class="btn primary" href="https://crypto.saa-alliance.com/" target="_blank" rel="noopener">Launch</a>
-          </div>
-        </div>
-
         <div class="card">
           <h3>Risk Analyzer</h3>
-          <p class="muted">Institutional portfolio risk management platform with VaR calculations, stress testing, scenario analysis, and reporting.</p>
-          <div class="btns">
-            <a class="btn" href="/platform-risk-analyzer/">View</a>
-            <a class="btn primary" href="https://analyzer.saa-alliance.com/" target="_blank" rel="noopener">Launch</a>
-          </div>
-        </div>
+          <p class="muted">Portfolio risk: VaR/CVaR, stress testing, PCA, backtesting, Monte Carlo (10k–100k paths), optimization. GPU Service (cuDF, CVXPY); AI Service (NVIDIA NIM, RAG). Export to ARIN. analyzer.saa-alliance.com</p>
 
+<div class="btns"><a class="btn" href="/platform-risk-analyzer/">View</a>
+<a class="btn primary" href="https://analyzer.saa-alliance.com/" target="_blank" rel="noopener">Launch</a></div>
+        </div>
         <div class="card">
           <h3>ARIN Platform</h3>
-          <p class="muted">Multi-agent AI risk intelligence engine powering cross-platform risk research.</p>
-          <div class="btns">
-            <a class="btn" href="/platform-arin/">View</a>
-            <a class="btn primary" href="https://arin.saa-alliance.com/dashboard" target="_blank" rel="noopener">Launch</a>
-          </div>
-        </div>
+          <p class="muted">13-agent AI council; single verdict with consensus and dissent. Governor, Entity Memory, Learning Agent. NIM, NeMo Guardrails, GNN. arin.saa-alliance.com</p>
 
+<div class="btns"><a class="btn" href="/platform-arin/">View</a>
+<a class="btn primary" href="https://arin.saa-alliance.com/dashboard" target="_blank" rel="noopener">Launch</a></div>
+        </div>
+        <div class="card">
+          <h3>Investment Dashboard</h3>
+          <p class="muted">Report Agent, institutional reports V2, watchlist, proactive scan, async generation. yfinance, SEC EDGAR. invest.saa-alliance.com</p>
+
+<div class="btns"><a class="btn" href="/platform-investment-dashboard/">View</a>
+<a class="btn primary" href="https://invest.saa-alliance.com/" target="_blank" rel="noopener">Launch</a></div>
+        </div>
+        <div class="card">
+          <h3>Crypto Analytics Portal</h3>
+          <p class="muted">Multi-metrics (6 categories), rating v1.4, Risk &amp; Intelligence OS v2, Send to ARIN, Report Orchestrator. NVIDIA NIM (DeepSeek R1, Llama 8B). crypto.saa-alliance.com</p>
+
+<div class="btns"><a class="btn" href="/platform-digital-assets-analytics/">View</a>
+<a class="btn primary" href="https://crypto.saa-alliance.com/" target="_blank" rel="noopener">Launch</a></div>
+        </div>
         <div class="card">
           <h3>News Analytics</h3>
-          <p class="muted">NLP-based sentiment and narrative analysis with sector impact and signal extraction.</p>
-          <div class="btns">
-            <a class="btn" href="/platform-news-analytics/">View</a>
-            <a class="btn primary" href="https://news.saa-alliance.com/dashboard?lang=en" target="_blank" rel="noopener">Launch</a>
-          </div>
-        </div>
+          <p class="muted">12 risk agents, RiskMirror, Headline-to-PnL, NVIDIA NIM (Llama 3.3 70B), Impact Graph. Multilingual sentiment and signal extraction. news.saa-alliance.com</p>
 
+<div class="btns"><a class="btn" href="/platform-news-analytics/">View</a>
+<a class="btn primary" href="https://news.saa-alliance.com/dashboard?lang=en" target="_blank" rel="noopener">Launch</a></div>
+        </div>
         <div class="card">
-          <h3>Physical‑Financial Risk Platform</h3>
-          <p class="muted">System-wide risk intelligence, scenarios and stress testing with real-time analytics.</p>
-          <div class="btns">
-            <a class="btn" href="/platform-physical-financial-risk-platform/">View</a>
-            <a class="btn primary" href="https://risk.saa-alliance.com" target="_blank" rel="noopener">Launch</a>
-          </div>
+
+<span class="pill" style="margin-bottom: 6px;">Research</span>
+          <h3>Prediction Market</h3>
+          <p class="muted">AI-powered prediction market protocol with crowd wisdom aggregation and decentralized forecasting.</p>
+
+<div class="btns"><a class="btn" href="/platform-prediction-market/">View</a></div>
         </div>
       </div>
-
       <h2>Need a deeper dossier?</h2>
       <div class="card">
-        <p>For technical materials, benchmarks, and research background:</p>
-        <div class="btns">
-          <a class="btn" href="https://papers.ssrn.com/author/7753421" target="_blank" rel="noopener">SSRN</a>
+
+For technical materials, benchmarks, and research background:
+<div class="btns"><a class="btn" href="https://papers.ssrn.com/author/7753421" target="_blank" rel="noopener">SSRN</a>
           <a class="btn" href="https://scholar.google.com/citations?user=2ECmg-sAAAAJ" target="_blank" rel="noopener">Google Scholar</a>
           <a class="btn" href="https://mrsaa1.github.io/portfolio-dashboard/saa-platform.html" target="_blank" rel="noopener">Platform overview</a>
-          <a class="btn primary" href="/contact/">Contact</a>
+<a class="btn primary" href="/contact/">Contact</a></div>
         </div>
-      </div>
+<footer class="page-footer" role="contentinfo"><span class="page-footer-copy">© 2026 Scientific Analytics Alliance Inc. • Premium Research &amp; Wealth Intelligence</span>
+<div class="page-footer-legal"><a href="/privacy-policy/">Privacy Policy</a>
+<span class="muted">•</span>
+<a href="/terms/">Terms of Use</a></div>
+<a class="page-footer-badge" href="https://www.nvidia.com/en-us/startups/" target="_blank" rel="noopener" aria-label="NVIDIA Inception Program">
+<img src="https://saa-alliance.com/wp-content/uploads/2026/01/nvidia-inception-program-badge-rgb-1c-blk-for-screen.png" alt="NVIDIA Inception Program Member" />
+</a>
 
-      <footer class="page-footer" role="contentinfo">
-        <span class="page-footer-copy">© 2025 Scientific Analytics Alliance • Premium Research & Wealth Intelligence</span>
-        <div class="page-footer-legal">
-          <a href="/privacy-policy/">Privacy Policy</a>
-          <span class="muted" style="font-size:12px">•</span>
-          <a href="/terms/">Terms of Use</a>
-        </div>
-        <a href="https://www.nvidia.com/en-us/startups/" target="_blank" rel="noopener" class="page-footer-badge" aria-label="NVIDIA Inception Program">
-          <img src="https://saa-alliance.com/wp-content/uploads/2026/01/nvidia-inception-program-badge-rgb-1c-blk-for-screen.png" alt="NVIDIA Inception Program Member" loading="lazy" decoding="async">
-        </a>
-      </footer>
-    </div>
+</footer></div>
   </div>
 </div>
-

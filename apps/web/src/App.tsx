@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import ApiErrorToast from './components/ApiErrorToast'
 import Onboarding from './components/Onboarding'
 import Layout from './components/Layout'
 import LoadingScreen from './components/LoadingScreen'
@@ -21,10 +22,21 @@ const StrategicModules = lazy(() => import('./pages/StrategicModules'))
 const CIPModule = lazy(() => import('./pages/modules/CIPModule'))
 const SCSSModule = lazy(() => import('./pages/modules/SCSSModule'))
 const SROModule = lazy(() => import('./pages/modules/SROModule'))
+const ASGIModule = lazy(() => import('./pages/modules/ASGIModule'))
+const ERFModule = lazy(() => import('./pages/modules/ERFModule'))
+const BIOSECModule = lazy(() => import('./pages/modules/BIOSECModule'))
+const ASMModule = lazy(() => import('./pages/modules/ASMModule'))
+const CADAPTModule = lazy(() => import('./pages/modules/CADAPTModule'))
+const SRSModule = lazy(() => import('./pages/modules/SRSModule'))
+const CityOSModule = lazy(() => import('./pages/modules/CityOSModule'))
+const FSTModule = lazy(() => import('./pages/modules/FSTModule'))
+const MunicipalDashboard = lazy(() => import('./pages/MunicipalDashboard'))
+const SRORegulatorDashboard = lazy(() => import('./pages/modules/SRORegulatorDashboard'))
 const StressTestReportPage = lazy(() => import('./pages/StressTestReportPage'))
 const ActionPlansPage = lazy(() => import('./pages/ActionPlansPage'))
 const StressPlannerPage = lazy(() => import('./pages/StressPlannerPage'))
 const BCPGeneratorPage = lazy(() => import('./pages/BCPGeneratorPage'))
+const UnifiedStressReportPage = lazy(() => import('./pages/UnifiedStressReportPage'))
 
 // 3D + AI Fintech Strategy Pages
 const Projects = lazy(() => import('./pages/Projects'))
@@ -33,13 +45,32 @@ const ProjectDetail = lazy(() => import('./pages/ProjectDetail'))
 const Portfolios = lazy(() => import('./pages/Portfolios'))
 const PortfolioCreate = lazy(() => import('./pages/PortfolioCreate'))
 const PortfolioDetail = lazy(() => import('./pages/PortfolioDetail'))
+const PortfolioGlobePage = lazy(() => import('./pages/PortfolioGlobePage'))
 const FraudClaims = lazy(() => import('./pages/FraudClaims'))
 const FraudClaimCreate = lazy(() => import('./pages/FraudClaimCreate'))
+const FraudClaimDetail = lazy(() => import('./pages/FraudClaimDetail'))
 const AgentMonitoring = lazy(() => import('./pages/AgentMonitoring'))
 const RiskZoneAnalysis = lazy(() => import('./pages/RiskZoneAnalysis'))
 const NvidiaServices = lazy(() => import('./pages/NvidiaServices'))
+const EarthEnginePage = lazy(() => import('./pages/EarthEnginePage'))
 const RegulatorMode = lazy(() => import('./pages/RegulatorMode'))
 const BoardMode = lazy(() => import('./pages/BoardMode'))
+const ARINPage = lazy(() => import('./pages/ARINPage'))
+const CrossTrackPage = lazy(() => import('./pages/CrossTrackPage'))
+const ReplayPage = lazy(() => import('./pages/ReplayPage'))
+const AuditExtPage = lazy(() => import('./pages/AuditExtPage'))
+const ComplianceDashboard = lazy(() => import('./pages/ComplianceDashboard'))
+const MeasuresEffectivenessPage = lazy(() => import('./pages/MeasuresEffectivenessPage'))
+const AgentWorkflows = lazy(() => import('./pages/AgentWorkflows'))
+const QuantumRiskIntelligence = lazy(() => import('./pages/QuantumRiskIntelligence'))
+const AIModels = lazy(() => import('./pages/AIModels'))
+const FloodPage = lazy(() => import('./pages/product/FloodPage'))
+const HeatPage = lazy(() => import('./pages/product/HeatPage'))
+const DroughtPage = lazy(() => import('./pages/product/DroughtPage'))
+const GrantPage = lazy(() => import('./pages/product/GrantPage'))
+const AlertPage = lazy(() => import('./pages/product/AlertPage'))
+const LPRPage = lazy(() => import('./pages/LPRPage'))
+const LPRProfilePage = lazy(() => import('./pages/LPRProfilePage'))
 
 function App() {
   const [showOnboarding, setShowOnboarding] = useState(false)
@@ -60,6 +91,7 @@ function App() {
 
   return (
     <ErrorBoundary>
+      <ApiErrorToast />
       {showOnboarding && <Onboarding onComplete={handleOnboardingComplete} />}
       <Routes>
         <Route path="/login" element={
@@ -70,6 +102,11 @@ function App() {
         <Route path="/report" element={
           <Suspense fallback={<LoadingScreen />}>
             <StressTestReportPage />
+          </Suspense>
+        } />
+        <Route path="/unified-stress" element={
+          <Suspense fallback={<LoadingScreen />}>
+            <UnifiedStressReportPage />
           </Suspense>
         } />
         <Route path="/" element={<Layout />}>
@@ -178,6 +215,86 @@ function App() {
               </Suspense>
             }
           />
+          <Route
+            path="modules/srs"
+            element={
+              <Suspense fallback={<LoadingScreen />}>
+                <SRSModule />
+              </Suspense>
+            }
+          />
+          <Route
+            path="modules/cityos"
+            element={
+              <Suspense fallback={<LoadingScreen />}>
+                <CityOSModule />
+              </Suspense>
+            }
+          />
+          <Route
+            path="modules/fst"
+            element={
+              <Suspense fallback={<LoadingScreen />}>
+                <FSTModule />
+              </Suspense>
+            }
+          />
+          <Route
+            path="modules/asgi"
+            element={
+              <Suspense fallback={<LoadingScreen />}>
+                <ASGIModule />
+              </Suspense>
+            }
+          />
+          <Route
+            path="modules/erf"
+            element={
+              <Suspense fallback={<LoadingScreen />}>
+                <ERFModule />
+              </Suspense>
+            }
+          />
+          <Route
+            path="modules/biosec"
+            element={
+              <Suspense fallback={<LoadingScreen />}>
+                <BIOSECModule />
+              </Suspense>
+            }
+          />
+          <Route
+            path="modules/asm"
+            element={
+              <Suspense fallback={<LoadingScreen />}>
+                <ASMModule />
+              </Suspense>
+            }
+          />
+          <Route path="modules/cadapt" element={<Navigate to="/municipal" replace />} />
+          <Route
+            path="municipal"
+            element={
+              <Suspense fallback={<LoadingScreen />}>
+                <MunicipalDashboard />
+              </Suspense>
+            }
+          />
+          <Route path="effectiveness" element={<Suspense fallback={<LoadingScreen />}><MeasuresEffectivenessPage /></Suspense>} />
+          <Route path="flood" element={<Suspense fallback={<LoadingScreen />}><FloodPage /></Suspense>} />
+          <Route path="heat" element={<Suspense fallback={<LoadingScreen />}><HeatPage /></Suspense>} />
+          <Route path="drought" element={<Suspense fallback={<LoadingScreen />}><DroughtPage /></Suspense>} />
+          <Route path="grant" element={<Suspense fallback={<LoadingScreen />}><GrantPage /></Suspense>} />
+          <Route path="alert" element={<Suspense fallback={<LoadingScreen />}><AlertPage /></Suspense>} />
+          <Route path="lpr" element={<Suspense fallback={<LoadingScreen />}><LPRPage /></Suspense>} />
+          <Route path="lpr/profile/:entity_id" element={<Suspense fallback={<LoadingScreen />}><LPRProfilePage /></Suspense>} />
+          <Route
+            element={
+              <Suspense fallback={<LoadingScreen />}>
+                <SRORegulatorDashboard />
+              </Suspense>
+            }
+          />
           {/* 3D + AI Fintech Strategy Routes */}
           <Route
             path="projects"
@@ -220,6 +337,14 @@ function App() {
             }
           />
           <Route
+            path="portfolios/:id/globe"
+            element={
+              <Suspense fallback={<LoadingScreen />}>
+                <PortfolioGlobePage />
+              </Suspense>
+            }
+          />
+          <Route
             path="portfolios/:id"
             element={
               <Suspense fallback={<LoadingScreen />}>
@@ -247,7 +372,7 @@ function App() {
             path="fraud/claims/:id"
             element={
               <Suspense fallback={<LoadingScreen />}>
-                <FraudClaims />
+                <FraudClaimDetail />
               </Suspense>
             }
           />
@@ -260,10 +385,82 @@ function App() {
             }
           />
           <Route
+            path="arin"
+            element={
+              <Suspense fallback={<LoadingScreen />}>
+                <ARINPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="cross-track"
+            element={
+              <Suspense fallback={<LoadingScreen />}>
+                <CrossTrackPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="replay"
+            element={
+              <Suspense fallback={<LoadingScreen />}>
+                <ReplayPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="audit-ext"
+            element={
+              <Suspense fallback={<LoadingScreen />}>
+                <AuditExtPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="compliance"
+            element={
+              <Suspense fallback={<LoadingScreen />}>
+                <ComplianceDashboard />
+              </Suspense>
+            }
+          />
+          <Route
+            path="workflows"
+            element={
+              <Suspense fallback={<LoadingScreen />}>
+                <AgentWorkflows />
+              </Suspense>
+            }
+          />
+          <Route
+            path="quantum-risk"
+            element={
+              <Suspense fallback={<LoadingScreen />}>
+                <QuantumRiskIntelligence />
+              </Suspense>
+            }
+          />
+          <Route
+            path="ai-models"
+            element={
+              <Suspense fallback={<LoadingScreen />}>
+                <AIModels />
+              </Suspense>
+            }
+          />
+          <Route
             path="nvidia-services"
             element={
               <Suspense fallback={<LoadingScreen />}>
                 <NvidiaServices />
+              </Suspense>
+            }
+          />
+          <Route
+            path="earth-engine"
+            element={
+              <Suspense fallback={<LoadingScreen />}>
+                <EarthEnginePage />
               </Suspense>
             }
           />

@@ -3,20 +3,41 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+    <link rel="manifest" href="/manifest.json" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0a0e17" />
     <meta name="description" content="SAA Alliance: Enterprise risk analytics for institutional investors. NVIDIA AI platforms, climate stress testing. 50+ institutions, 300T+ assets." />
     <title>PFRP | Physical-Financial Risk Platform</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="preconnect" href="https://api.cesium.com" crossorigin>
     <link rel="dns-prefetch" href="https://assets.cesium.com">
-    <!-- Space Grotesk (all text/headings) + JetBrains Mono (numbers, codes, tickers) -->
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <!-- Platform typography: JetBrains Mono only. Preload so font applies before first paint. -->
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" as="style">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" id="platform-fonts">
+    <style id="platform-font-critical">html,body,#root{font-family:'JetBrains Mono',monospace !important}</style>
     <!-- CesiumJS CSS from jsDelivr CDN -->
     <link href="https://cdn.jsdelivr.net/npm/cesium@1.124.0/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
   </head>
-  <body class="bg-dark-bg text-dark-text antialiased" style="background:#0a0e17">
+  <body class="font-sans bg-dark-bg text-dark-text antialiased" style="background:#0a0e17;font-family:'JetBrains Mono',monospace">
     <div id="root" style="background:#0a0e17;min-height:100vh"></div>
+    <script>
+      (function(){
+        var m = /[?&]api=([^&]+)/.exec(location.search);
+        if (m) {
+          window.__VITE_API_URL__ = decodeURIComponent(m[1]).replace(/\/+$/, '');
+        } else if ((location.hostname === '127.0.0.1' || location.hostname === 'localhost') && location.port === '15180') {
+          window.__VITE_API_URL__ = 'http://127.0.0.1:19002';
+        }
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator && location.protocol === 'https:' || location.hostname === 'localhost') {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker.register('/sw.js').catch(function () {});
+        });
+      }
+    </script>
   </body>
 </html>

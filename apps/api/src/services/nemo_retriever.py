@@ -129,6 +129,16 @@ class NeMoRetrieverService:
             except Exception as e:
                 logger.warning(f"Historical events query failed: {e}")
         
+        # 2b. Query cuRAG / vector store (when enabled and requested)
+        if ("vector_store" in sources or "curag" in sources) and getattr(settings, "enable_curag", False):
+            try:
+                from src.services.curag_retriever import retrieve as curag_retrieve
+                curag_docs = await curag_retrieve(query, top_k=top_k)
+                if curag_docs:
+                    retrieved_docs.extend(curag_docs)
+            except Exception as e:
+                logger.warning(f"cuRAG/vector_store query failed: {e}")
+        
         # 3. Rerank results (if we have embedding capability)
         if len(retrieved_docs) > top_k and self.nvidia_api_key:
             try:
@@ -353,11 +363,12 @@ class NeMoRetrieverService:
                         }
             else:
                 # General query - search by name or properties
+                # Use $search_text (not $query) to avoid clashing with session.run(query, ...)
                 cypher_query = """
                 MATCH (n)
-                WHERE n.name CONTAINS $query 
-                   OR n.description CONTAINS $query
-                   OR any(prop in keys(n) WHERE toString(n[prop]) CONTAINS $query)
+                WHERE n.name CONTAINS $search_text
+                   OR n.description CONTAINS $search_text
+                   OR any(prop in keys(n) WHERE toString(n[prop]) CONTAINS $search_text)
                 OPTIONAL MATCH (n)-[r]-(related)
                 RETURN n, collect(DISTINCT related)[0..$limit] as related_nodes,
                        collect(DISTINCT r)[0..$limit] as relationships
@@ -366,8 +377,7 @@ class NeMoRetrieverService:
                 async with kg_service.driver.session() as session:
                     result = await session.run(
                         cypher_query,
-                        query=query.lower(),
-                        limit=top_k
+                        {"search_text": query.lower(), "limit": top_k}
                     )
                     nodes = []
                     relationships = []

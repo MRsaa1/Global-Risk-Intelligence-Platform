@@ -6,7 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import delete, select, func
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import OperationalError, IntegrityError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
@@ -20,8 +20,11 @@ from src.models.provenance import DataProvenance
 from src.models.stress_test import StressTest, RiskZone, ZoneAsset, StressTestReport, ActionPlan
 from src.models.historical_event import HistoricalEvent
 from src.models.twin_asset_library import TwinAssetLibraryItem
-from src.services.seed_data import seed_all, seed_modules_only
+from src.services.seed_data import seed_all, seed_modules_only, refresh_twin_geometry_from_asset_type
 from src.services.knowledge_graph import get_knowledge_graph_service
+from src.services.strategic_modules_seed import seed_strategic_modules, seed_srs
+from src.modules.cityos.seed_cities import seed_cityos_cities
+from src.services.ingestion.seed_ingestion_sources import seed_ingestion_sources_if_empty
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +42,14 @@ async def _require_admin_or_allow_dev(
         return None
     if getattr(settings, "allow_seed_in_production", False):
         return None
-    user = await get_current_user(credentials=credentials, db=db)
+    try:
+        user = await get_current_user(credentials=credentials, db=db)
+    except OperationalError as e:
+        logger.warning("Seed auth check failed (database): %s", e)
+        raise HTTPException(
+            status_code=503,
+            detail="Database schema outdated. On server run: cd apps/api && alembic upgrade head",
+        ) from e
     if user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Seeding requires admin role")
     return user
@@ -70,12 +80,132 @@ async def seed_sample_data(
             "message": result.get("message", "Sample data seeded successfully"),
             **result,
         }
+    except (OperationalError, ProgrammingError) as e:
+        logger.warning("Seed failed (database schema): %s", e)
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Database schema outdated or missing tables. "
+                "On server run: cd apps/api && alembic upgrade head. "
+                "Then restart the API."
+            ),
+        ) from e
+    except IntegrityError as e:
+        logger.warning("Seed failed (constraint): %s", e)
+        raise HTTPException(
+            status_code=409,
+            detail="Data already exists or constraint violation. Clear demo data first or use a fresh database.",
+        ) from e
     except Exception as e:
         logger.exception("Seed failed: %s", e)
+        err_msg = str(e)
+        hint = ""
+        if any(x in err_msg.lower() for x in ("no such table", "does not exist", "column", "syntax")):
+            hint = " (Tip: run 'cd apps/api && alembic upgrade head' on server)"
         raise HTTPException(
             status_code=500,
-            detail=f"Seeding failed: {str(e)}",
+            detail=f"Seeding failed: {err_msg}{hint}",
         )
+
+
+@router.post("/strategic-modules")
+async def seed_strategic_modules_endpoint(
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(_require_admin_or_allow_dev),
+):
+    """
+    Seed strategic modules (CIP, SCSS, SRO) with 6 entities each + relationships.
+
+    - CIP: 6 infrastructure assets (power, water, telecom, data center, emergency) + dependencies
+    - SCSS: 6 suppliers (raw materials, components, logistics) + supply routes
+    - SRO: 6 financial institutions (banks, insurance, clearing) + correlations + indicators
+
+    Idempotent: skips a module if it already has 6+ entities.
+    In development or ALLOW_SEED_IN_PRODUCTION=true: no auth.
+    """
+    if settings.environment == "production" and not getattr(settings, "allow_seed_in_production", False):
+        raise HTTPException(
+            status_code=403,
+            detail="Seeding is disabled in production. Set ALLOW_SEED_IN_PRODUCTION=true for demo servers.",
+        )
+    try:
+        result = await seed_strategic_modules(db)
+        return {"status": "success", **result}
+    except OperationalError as e:
+        logger.warning("Strategic modules seed failed (schema): %s", e)
+        raise HTTPException(
+            status_code=503,
+            detail="Database schema outdated. On server run: cd apps/api && alembic upgrade head",
+        ) from e
+    except Exception as e:
+        logger.exception("Strategic modules seed failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/srs")
+async def seed_srs_endpoint(
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(_require_admin_or_allow_dev),
+):
+    """
+    Seed SRS (Sovereign Risk Shield) with demo sovereign funds and resource deposits.
+    Idempotent: skips if already populated. Use to populate the SRS module for demos.
+    """
+    if settings.environment == "production" and not getattr(settings, "allow_seed_in_production", False):
+        raise HTTPException(
+            status_code=403,
+            detail="Seeding is disabled in production. Set ALLOW_SEED_IN_PRODUCTION=true for demo servers.",
+        )
+    try:
+        result = await seed_srs(db)
+        return {"status": "success", "message": f"SRS: {result.get('srs_funds', 0)} funds, {result.get('srs_deposits', 0)} deposits.", **result}
+    except Exception as e:
+        logger.exception("SRS seed failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/cityos")
+async def seed_cityos(
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(_require_admin_or_allow_dev),
+):
+    """
+    Seed CityOS city twins from demo_communities (pilot cities for CityOS module).
+    Idempotent: skips cities that already exist. Use to populate digital twin cities for CityOS.
+    """
+    if settings.environment == "production" and not getattr(settings, "allow_seed_in_production", False):
+        raise HTTPException(
+            status_code=403,
+            detail="Seeding is disabled in production. Set ALLOW_SEED_IN_PRODUCTION=true for demo servers.",
+        )
+    try:
+        result = await seed_cityos_cities(db)
+        return {"status": "success", "message": f"CityOS: {result['added']} city twins added.", **result}
+    except Exception as e:
+        logger.exception("CityOS seed failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/ingestion-sources")
+async def seed_ingestion_sources(
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(_require_admin_or_allow_dev),
+):
+    """
+    Seed default ingestion_sources (natural_hazards, weather, etc.) if the catalog is empty.
+    Run once after DB migration so scheduled ingestion and catalog-driven jobs have sources.
+    """
+    if settings.environment == "production" and not getattr(settings, "allow_seed_in_production", False):
+        raise HTTPException(
+            status_code=403,
+            detail="Seeding is disabled in production. Set ALLOW_SEED_IN_PRODUCTION=true for demo servers.",
+        )
+    try:
+        result = await seed_ingestion_sources_if_empty(db)
+        return {"status": "success", **result}
+    except Exception as e:
+        logger.exception("Ingestion sources seed failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/seed-modules")
@@ -99,6 +229,12 @@ async def seed_modules(
         return {"status": "success", **result}
     except HTTPException:
         raise
+    except OperationalError as e:
+        logger.warning("Seed modules failed (schema): %s", e)
+        raise HTTPException(
+            status_code=503,
+            detail="Database schema outdated. On server run: cd apps/api && alembic upgrade head",
+        ) from e
     except Exception as e:
         logger.exception("Seed modules failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
@@ -142,98 +278,160 @@ async def seed_twin_asset_library(
     from datetime import datetime as _dt
     from uuid import uuid4 as _uuid4
 
-    base = (settings.nucleus_library_root or "/Library").rstrip("/") or "/Library"
-    # One demo item with public GLB URL — shows as "Ready" without conversion
-    demo_glb_url = "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Duck/glTF-Binary/Duck.glb"
+    # ---------------------------------------------------------------------------
+    # Building GLB models from Kenney City Kit Commercial (CC0)
+    # Served from frontend public/models/buildings/
+    # ---------------------------------------------------------------------------
+    _B = "/models/buildings"
     items = [
+        # --- Skyscrapers (office towers, HQs) ---
         {
-            "domain": "demo",
-            "kind": "building",
+            "domain": "city",
+            "kind": "office_tower",
             "category": "commercial",
-            "name": "Demo Duck (GLB)",
-            "description": "Sample GLB for 3D View. Attach to any asset to see it in the viewer.",
-            "tags": ["demo", "glb", "sample"],
-            "source": "gltf_sample_models",
-            "usd_path": None,
-            "glb_object": demo_glb_url,
-            "license": "CC0 (Khronos glTF Sample Models)",
+            "name": "Office Tower A",
+            "description": "Modern glass skyscraper for corporate HQ and office assets.",
+            "tags": ["office", "skyscraper", "tower", "commercial"],
+            "source": "kenney_city_kit",
+            "source_url": "https://kenney.nl/assets/city-kit-commercial",
+            "glb_object": f"{_B}/skyscraper-a.glb",
+            "license": "CC0 1.0 (Kenney)",
         },
         {
-            "domain": "factory",
-            "kind": "factory_plant",
-            "category": "industrial",
-            "name": "Generic Factory Plant (OpenUSD master)",
-            "description": "Starter factory plant scene. Use as a template for client-specific twins.",
-            "tags": ["factory", "plant", "simready", "template"],
-            "source": "nvidia_blueprint",
-            "usd_path": f"{base}/Factory/Plants/generic_factory.usd",
-            "license": "NVIDIA sample content / check pack license",
+            "domain": "city",
+            "kind": "office_tower",
+            "category": "commercial",
+            "name": "Office Tower B",
+            "description": "Tall commercial building with distinctive facade.",
+            "tags": ["office", "skyscraper", "tower", "commercial"],
+            "source": "kenney_city_kit",
+            "source_url": "https://kenney.nl/assets/city-kit-commercial",
+            "glb_object": f"{_B}/skyscraper-b.glb",
+            "license": "CC0 1.0 (Kenney)",
+        },
+        {
+            "domain": "city",
+            "kind": "office_tower",
+            "category": "commercial",
+            "name": "Financial Center Tower",
+            "description": "High-rise building suitable for financial district.",
+            "tags": ["finance", "skyscraper", "tower", "bank"],
+            "source": "kenney_city_kit",
+            "source_url": "https://kenney.nl/assets/city-kit-commercial",
+            "glb_object": f"{_B}/skyscraper-c.glb",
+            "license": "CC0 1.0 (Kenney)",
         },
         {
             "domain": "factory",
             "kind": "datacenter",
             "category": "industrial",
-            "name": "AI/Data Center Hall (OpenUSD master)",
-            "description": "Reference datacenter hall layout for downtime/cascade scenarios.",
-            "tags": ["datacenter", "power", "cooling"],
-            "source": "nvidia_blueprint",
-            "usd_path": f"{base}/Factory/Plants/datacenter_hall.usd",
-            "license": "NVIDIA blueprint / check license",
+            "name": "Data Center Tower",
+            "description": "Multi-storey data center building for IT infrastructure assets.",
+            "tags": ["datacenter", "server", "IT", "tower"],
+            "source": "kenney_city_kit",
+            "source_url": "https://kenney.nl/assets/city-kit-commercial",
+            "glb_object": f"{_B}/skyscraper-d.glb",
+            "license": "CC0 1.0 (Kenney)",
         },
         {
             "domain": "city",
-            "kind": "city_block",
-            "category": "public",
-            "name": "City Block (Downtown) - Placeholder",
-            "description": "City-scale context recommended via 3D Tiles; USD used only for focus assets.",
-            "tags": ["city", "block", "context"],
-            "source": "open_city",
-            "usd_path": f"{base}/City/Blocks/downtown_block.usd",
-            "license": "Open data / attribution required",
+            "kind": "mixed_use",
+            "category": "commercial",
+            "name": "Mixed-Use Tower",
+            "description": "Versatile high-rise for retail, office, or mixed-use assets.",
+            "tags": ["mixed", "retail", "office", "tower"],
+            "source": "kenney_city_kit",
+            "source_url": "https://kenney.nl/assets/city-kit-commercial",
+            "glb_object": f"{_B}/skyscraper-e.glb",
+            "license": "CC0 1.0 (Kenney)",
         },
+        # --- Mid-rise / commercial buildings ---
+        {
+            "domain": "city",
+            "kind": "commercial_building",
+            "category": "commercial",
+            "name": "Commercial Building A",
+            "description": "Mid-rise commercial building for retail and office use.",
+            "tags": ["commercial", "retail", "office", "midrise"],
+            "source": "kenney_city_kit",
+            "source_url": "https://kenney.nl/assets/city-kit-commercial",
+            "glb_object": f"{_B}/commercial-a.glb",
+            "license": "CC0 1.0 (Kenney)",
+        },
+        {
+            "domain": "city",
+            "kind": "commercial_building",
+            "category": "commercial",
+            "name": "Commercial Building B",
+            "description": "Urban commercial block with storefronts.",
+            "tags": ["commercial", "retail", "urban"],
+            "source": "kenney_city_kit",
+            "source_url": "https://kenney.nl/assets/city-kit-commercial",
+            "glb_object": f"{_B}/commercial-b.glb",
+            "license": "CC0 1.0 (Kenney)",
+        },
+        # --- Residential ---
+        {
+            "domain": "city",
+            "kind": "residential",
+            "category": "residential",
+            "name": "Apartment Building",
+            "description": "Multi-family residential building.",
+            "tags": ["residential", "apartment", "housing"],
+            "source": "kenney_city_kit",
+            "source_url": "https://kenney.nl/assets/city-kit-commercial",
+            "glb_object": f"{_B}/lowrise-a.glb",
+            "license": "CC0 1.0 (Kenney)",
+        },
+        {
+            "domain": "city",
+            "kind": "residential",
+            "category": "residential",
+            "name": "Residential House",
+            "description": "Single-family or small residential building.",
+            "tags": ["residential", "house", "single-family"],
+            "source": "kenney_city_kit",
+            "source_url": "https://kenney.nl/assets/city-kit-commercial",
+            "glb_object": f"{_B}/lowrise-b.glb",
+            "license": "CC0 1.0 (Kenney)",
+        },
+        # --- Industrial / logistics ---
+        {
+            "domain": "factory",
+            "kind": "industrial",
+            "category": "industrial",
+            "name": "Industrial Facility",
+            "description": "Factory or manufacturing building for industrial assets.",
+            "tags": ["industrial", "factory", "manufacturing"],
+            "source": "kenney_city_kit",
+            "source_url": "https://kenney.nl/assets/city-kit-commercial",
+            "glb_object": f"{_B}/industrial-a.glb",
+            "license": "CC0 1.0 (Kenney)",
+        },
+        {
+            "domain": "factory",
+            "kind": "warehouse",
+            "category": "industrial",
+            "name": "Logistics Warehouse",
+            "description": "Distribution center or warehouse for logistics assets.",
+            "tags": ["logistics", "warehouse", "distribution"],
+            "source": "kenney_city_kit",
+            "source_url": "https://kenney.nl/assets/city-kit-commercial",
+            "glb_object": f"{_B}/facility-a.glb",
+            "license": "CC0 1.0 (Kenney)",
+        },
+        # --- Infrastructure / public ---
         {
             "domain": "city",
             "kind": "infrastructure",
             "category": "public",
-            "name": "Substation / Grid Node (OpenUSD master)",
-            "description": "Infrastructure node for cascade/network risk scenarios.",
-            "tags": ["grid", "infrastructure", "cascade"],
-            "source": "nvidia_pack",
-            "usd_path": f"{base}/City/Infrastructure/substation.usd",
-            "license": "NVIDIA sample content / check pack license",
-        },
-        {
-            "domain": "finance",
-            "kind": "bank_hq",
-            "category": "commercial",
-            "name": "Bank HQ (Generic building) - Placeholder",
-            "description": "Generic finance HQ building; real assets should come from client BIM/IFC.",
-            "tags": ["finance", "bank", "hq"],
-            "source": "template",
-            "usd_path": f"{base}/Finance/Banking/bank_hq_generic.usd",
-            "license": "Template",
-        },
-        {
-            "domain": "finance",
-            "kind": "insurance_hq",
-            "category": "commercial",
-            "name": "Insurance HQ (Generic building) - Placeholder",
-            "description": "Generic insurer building; replace with client/partner models when available.",
-            "tags": ["finance", "insurance", "hq"],
-            "source": "template",
-            "usd_path": f"{base}/Finance/Insurance/insurance_hq_generic.usd",
-            "license": "Template",
-        },
-        {
-            "domain": "factory",
-            "kind": "port_terminal",
-            "category": "industrial",
-            "name": "Port Terminal (OpenUSD master) - Placeholder",
-            "description": "Port terminal scene for logistics/chokepoint risk.",
-            "tags": ["port", "logistics", "terminal"],
-            "source": "template",
-            "usd_path": f"{base}/Factory/Plants/port_terminal.usd",
-            "license": "Template",
+            "name": "Infrastructure Complex",
+            "description": "Public infrastructure building (power, water, transport hub).",
+            "tags": ["infrastructure", "public", "utility", "power"],
+            "source": "kenney_city_kit",
+            "source_url": "https://kenney.nl/assets/city-kit-commercial",
+            "glb_object": f"{_B}/complex-a.glb",
+            "license": "CC0 1.0 (Kenney)",
         },
     ]
 
@@ -269,6 +467,25 @@ async def seed_twin_asset_library(
         raise
 
     return {"status": "success", "seeded": len(rows)}
+
+
+@router.post("/refresh-twin-models")
+async def refresh_twin_models(
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(_require_admin_or_allow_dev),
+):
+    """
+    Update existing Digital Twins: set 3D building model (geometry_path) from asset type.
+    Use when demo was loaded earlier and you want to see the new building GLBs without clearing/re-seeding.
+    """
+    if settings.environment == "production" and not getattr(settings, "allow_seed_in_production", False):
+        raise HTTPException(status_code=403, detail="Seeding is disabled in production")
+    try:
+        updated = await refresh_twin_geometry_from_asset_type(db)
+        return {"status": "success", "updated": updated, "message": f"Updated {updated} digital twin(s) with building models."}
+    except Exception as e:
+        logger.exception("Refresh twin models failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.delete("/seed")

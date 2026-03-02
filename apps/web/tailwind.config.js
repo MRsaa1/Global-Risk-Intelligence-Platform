@@ -7,87 +7,79 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Primary - Deep Space Blue
+        // Institutional (BlackRock/Palantir): zinc base; use semantic colors only for risk/status
         primary: {
-          50: '#e6f0ff',
-          100: '#b3d1ff',
-          200: '#80b3ff',
-          300: '#4d94ff',
-          400: '#1a75ff',
-          500: '#0056e6',
-          600: '#0044b3',
-          700: '#003380',
-          800: '#00224d',
-          900: '#00111a',
+          50: '#fafafa',
+          100: '#f4f4f5',
+          200: '#e4e4e7',
+          300: '#d4d4d8',
+          400: '#a1a1aa',
+          500: '#71717a',
+          600: '#52525b',
+          700: '#3f3f46',
+          800: '#27272a',
+          900: '#18181b',
+          950: '#09090b',
         },
-        // Accent - Gold (Classic Wealth)
         accent: {
-          50: '#faf7f0',
-          100: '#f5ecd6',
-          200: '#e8d9b0',
-          300: '#dbc68a',
-          400: '#ceb364',
-          500: '#C9A962',
-          600: '#b8983a',
-          700: '#9a7d2e',
-          800: '#7c6323',
-          900: '#5e4a1a',
+          50: '#fafafa',
+          100: '#f4f4f5',
+          200: '#e4e4e7',
+          300: '#d4d4d8',
+          400: '#a1a1aa',
+          500: '#71717a',
         },
-        // Risk colors (matching screenshot)
+        // Semantic only: risk levels, alerts, status badges
         risk: {
-          low: '#22c55e',      // Green
-          medium: '#f59e0b',   // Orange/Amber
-          high: '#ef4444',     // Red
-          critical: '#dc2626', // Dark Red
+          low: '#22c55e',
+          medium: '#eab308',
+          high: '#ef4444',
+          critical: '#b91c1c',
         },
-        // Warning/Alert
         warning: {
-          light: '#fbbf24',
-          DEFAULT: '#f59e0b',
-          dark: '#d97706',
+          light: '#a1a1aa',
+          DEFAULT: '#71717a',
+          dark: '#52525b',
         },
-        // Dark theme (matching screenshot)
         dark: {
-          bg: '#0a0e17',       // Deep space black
-          card: '#111827',     // Card background
-          panel: '#0f172a',    // Panel background
-          border: '#1e293b',   // Border
-          text: '#f1f5f9',     // Primary text
-          muted: '#94a3b8',    // Muted text
-          glow: '#1e40af',     // Blue glow
+          bg: '#09090b',
+          card: '#18181b',
+          panel: '#18181b',
+          border: '#27272a',
+          text: '#fafafa',
+          muted: '#71717a',
+          glow: '#3f3f46',
         },
-        // Fire/Heat colors (for stress visualization)
         heat: {
-          cold: '#3b82f6',     // Blue
-          warm: '#f59e0b',     // Orange
-          hot: '#ef4444',      // Red
-          burning: '#dc2626',  // Dark red
+          cold: '#64748b',
+          warm: '#a16207',
+          hot: '#b91c1c',
+          burning: '#7f1d1d',
+        },
+        // Quantum aesthetics: depth, observation glow, scenario glow, uncertainty bands
+        quantum: {
+          bgDeep: '#0a0a0f',
+          bgTop: '#030712',
+          glowCyan: '#06b6d4',
+          glowCyanLight: '#22d3ee',
+          glowViolet: '#8b5cf6',
+          glowVioletLight: '#a78bfa',
+          uncertainty: 'rgba(6, 182, 212, 0.2)',
         },
       },
+      /* Unified font system (platform-wide): JetBrains Mono only — sans, display, mono */
       fontFamily: {
-        sans: ['Space Grotesk', 'system-ui', 'sans-serif'],
-        display: ['Space Grotesk', 'system-ui', 'sans-serif'],
+        sans: ['JetBrains Mono', 'monospace'],
+        display: ['JetBrains Mono', 'monospace'],
         mono: ['JetBrains Mono', 'monospace'],
       },
       animation: {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-        'float': 'float 6s ease-in-out infinite',
-        'glow': 'glow 2s ease-in-out infinite alternate',
         'spin-slow': 'spin 20s linear infinite',
-      },
-      keyframes: {
-        float: {
-          '0%, 100%': { transform: 'translateY(0)' },
-          '50%': { transform: 'translateY(-10px)' },
-        },
-        glow: {
-          '0%': { boxShadow: '0 0 5px #3b82f6, 0 0 10px #3b82f6' },
-          '100%': { boxShadow: '0 0 10px #3b82f6, 0 0 20px #3b82f6, 0 0 30px #3b82f6' },
-        },
       },
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
-        'grid-pattern': 'linear-gradient(to right, #1e293b 1px, transparent 1px), linear-gradient(to bottom, #1e293b 1px, transparent 1px)',
+        'grid-pattern': 'linear-gradient(to right, #27272a 1px, transparent 1px), linear-gradient(to bottom, #27272a 1px, transparent 1px)',
       },
     },
   },

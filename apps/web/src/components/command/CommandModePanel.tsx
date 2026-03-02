@@ -38,15 +38,15 @@ export default function CommandModePanel({
       transition={{ duration: 0.5, ease: 'easeInOut' }}
     >
       {/* Glass background */}
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-xl" />
+      <div className="absolute inset-0 bg-black/60" />
       
       {/* Close button */}
       <button
         onClick={onClose}
-        className="absolute top-4 right-4 z-50 p-2 bg-white/10 hover:bg-white/20 rounded-lg border border-white/10 transition-colors"
+        className="absolute top-4 right-4 z-50 p-2 bg-zinc-800 hover:bg-zinc-700 rounded-md border border-zinc-700 transition-colors"
         aria-label="Close Command Mode"
       >
-        <XMarkIcon className="w-5 h-5 text-white" />
+        <XMarkIcon className="w-5 h-5 text-zinc-100" />
       </button>
       
       {/* 4-Panel Grid Layout */}
@@ -56,7 +56,7 @@ export default function CommandModePanel({
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="relative rounded-xl overflow-hidden"
+          className="relative rounded-md overflow-hidden"
         >
           <StressMetricsPanel 
             stressTest={stressTest} 
@@ -69,7 +69,7 @@ export default function CommandModePanel({
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="relative rounded-xl overflow-hidden"
+          className="relative rounded-md overflow-hidden"
         >
           <ZoneMetricsPanel selectedZone={selectedZone} />
         </motion.div>
@@ -79,7 +79,7 @@ export default function CommandModePanel({
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
-          className="relative rounded-xl overflow-hidden"
+          className="relative rounded-md overflow-hidden"
         >
           <CascadeFlowPanel 
             selectedZone={selectedZone}
@@ -92,7 +92,7 @@ export default function CommandModePanel({
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
-          className="relative rounded-xl overflow-hidden"
+          className="relative rounded-md overflow-hidden"
         >
           <TimelinePredictionsPanel 
             selectedZone={selectedZone}

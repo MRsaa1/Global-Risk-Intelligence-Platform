@@ -163,8 +163,8 @@ function Metric({
 }) {
   const colors = {
     default: 'text-white',
-    warning: 'text-amber-400',
-    danger: 'text-red-400',
+    warning: 'text-amber-400/80',
+    danger: 'text-red-400/80',
   }
 
   return (
@@ -188,9 +188,9 @@ function TabButton({
   return (
     <button
       onClick={onClick}
-      className={`px-4 py-2 text-sm rounded-lg transition-all ${
+      className={`px-4 py-2 text-sm rounded-md transition-all ${
         active
-          ? 'bg-white/10 text-white backdrop-blur-sm border border-white/20'
+          ? 'bg-white/10 text-white border border-white/20'
           : 'text-white/40 hover:text-white/70'
       }`}
     >
@@ -214,7 +214,7 @@ function TimeButton({
       onClick={onClick}
       className={`px-3 py-1.5 text-xs rounded transition-all ${
         active
-          ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+          ? 'bg-amber-500/20 text-amber-400/80 border border-amber-500/30'
           : 'text-white/40 hover:text-white/70 border border-transparent'
       }`}
     >
@@ -255,7 +255,7 @@ function AssetPanel({ assetId }: { assetId: string }) {
   }
 
   return (
-    <div className="bg-black/60 backdrop-blur-md rounded-xl border border-white/10 p-4 w-64">
+    <div className="bg-black/60 rounded-md border border-white/10 p-4 w-64">
       <h3 className="text-white font-medium mb-3">{assetData.name}</h3>
       
       <div className="space-y-2 text-sm">
@@ -265,11 +265,11 @@ function AssetPanel({ assetId }: { assetId: string }) {
         </div>
         <div className="flex justify-between">
           <span className="text-white/50">Risk Level</span>
-          <span className="text-red-400">{assetData.risk}</span>
+          <span className="text-red-400/80">{assetData.risk}</span>
         </div>
       </div>
       
-      <button className="mt-4 w-full py-2 bg-white/10 hover:bg-white/20 rounded-lg text-white text-sm transition-colors">
+      <button className="mt-4 w-full py-2 bg-white/10 hover:bg-white/20 rounded-md text-white text-sm transition-colors">
         View Digital Twin →
       </button>
     </div>

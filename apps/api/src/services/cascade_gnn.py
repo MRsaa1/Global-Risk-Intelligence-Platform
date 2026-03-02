@@ -585,15 +585,16 @@ class CascadeGNNService:
                 edge_count[edge.source_id] = edge_count.get(edge.source_id, 0) + 1
                 edge_count[edge.target_id] = edge_count.get(edge.target_id, 0) + 1
             
+            num_edges = max(1, len(self.edges))
             critical_nodes = sorted(
-                [(n, c / len(self.edges)) for n, c in edge_count.items()],
+                [(n, c / num_edges) for n, c in edge_count.items()],
                 key=lambda x: x[1],
                 reverse=True,
             )[:10]
         
         # Calculate resilience score
         if len(self.nodes) > 0:
-            avg_connectivity = len(self.edges) / len(self.nodes)
+            avg_connectivity = len(self.edges) / max(1, len(self.nodes))
             resilience = min(100, 40 + avg_connectivity * 20 - len(spof) * 5)
         else:
             resilience = 50.0
@@ -651,6 +652,22 @@ class CascadeGNNService:
                     ("SFO_Airport", "SFO Airport", NodeType.INFRASTRUCTURE, 80e6, 72, "Logistics", "San Francisco"),
                 ],
             },
+            "Montreal": {
+                "climate": [
+                    ("hydro_p43", "Hydro-Québec Sub-Station P43", NodeType.INFRASTRUCTURE, 180e6, 89, "Energy", "Montreal"),
+                    ("wtp_pierrefonds", "Pierrefonds Water Treatment Plant", NodeType.INFRASTRUCTURE, 450e6, 82, "Infrastructure", "Montreal"),
+                    ("hospital_lakeshore", "Lakeshore General Hospital", NodeType.INFRASTRUCTURE, 420e6, 75, "Healthcare", "Montreal"),
+                    ("bridge_galipeault", "Galipeault Bridge (Île-Perrot)", NodeType.INFRASTRUCTURE, 280e6, 71, "Logistics", "Montreal"),
+                    ("industrial_kirkland", "West Island Industrial Park", NodeType.ASSET, 245e6, 54, "Manufacturing", "Montreal"),
+                ],
+                "operational": [
+                    ("hydro_p43", "Hydro-Québec Sub-Station P43", NodeType.INFRASTRUCTURE, 180e6, 89, "Energy", "Montreal"),
+                    ("wtp_pierrefonds", "Pierrefonds Water Treatment Plant", NodeType.INFRASTRUCTURE, 450e6, 82, "Infrastructure", "Montreal"),
+                    ("hospital_lakeshore", "Lakeshore General Hospital", NodeType.INFRASTRUCTURE, 420e6, 75, "Healthcare", "Montreal"),
+                    ("bridge_galipeault", "Galipeault Bridge (Île-Perrot)", NodeType.INFRASTRUCTURE, 280e6, 71, "Logistics", "Montreal"),
+                    ("industrial_kirkland", "West Island Industrial Park", NodeType.ASSET, 245e6, 54, "Manufacturing", "Montreal"),
+                ],
+            },
             "Frankfurt": {
                 "operational": [
                     ("FRA_Airport_Cargo", "FRA Airport Cargo", NodeType.INFRASTRUCTURE, 60e6, 72, "Logistics", "Frankfurt"),
@@ -669,6 +686,22 @@ class CascadeGNNService:
             },
         }
         _CITY_EDGES: Dict[str, Dict[str, List[Tuple]]] = {
+            "Montreal": {
+                "climate": [
+                    ("hydro_p43", "wtp_pierrefonds", EdgeType.OPERATIONAL, 0.88),
+                    ("wtp_pierrefonds", "hospital_lakeshore", EdgeType.OPERATIONAL, 0.82),
+                    ("hospital_lakeshore", "bridge_galipeault", EdgeType.SUPPLY, 0.75),
+                    ("hydro_p43", "industrial_kirkland", EdgeType.SUPPLY, 0.78),
+                    ("bridge_galipeault", "industrial_kirkland", EdgeType.SUPPLY, 0.72),
+                ],
+                "operational": [
+                    ("hydro_p43", "wtp_pierrefonds", EdgeType.OPERATIONAL, 0.88),
+                    ("wtp_pierrefonds", "hospital_lakeshore", EdgeType.OPERATIONAL, 0.82),
+                    ("hospital_lakeshore", "bridge_galipeault", EdgeType.SUPPLY, 0.75),
+                    ("hydro_p43", "industrial_kirkland", EdgeType.SUPPLY, 0.78),
+                    ("bridge_galipeault", "industrial_kirkland", EdgeType.SUPPLY, 0.72),
+                ],
+            },
             "San Francisco": {
                 "operational": [
                     ("Port_of_Oakland", "SF_Distribution_Center", EdgeType.SUPPLY, 0.85),
@@ -782,6 +815,8 @@ class CascadeGNNService:
         self.nx_graph = None
         self.pyg_data = None
 
+        sc_type = _scenario_id_to_type(scenario_id)
+
         # Prefer city-specific nodes (Port of Oakland, SF Distribution Center) over tpl_*
         city_key = next((k for k in _CITY_NODES if k.lower() in (city_id or "").lower()), None)
         if city_key and sc_type in _CITY_NODES.get(city_key, {}):
@@ -801,7 +836,6 @@ class CascadeGNNService:
 
         infra = zone_visualization_service.get_infrastructure_targets(city_id)
         financial = zone_visualization_service.get_financial_centers(city_id)
-        sc_type = _scenario_id_to_type(scenario_id)
         if sc_type not in _TEMPLATE_NODES:
             sc_type = "climate"
 

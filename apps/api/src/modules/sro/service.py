@@ -8,16 +8,30 @@ from uuid import uuid4
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+logger = logging.getLogger(__name__)
+
+
+def _get_kg():
+    """Lazy-import Knowledge Graph service; returns None if disabled or unavailable."""
+    try:
+        from src.services.knowledge_graph import get_knowledge_graph_service
+        kg = get_knowledge_graph_service()
+        return kg if kg.is_available else None
+    except Exception:
+        return None
+
+
 from .models import (
     FinancialInstitution,
     RiskCorrelation,
     SystemicRiskIndicator,
+    InstitutionExposure,
+    Market,
+    SimulationRun,
     InstitutionType,
     SystemicImportance,
     IndicatorType,
 )
-
-logger = logging.getLogger(__name__)
 
 
 class SROService:
@@ -73,6 +87,28 @@ class SROService:
         await self.db.flush()
         
         logger.info(f"Registered institution: {sro_id} - {name}")
+        
+        # Sync to Knowledge Graph when Neo4j is enabled
+        kg = _get_kg()
+        if kg:
+            try:
+                await kg.create_institution_node(
+                    institution.id,
+                    name,
+                    institution_type,
+                    systemic_importance=systemic_importance,
+                    country_code=country_code,
+                    sro_id=sro_id,
+                    total_assets=total_assets,
+                    lei=lei_code,
+                    gsib_score=getattr(institution, "gsib_score", None),
+                    tier1_capital_ratio=getattr(institution, "tier1_capital_ratio", None),
+                    leverage_ratio=institution.leverage_ratio,
+                    liquidity_coverage_ratio=getattr(institution, "liquidity_coverage_ratio", None),
+                    interconnectedness_index=institution.interconnectedness_score,
+                )
+            except Exception as e:
+                logger.warning("SRO KG sync (register) failed: %s", e)
         
         return institution
     
@@ -144,7 +180,57 @@ class SROService:
         
         logger.info(f"Deleted institution: {institution.sro_id}")
         return True
-    
+
+    # ==========================================
+    # Institution Exposures (CIP/SCSS integration)
+    # ==========================================
+
+    async def add_exposure(
+        self,
+        institution_id: str,
+        target_type: str,
+        target_id: str,
+        exposure_amount_usd: Optional[float] = None,
+        sector_concentration: Optional[float] = None,
+        description: Optional[str] = None,
+    ) -> InstitutionExposure:
+        """Link institution to CIP asset, SCSS supplier, or market."""
+        institution = await self.get_institution(institution_id)
+        if not institution:
+            raise ValueError("Institution not found")
+        if target_type not in ("INFRASTRUCTURE", "SUPPLIER", "MARKET"):
+            raise ValueError("target_type must be INFRASTRUCTURE, SUPPLIER, or MARKET")
+
+        exposure = InstitutionExposure(
+            id=str(uuid4()),
+            institution_id=institution_id,
+            target_type=target_type,
+            target_id=target_id,
+            exposure_amount_usd=exposure_amount_usd,
+            sector_concentration=sector_concentration,
+            description=description,
+        )
+        self.db.add(exposure)
+        await self.db.flush()
+
+        kg = _get_kg()
+        if kg:
+            try:
+                if target_type == "INFRASTRUCTURE":
+                    await kg.create_depends_on_infrastructure(
+                        institution_id, target_id,
+                        exposure_amount=exposure_amount_usd,
+                    )
+                elif target_type == "SUPPLIER":
+                    await kg.create_exposed_to_supply_chain(
+                        institution_id, target_id,
+                        exposure_amount=exposure_amount_usd,
+                    )
+            except Exception as e:
+                logger.warning("SRO KG sync (exposure) failed: %s", e)
+
+        return exposure
+
     # ==========================================
     # Correlation Management
     # ==========================================
@@ -177,6 +263,22 @@ class SROService:
         await self.db.flush()
         
         logger.info(f"Added correlation: {institution_a_id} <-> {institution_b_id}")
+        
+        # Sync HAS_EXPOSURE to Knowledge Graph when both institutions exist in KG
+        kg = _get_kg()
+        if kg:
+            try:
+                criticality = min(1.0, (contagion_probability or 0.5) + abs(correlation_coefficient) * 0.5)
+                await kg.create_dependency(
+                    institution_a_id,
+                    institution_b_id,
+                    dependency_type="HAS_EXPOSURE",
+                    criticality=criticality,
+                    exposure_amount=exposure_amount,
+                    contagion_probability=contagion_probability,
+                )
+            except Exception as e:
+                logger.warning("SRO KG sync (correlation) failed: %s", e)
         
         return correlation
     
@@ -485,3 +587,145 @@ class SROService:
             "by_type": by_type,
             "by_systemic_importance": by_importance,
         }
+
+    # ==========================================
+    # Markets CRUD (FR-SRO-002)
+    # ==========================================
+
+    async def register_market(
+        self,
+        name: str,
+        asset_class: str,
+        market_structure: str = "centralized_exchange",
+        daily_volume_usd: Optional[float] = None,
+        country_code: Optional[str] = None,
+    ) -> Market:
+        """Register a financial market."""
+        market_id = f"SRO-MKT-{asset_class.upper()[:8]}-{str(uuid4())[:8]}"
+        m = Market(
+            id=str(uuid4()),
+            market_id=market_id,
+            name=name,
+            asset_class=asset_class,
+            market_structure=market_structure,
+            daily_volume_usd=daily_volume_usd,
+            country_code=country_code,
+        )
+        self.db.add(m)
+        await self.db.flush()
+        return m
+
+    async def list_markets(self, limit: int = 100) -> List[Market]:
+        """List markets."""
+        result = await self.db.execute(
+            select(Market).where(Market.is_active == True).limit(limit)
+        )
+        return list(result.scalars().all())
+
+    async def get_market(self, market_id: str) -> Optional[Market]:
+        """Get market by ID or market_id."""
+        result = await self.db.execute(
+            select(Market).where(
+                (Market.id == market_id) | (Market.market_id == market_id)
+            )
+        )
+        return result.scalar_one_or_none()
+
+    # ==========================================
+    # Simulation Runs & Network (FR-SRO-005, FR-SRO-006)
+    # ==========================================
+
+    async def store_simulation_run(
+        self,
+        scenario_id: str,
+        scenario_name: str,
+        results: Dict[str, Any],
+        monte_carlo_runs: int,
+    ) -> str:
+        """Store simulation run; returns run_id."""
+        run_id = str(uuid4())
+        sr = SimulationRun(
+            id=run_id,
+            run_id=f"RUN-{run_id[:8]}",
+            scenario_id=None,
+            results_json=json.dumps(results, default=str),
+            monte_carlo_runs=monte_carlo_runs,
+            percentiles=json.dumps(results.get("percentiles", {})),
+            critical_path=json.dumps(results.get("critical_path", [])),
+            status="completed",
+        )
+        self.db.add(sr)
+        await self.db.flush()
+        return sr.run_id
+
+    async def get_simulation_run(self, run_id: str) -> Optional[Dict[str, Any]]:
+        """Get simulation run by run_id or id."""
+        result = await self.db.execute(
+            select(SimulationRun).where(
+                (SimulationRun.run_id == run_id) | (SimulationRun.id == run_id)
+            )
+        )
+        sr = result.scalar_one_or_none()
+        if not sr:
+            return None
+        return {
+            "id": sr.id,
+            "run_id": sr.run_id,
+            "results": json.loads(sr.results_json) if sr.results_json else {},
+            "percentiles": json.loads(sr.percentiles) if sr.percentiles else {},
+            "critical_path": json.loads(sr.critical_path) if sr.critical_path else [],
+            "monte_carlo_runs": sr.monte_carlo_runs,
+            "created_at": sr.created_at.isoformat() if sr.created_at else None,
+        }
+
+    async def list_simulation_runs(self, limit: int = 20) -> List[Dict[str, Any]]:
+        """List simulation runs."""
+        result = await self.db.execute(
+            select(SimulationRun)
+            .order_by(SimulationRun.created_at.desc())
+            .limit(limit)
+        )
+        runs = list(result.scalars().all())
+        return [
+            {
+                "id": r.id,
+                "run_id": r.run_id,
+                "monte_carlo_runs": r.monte_carlo_runs,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in runs
+        ]
+
+    async def get_contagion_network(self, run_id: Optional[str] = None) -> Dict[str, Any]:
+        """Build contagion network: institutions as nodes, correlations as edges (FR-SRO-006)."""
+        insts = await self.list_institutions(limit=100)
+        nodes = [
+            {
+                "id": i.id,
+                "sro_id": i.sro_id,
+                "name": i.name,
+                "institution_type": i.institution_type,
+                "country_code": i.country_code,
+                "systemic_risk_score": i.systemic_risk_score,
+                "contagion_risk": i.contagion_risk,
+            }
+            for i in insts
+        ]
+        corr_result = await self.db.execute(select(RiskCorrelation).limit(500))
+        corrs = list(corr_result.scalars().all())
+        edges = [
+            {
+                "source_id": c.institution_a_id,
+                "target_id": c.institution_b_id,
+                "correlation_coefficient": c.correlation_coefficient,
+                "exposure_amount": c.exposure_amount,
+            }
+            for c in corrs
+        ]
+        result: Dict[str, Any] = {"nodes": nodes, "edges": edges}
+        if run_id:
+            run = await self.get_simulation_run(run_id)
+            if run:
+                result["simulation"] = run
+                result["critical_path"] = run.get("critical_path", [])
+        return result

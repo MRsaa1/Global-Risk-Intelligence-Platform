@@ -10,6 +10,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
+import { Link } from 'react-router-dom'
 import {
   LinkIcon,
   ArrowPathIcon,
@@ -145,10 +146,10 @@ export default function RiskZoneAnalysis() {
 
   if (isLoading) {
     return (
-      <div className="h-full flex items-center justify-center">
+      <div className="min-h-full bg-zinc-950 flex items-center justify-center">
         <div className="text-center">
-          <ArrowPathIcon className="w-12 h-12 mx-auto mb-4 text-primary-400 animate-spin" />
-          <p className="text-dark-muted">Loading dependencies analysis...</p>
+          <ArrowPathIcon className="w-12 h-12 mx-auto mb-4 text-zinc-500 animate-spin" />
+          <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Loading dependencies analysis...</p>
         </div>
       </div>
     )
@@ -156,12 +157,12 @@ export default function RiskZoneAnalysis() {
 
   if (error) {
     return (
-      <div className="h-full flex items-center justify-center">
+      <div className="min-h-full bg-zinc-950 flex items-center justify-center">
         <div className="text-center">
-          <p className="text-red-400 mb-4">Error loading dependencies</p>
+          <p className="text-red-400/80 mb-4 font-sans text-sm">Error loading dependencies</p>
           <button
             onClick={() => refetch()}
-            className="px-4 py-2 bg-primary-500 hover:bg-primary-600 rounded-lg"
+            className="px-4 py-2 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-100 hover:bg-zinc-700"
           >
             Retry
           </button>
@@ -219,9 +220,9 @@ export default function RiskZoneAnalysis() {
       return 'text-yellow-500 border-yellow-500/30 bg-yellow-500/10'
     }
     if (type === 'indirect') {
-      return 'text-blue-500 border-blue-500/30 bg-blue-500/10'
+      return 'text-zinc-500 border-zinc-500/30 bg-zinc-500/10'
     }
-    return 'text-gray-400 border-gray-400/30 bg-gray-400/10'
+    return 'text-zinc-400 border-zinc-500/30 bg-zinc-500/10'
   }
 
   const getCategoryIcon = (category: string) => {
@@ -247,7 +248,7 @@ export default function RiskZoneAnalysis() {
   }
 
   return (
-    <div className="h-full overflow-auto p-8">
+    <div className="min-h-full bg-zinc-950 p-8 pb-16">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
@@ -256,13 +257,13 @@ export default function RiskZoneAnalysis() {
       >
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-display font-bold gradient-text">
+            <h1 className="text-2xl font-display font-semibold text-zinc-100 tracking-tight">
               Risk Zones Dependencies Analysis
             </h1>
-            <p className="text-dark-muted mt-2">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mt-1">
               Comprehensive analysis of dependencies, causal chains, and cascade effects between risk zones
             </p>
-            <div className="mt-2 text-xs text-white/40">
+            <div className="mt-2 font-mono text-[10px] uppercase tracking-wider text-zinc-500">
               {data.revision !== undefined && (
                 <span className="mr-3">Revision: {data.revision}</span>
               )}
@@ -274,10 +275,10 @@ export default function RiskZoneAnalysis() {
               <div
                 className={`mt-2 text-xs ${
                   actionMessage.kind === 'success'
-                    ? 'text-emerald-400'
+                    ? 'text-zinc-400'
                     : actionMessage.kind === 'error'
                       ? 'text-red-400'
-                      : 'text-white/50'
+                      : 'text-zinc-500'
                 }`}
               >
                 {actionMessage.text}
@@ -288,7 +289,7 @@ export default function RiskZoneAnalysis() {
             <button
               onClick={handleUpdateDependencies}
               disabled={isUpdating}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center gap-2 px-4 py-2 bg-zinc-500/20 hover:bg-zinc-500/30 border border-zinc-500/30 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               title="Update dependencies via ANALYST agent (real-time analysis)"
             >
               <ArrowPathIcon className={`w-4 h-4 ${isUpdating ? 'animate-spin' : ''}`} />
@@ -297,12 +298,18 @@ export default function RiskZoneAnalysis() {
             <button
               onClick={handleRefresh}
               disabled={isRefreshing}
-              className="flex items-center gap-2 px-4 py-2 bg-dark-card hover:bg-dark-border rounded-lg transition-colors"
+              className="flex items-center gap-2 px-4 py-2 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-100 hover:bg-zinc-700 transition-colors disabled:opacity-50"
             >
               <ArrowPathIcon className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
               Refresh
             </button>
           </div>
+        </div>
+        <div className="mt-3">
+          <Link to="/command" className="inline-flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-300">
+            <GlobeAltIcon className="w-4 h-4" />
+            View risk by H3 hex on globe
+          </Link>
         </div>
       </motion.div>
 
@@ -313,7 +320,7 @@ export default function RiskZoneAnalysis() {
         transition={{ delay: 0.1 }}
         className="mb-6"
       >
-        <div className="flex items-center gap-2 border-b border-white/10">
+        <div className="flex items-center gap-2 border-b border-zinc-800/60">
           {(['all', 'critical', 'high', 'medium', 'low'] as RiskCategory[]).map((tab) => {
             const count = tab === 'all' 
               ? data.zones.length
@@ -324,8 +331,8 @@ export default function RiskZoneAnalysis() {
                 onClick={() => setActiveTab(tab)}
                 className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
                   activeTab === tab
-                    ? 'border-blue-500 text-blue-400'
-                    : 'border-transparent text-white/50 hover:text-white/80'
+                    ? 'border-zinc-500 text-zinc-400'
+                    : 'border-transparent text-zinc-500 hover:text-zinc-300'
                 }`}
               >
                 {tab.charAt(0).toUpperCase() + tab.slice(1)} ({count})
@@ -342,21 +349,21 @@ export default function RiskZoneAnalysis() {
         transition={{ delay: 0.15 }}
         className="grid grid-cols-4 gap-4 mb-8"
       >
-        <div className="glass rounded-xl p-4 border border-white/5">
-          <div className="text-2xl font-bold text-white/80">{filteredZones.length}</div>
-          <div className="text-sm text-white/50">Zones ({activeTab})</div>
+        <div className="rounded-md p-4 border border-zinc-800/60 bg-zinc-900/50">
+          <div className="text-2xl font-mono font-semibold tabular-nums text-zinc-100">{filteredZones.length}</div>
+          <div className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mt-0.5">Zones ({activeTab})</div>
         </div>
-        <div className="glass rounded-xl p-4 border border-white/5">
-          <div className="text-2xl font-bold text-white/80">{filteredDependencies.length}</div>
-          <div className="text-sm text-white/50">Dependencies</div>
+        <div className="rounded-md p-4 border border-zinc-800/60 bg-zinc-900/50">
+          <div className="text-2xl font-mono font-semibold tabular-nums text-zinc-100">{filteredDependencies.length}</div>
+          <div className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mt-0.5">Dependencies</div>
         </div>
-        <div className="glass rounded-xl p-4 border border-white/5">
-          <div className="text-2xl font-bold text-white/80">{filteredCausalChains.length}</div>
-          <div className="text-sm text-white/50">Causal Chains</div>
+        <div className="rounded-md p-4 border border-zinc-800/60 bg-zinc-900/50">
+          <div className="text-2xl font-mono font-semibold tabular-nums text-zinc-100">{filteredCausalChains.length}</div>
+          <div className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mt-0.5">Causal Chains</div>
         </div>
-        <div className="glass rounded-xl p-4 border border-white/5">
-          <div className="text-2xl font-bold text-white/80">{filteredClusters.length}</div>
-          <div className="text-sm text-white/50">Root Cause Clusters</div>
+        <div className="rounded-md p-4 border border-zinc-800/60 bg-zinc-900/50">
+          <div className="text-2xl font-mono font-semibold tabular-nums text-zinc-100">{filteredClusters.length}</div>
+          <div className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mt-0.5">Root Cause Clusters</div>
         </div>
       </motion.div>
 
@@ -368,25 +375,25 @@ export default function RiskZoneAnalysis() {
         className="mb-8"
       >
         <div className="mb-4">
-          <h2 className="text-xl font-semibold mb-2 flex items-center gap-2">
-            <InformationCircleIcon className="w-5 h-5 text-primary-400" />
+          <h2 className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-2 flex items-center gap-2">
+            <InformationCircleIcon className="w-4 h-4 text-zinc-500" />
             Root Cause Clusters
           </h2>
-          <p className="text-sm text-white/50">
+          <p className="text-sm text-zinc-500/90 font-sans">
             Fundamental systemic causes that unite risk zones. Each cluster represents a root cause affecting multiple zones, 
             creating systemic risks that require comprehensive risk management approaches.
           </p>
         </div>
         <div className="space-y-3">
           {filteredClusters.length === 0 ? (
-            <div className="text-center py-8 text-white/40">
+            <div className="text-center py-8 text-zinc-500">
               No root cause clusters found for {activeTab} risk zones
             </div>
           ) : (
             filteredClusters.map((cluster) => (
             <div
               key={cluster.root_cause}
-              className="glass rounded-xl p-4 border border-white/5"
+              className="rounded-md p-4 border border-zinc-800/60 bg-zinc-900/50"
             >
               <button
                 onClick={() => setExpandedCluster(
@@ -400,11 +407,11 @@ export default function RiskZoneAnalysis() {
                     cluster.criticality > 0.7 ? 'bg-orange-500' : 'bg-yellow-500'
                   }`} />
                   <div className="text-left">
-                    <div className="font-medium text-white/80">{cluster.description}</div>
-                    <div className="text-xs text-white/50">
+                    <div className="font-medium text-zinc-200">{cluster.description}</div>
+                    <div className="text-xs text-zinc-500">
                       Criticality: {(cluster.criticality * 100).toFixed(0)}% · {cluster.zones.length} zones
                       {cluster.detailed_description && (
-                        <div className="mt-1 text-white/40 text-[10px] line-clamp-1">
+                        <div className="mt-1 text-zinc-500 text-[10px] line-clamp-1">
                           {cluster.detailed_description}
                         </div>
                       )}
@@ -412,9 +419,9 @@ export default function RiskZoneAnalysis() {
                   </div>
                 </div>
                 {expandedCluster === cluster.root_cause ? (
-                  <ChevronUpIcon className="w-5 h-5 text-white/40" />
+                  <ChevronUpIcon className="w-5 h-5 text-zinc-500" />
                 ) : (
-                  <ChevronDownIcon className="w-5 h-5 text-white/40" />
+                  <ChevronDownIcon className="w-5 h-5 text-zinc-500" />
                 )}
               </button>
               <AnimatePresence>
@@ -423,13 +430,13 @@ export default function RiskZoneAnalysis() {
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
                     exit={{ opacity: 0, height: 0 }}
-                    className="mt-4 pt-4 border-t border-white/10 overflow-hidden"
+                    className="mt-4 pt-4 border-t border-zinc-800/60 overflow-hidden"
                   >
                     <div className="mb-3">
                       {cluster.detailed_description && (
-                        <p className="text-sm text-white/60 mb-3">{cluster.detailed_description}</p>
+                        <p className="text-sm text-zinc-400/90 font-sans mb-3">{cluster.detailed_description}</p>
                       )}
-                      <div className="flex items-center gap-4 text-xs text-white/50">
+                      <div className="flex items-center gap-4 font-mono text-[10px] uppercase tracking-wider text-zinc-500">
                         <span>Affected Zones: {cluster.affected_count || cluster.zones.length}</span>
                         {cluster.cascade_potential && (
                           <span>Cascade Potential: {(cluster.cascade_potential * 100).toFixed(0)}%</span>
@@ -450,10 +457,10 @@ export default function RiskZoneAnalysis() {
                         .map(({ zoneId, zone }) => (
                           <div
                             key={zoneId}
-                            className="p-2 rounded-lg bg-black/30 border border-white/5 text-sm"
+                            className="p-2 rounded-md bg-zinc-900/80 border border-zinc-800/60 text-sm"
                           >
-                            <div className="font-medium text-white/80">{zone.name}</div>
-                            <div className="text-xs text-white/50">Risk: {(zone.risk * 100).toFixed(0)}%</div>
+                            <div className="font-medium text-zinc-200">{zone.name}</div>
+                            <div className="font-mono text-[10px] text-zinc-500 tabular-nums">Risk: {(zone.risk * 100).toFixed(0)}%</div>
                           </div>
                         ))}
                     </div>
@@ -476,22 +483,22 @@ export default function RiskZoneAnalysis() {
         <div className="flex items-center justify-between mb-3">
           <button
             onClick={() => setDependenciesExpanded((v) => !v)}
-            className="flex items-center gap-2 text-xl font-semibold text-white/90 hover:text-white transition-colors"
+            className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-zinc-500 hover:text-zinc-400 transition-colors"
             title={dependenciesExpanded ? 'Collapse' : 'Expand'}
           >
-            <LinkIcon className="w-5 h-5 text-primary-400" />
+            <LinkIcon className="w-4 h-4 text-zinc-500" />
             Zone Dependencies
             {dependenciesExpanded ? (
-              <ChevronUpIcon className="w-5 h-5 text-white/40" />
+              <ChevronUpIcon className="w-5 h-5 text-zinc-500" />
             ) : (
-              <ChevronDownIcon className="w-5 h-5 text-white/40" />
+              <ChevronDownIcon className="w-5 h-5 text-zinc-500" />
             )}
           </button>
-          <div className="text-xs text-white/40">
+          <div className="font-mono text-[10px] uppercase tracking-wider text-zinc-500 tabular-nums">
             {filteredDependencies.length} links
           </div>
         </div>
-        <p className="text-sm text-white/50 mb-4">
+        <p className="text-sm text-zinc-500/90 font-sans mb-4">
           Dependencies are collapsed by default to keep the page readable. Expand to inspect individual links.
         </p>
 
@@ -505,50 +512,50 @@ export default function RiskZoneAnalysis() {
             >
               <div className="space-y-3">
                 {filteredDependencies.length === 0 ? (
-                  <div className="text-center py-8 text-white/40">
+                  <div className="text-center py-8 text-zinc-500">
                     No dependencies found for {activeTab} risk zones
                   </div>
                 ) : (
                   filteredDependencies.map((dep, idx) => (
                     <div
                       key={idx}
-                      className={`glass rounded-xl p-4 border ${getDependencyColor(dep.dependency_type, dep.criticality)}`}
+                      className={`rounded-md p-4 border border-zinc-800/60 bg-zinc-900/50 ${getDependencyColor(dep.dependency_type, dep.criticality)}`}
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-2">
-                            <div className="text-white/60">
+                            <div className="text-zinc-400">
                               {getCategoryIcon(dep.category)}
                             </div>
-                            <div className="font-medium text-white/80">
+                            <div className="font-medium text-zinc-200">
                               {dep.zone1_name} ↔ {dep.zone2_name}
                             </div>
                             <span className={`px-2 py-0.5 rounded text-xs ${
-                              dep.dependency_type === 'direct' ? 'bg-amber-500/20 text-amber-300' :
-                              dep.dependency_type === 'indirect' ? 'bg-blue-500/20 text-blue-300' :
-                              'bg-white/10 text-white/50'
+                              dep.dependency_type === 'direct' ? 'bg-zinc-500/20 text-zinc-300' :
+                              dep.dependency_type === 'indirect' ? 'bg-zinc-500/20 text-zinc-300' :
+                              'bg-zinc-700 text-zinc-500'
                             }`}>
                               {dep.dependency_type}
                             </span>
                           </div>
-                          <div className="text-sm text-white/60 mb-2">{dep.mechanism}</div>
-                          <div className="flex items-center gap-4 text-xs text-white/50">
+                          <div className="text-sm text-zinc-400 mb-2">{dep.mechanism}</div>
+                          <div className="flex items-center gap-4 text-xs text-zinc-500">
                             <span>Strength: {(dep.criticality * 100).toFixed(0)}%</span>
                             <span className="capitalize">Category: {dep.category}</span>
                           </div>
-                          <div className="mt-2 pt-2 border-t border-white/5 text-xs text-white/40">
+                          <div className="mt-2 pt-2 border-t border-zinc-800/60 font-mono text-[10px] text-zinc-500">
                             <div className="grid grid-cols-2 gap-2">
                               <div>
-                                <span className="text-white/30">Zone 1 Risk:</span>{' '}
-                                <span className="text-white/60">
+                                <span className="text-zinc-600">Zone 1 Risk:</span>{' '}
+                                <span className="text-zinc-400">
                                   {data.zones.find(z => z.id === dep.zone1_id)?.risk
                                     ? `${(data.zones.find(z => z.id === dep.zone1_id)!.risk * 100).toFixed(0)}%`
                                     : 'N/A'}
                                 </span>
                               </div>
                               <div>
-                                <span className="text-white/30">Zone 2 Risk:</span>{' '}
-                                <span className="text-white/60">
+                                <span className="text-zinc-600">Zone 2 Risk:</span>{' '}
+                                <span className="text-zinc-400">
                                   {data.zones.find(z => z.id === dep.zone2_id)?.risk
                                     ? `${(data.zones.find(z => z.id === dep.zone2_id)!.risk * 100).toFixed(0)}%`
                                     : 'N/A'}
@@ -575,40 +582,40 @@ export default function RiskZoneAnalysis() {
         className="mb-8"
       >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold">Causal Chains</h2>
-          <div className="text-xs text-white/40">
+          <h2 className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Causal Chains</h2>
+          <div className="font-mono text-[10px] uppercase tracking-wider text-zinc-500 tabular-nums">
             {filteredCausalChains.length} active chains
           </div>
         </div>
-        <p className="text-sm text-white/50 mb-4">
+        <p className="text-sm text-zinc-500/90 font-sans mb-4">
           Cause-and-effect sequences showing how events in one zone trigger cascading effects across the network. 
           Each chain represents a potential risk propagation path that could affect multiple zones.
         </p>
         <div className="space-y-4">
           {filteredCausalChains.length === 0 ? (
-            <div className="text-center py-8 text-white/40">
+            <div className="text-center py-8 text-zinc-500">
               No causal chains found for {activeTab} risk zones
             </div>
           ) : (
             filteredCausalChains.map((chain, idx) => (
             <div
               key={idx}
-              className="glass rounded-xl p-4 border border-white/5"
+              className="rounded-md p-4 border border-zinc-800/60 bg-zinc-900/50"
             >
               <button
                 onClick={() => setExpandedChain(expandedChain === idx ? null : idx)}
                 className="w-full flex items-center justify-between mb-2"
               >
                 <div>
-                  <div className="font-medium text-white/80">{chain.root_cause}</div>
-                  <div className="text-sm text-white/50">
+                  <div className="font-medium text-zinc-200">{chain.root_cause}</div>
+                  <div className="text-sm text-zinc-500">
                     → {chain.final_effect} · Criticality: {(chain.criticality * 100).toFixed(0)}%
                   </div>
                 </div>
                 {expandedChain === idx ? (
-                  <ChevronUpIcon className="w-5 h-5 text-white/40" />
+                  <ChevronUpIcon className="w-5 h-5 text-zinc-500" />
                 ) : (
-                  <ChevronDownIcon className="w-5 h-5 text-white/40" />
+                  <ChevronDownIcon className="w-5 h-5 text-zinc-500" />
                 )}
               </button>
               <AnimatePresence>
@@ -617,9 +624,9 @@ export default function RiskZoneAnalysis() {
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
                     exit={{ opacity: 0, height: 0 }}
-                    className="mt-4 pt-4 border-t border-white/10 overflow-hidden"
+                    className="mt-4 pt-4 border-t border-zinc-800/60 overflow-hidden"
                   >
-                    <div className="mb-3 text-xs text-white/50">
+                    <div className="mb-3 font-mono text-[10px] uppercase tracking-wider text-zinc-500">
                       <div className="flex items-center gap-4">
                         <span>Chain Length: {chain.chain.length} steps</span>
                         <span>Criticality: {(chain.criticality * 100).toFixed(0)}%</span>
@@ -631,32 +638,32 @@ export default function RiskZoneAnalysis() {
                         return (
                           <div
                             key={stepIdx}
-                            className="flex items-center gap-3 p-2 rounded-lg bg-black/30"
+                            className="flex items-center gap-3 p-2 rounded-md bg-zinc-900/80 border border-zinc-800/60"
                           >
-                            <div className="w-8 h-8 rounded-full bg-primary-500/20 flex items-center justify-center text-xs font-medium text-primary-300">
+                            <div className="w-8 h-8 rounded-full bg-zinc-800/80 flex items-center justify-center text-xs font-mono font-medium tabular-nums text-zinc-300">
                               {step.step}
                             </div>
                             <div className="flex-1">
                               <div className="flex items-center gap-2">
-                                <div className="font-medium text-white/80">{step.zone_name}</div>
+                                <div className="font-medium text-zinc-200">{step.zone_name}</div>
                                 {zone && (
-                                  <span className="text-xs text-white/40">
+                                  <span className="text-xs text-zinc-500">
                                     (Risk: {(zone.risk * 100).toFixed(0)}%)
                                   </span>
                                 )}
                               </div>
-                              <div className="text-xs text-white/50">{step.description}</div>
+                              <div className="text-xs text-zinc-500">{step.description}</div>
                             </div>
                             {stepIdx < chain.chain.length - 1 && (
-                              <div className="text-white/20 text-xs">→</div>
+                              <div className="text-zinc-100/20 text-xs">→</div>
                             )}
                           </div>
                         )
                       })}
                     </div>
-                    <div className="mt-3 pt-3 border-t border-white/5 text-xs text-white/40">
-                      <div className="font-medium text-white/60 mb-1">Final Effect:</div>
-                      <div className="text-white/70">{chain.final_effect}</div>
+                    <div className="mt-3 pt-3 border-t border-zinc-800/60 font-mono text-[10px] text-zinc-500">
+                      <div className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-1">Final Effect</div>
+                      <div className="text-zinc-300">{chain.final_effect}</div>
                     </div>
                   </motion.div>
                 )}
@@ -674,11 +681,11 @@ export default function RiskZoneAnalysis() {
         transition={{ delay: 0.5 }}
         className="mb-8"
       >
-        <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-          <ExclamationTriangleIcon className="w-5 h-5 text-red-400" />
+        <h2 className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-4 flex items-center gap-2">
+          <ExclamationTriangleIcon className="w-4 h-4 text-zinc-500" />
           Consequences Analysis
         </h2>
-        <p className="text-sm text-white/50 mb-4">
+        <p className="text-sm text-zinc-500/90 font-sans mb-4">
           Potential consequences of risk escalation in {activeTab === 'all' ? 'all zones' : activeTab} zones. 
           Analysis includes humanitarian, economic, infrastructure, geopolitical, and cascade effects.
         </p>
@@ -689,14 +696,14 @@ export default function RiskZoneAnalysis() {
             .map((zone) => (
               <div
                 key={zone.id}
-                className="glass rounded-xl p-4 border border-white/5"
+                className="rounded-md p-4 border border-zinc-800/60 bg-zinc-900/50"
               >
                 <div className="flex items-center justify-between mb-3">
-                  <div className="font-medium text-white/80">{zone.name}</div>
-                  <div className={`text-xs px-2 py-1 rounded ${
-                    zone.risk > 0.9 ? 'bg-red-500/20 text-red-400' :
-                    zone.risk > 0.8 ? 'bg-orange-500/20 text-orange-400' :
-                    'bg-yellow-500/20 text-yellow-400'
+                  <div className="font-medium text-zinc-200">{zone.name}</div>
+                  <div className={`font-mono text-[10px] tabular-nums px-2 py-1 rounded ${
+                    zone.risk > 0.9 ? 'bg-red-500/20 text-red-400/80 border border-red-500/20' :
+                    zone.risk > 0.8 ? 'bg-orange-500/20 text-orange-400/80 border border-orange-500/20' :
+                    'bg-yellow-500/20 text-yellow-400/80 border border-yellow-500/20'
                   }`}>
                     Risk: {(zone.risk * 100).toFixed(0)}%
                   </div>
@@ -711,14 +718,14 @@ export default function RiskZoneAnalysis() {
                   {zone.risk > 0.8 && (
                     <div className="text-yellow-400/80">• Infrastructure: Critical systems failure, energy grid disruption</div>
                   )}
-                  <div className="text-blue-400/80">• Geopolitical: Regional instability, international tensions</div>
-                  <div className="text-gray-400/80">• Cascade: Risk propagation to connected zones</div>
+                  <div className="text-zinc-400/80">• Geopolitical: Regional instability, international tensions</div>
+                  <div className="text-zinc-400/80">• Cascade: Risk propagation to connected zones</div>
                 </div>
               </div>
             ))}
         </div>
         {filteredZones.filter(z => z.risk >= 0.7).length === 0 && (
-          <div className="text-center py-8 text-white/40">
+          <div className="text-center py-8 text-zinc-500">
             No high-risk zones in {activeTab} category
           </div>
         )}

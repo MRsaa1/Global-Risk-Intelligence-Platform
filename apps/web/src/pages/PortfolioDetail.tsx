@@ -34,16 +34,16 @@ interface REITMetrics {
   as_of_date: string
   nav: number
   nav_per_share: number | null
-  ffo: number
-  affo: number
-  dividend_yield: number
-  earnings_yield: number
+  ffo: number | null
+  affo: number | null
+  dividend_yield: number | null
+  earnings_yield: number | null
   debt_to_equity: number
   loan_to_value: number
-  interest_coverage: number
+  interest_coverage: number | null
   occupancy: number
-  noi: number
-  cap_rate: number
+  noi: number | null
+  cap_rate: number | null
   ytd_return: number
   asset_count: number
   total_gfa_m2: number
@@ -166,16 +166,16 @@ export default function PortfolioDetail() {
 
   const getRiskColor = (score: number | null) => {
     if (score === null) return 'text-dark-muted'
-    if (score < 30) return 'text-green-400'
-    if (score < 60) return 'text-amber-400'
-    return 'text-red-400'
+    if (score < 30) return 'text-green-400/80'
+    if (score < 60) return 'text-amber-400/80'
+    return 'text-red-400/80'
   }
 
   if (loading) {
     return (
-      <div className="h-full overflow-auto p-8">
-        <div className="h-1 rounded-full bg-white/10 overflow-hidden mb-4">
-          <div className="h-full w-1/3 bg-primary-500 animate-pulse" />
+      <div className="min-h-full bg-zinc-950 p-8 pb-16">
+        <div className="h-1 rounded-full bg-zinc-700 overflow-hidden mb-4">
+          <div className="h-full w-1/3 bg-zinc-500 animate-pulse" />
         </div>
         <p className="text-dark-muted">Loading portfolio...</p>
       </div>
@@ -184,11 +184,11 @@ export default function PortfolioDetail() {
 
   if (!portfolio || !metrics) {
     return (
-      <div className="h-full overflow-auto p-8">
-        <p className="text-white/80 mb-4">Portfolio not found</p>
+      <div className="min-h-full bg-zinc-950 p-8 pb-16">
+        <p className="text-zinc-200 mb-4">Portfolio not found</p>
         <button
           onClick={() => navigate('/portfolios')}
-          className="flex items-center gap-2 text-primary-400 hover:text-primary-300"
+          className="flex items-center gap-2 text-zinc-400 hover:text-zinc-300"
         >
           <ArrowLeftIcon className="w-5 h-5" />
           Back to Portfolios
@@ -198,24 +198,24 @@ export default function PortfolioDetail() {
   }
 
   return (
-    <div className="h-full overflow-auto p-8">
+    <div className="min-h-full bg-zinc-950 p-8 pb-16">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
         <div>
           <button
             onClick={() => navigate('/portfolios')}
-            className="flex items-center gap-2 text-dark-muted hover:text-white mb-2"
+            className="flex items-center gap-2 text-dark-muted hover:text-zinc-100 mb-2"
           >
             <ArrowLeftIcon className="w-5 h-5" />
             Back to Portfolios
           </button>
-          <h1 className="text-2xl font-display font-bold text-white flex items-center gap-2">
-            <BuildingOfficeIcon className="w-8 h-8 text-emerald-400" />
+          <h1 className="text-2xl font-display font-bold text-zinc-100 flex items-center gap-2">
+            <BuildingOfficeIcon className="w-8 h-8 text-zinc-400" />
             {portfolio.name}
           </h1>
           <div className="flex flex-wrap items-center gap-2 mt-2">
             <span className="text-dark-muted text-sm font-mono">{portfolio.code}</span>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-primary-500/20 text-primary-300">
+            <span className="text-xs px-2 py-0.5 rounded-full bg-zinc-500/20 text-zinc-300">
               {typeLabels[portfolio.portfolio_type] || portfolio.portfolio_type}
             </span>
             {portfolio.manager_name && (
@@ -226,14 +226,14 @@ export default function PortfolioDetail() {
         <div className="flex gap-2">
           <button
             onClick={fetchPortfolioData}
-            className="p-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 text-white/70"
+            className="p-2 rounded-md bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 text-zinc-300"
             title="Refresh"
           >
             <ArrowPathIcon className="w-5 h-5" />
           </button>
           <button
             onClick={() => navigate(`/portfolios/${id}/globe`)}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl border border-white/10 text-white/80 hover:bg-white/5"
+            className="flex items-center gap-2 px-4 py-2 rounded-md border border-zinc-700 text-zinc-200 hover:bg-zinc-800"
           >
             <MapIcon className="w-5 h-5" />
             3D Globe View
@@ -243,34 +243,34 @@ export default function PortfolioDetail() {
 
       {/* Key REIT Metrics */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
-        <div className="glass rounded-2xl p-4 border border-primary-500/20 bg-primary-500/10 text-center">
-          <p className="text-primary-300/80 text-xs">NAV</p>
-          <p className="text-lg font-bold text-white">{formatCurrency(metrics.nav, portfolio.base_currency)}</p>
+        <div className="glass rounded-md p-4 border border-zinc-500/20 bg-zinc-500/10 text-center">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">NAV</p>
+          <p className="text-lg font-bold font-mono tabular-nums text-zinc-100">{formatCurrency(metrics.nav, portfolio.base_currency)}</p>
         </div>
-        <div className="glass rounded-2xl p-4 border border-purple-500/20 bg-purple-500/10 text-center">
-          <p className="text-purple-300/80 text-xs">FFO</p>
-          <p className="text-lg font-bold text-white">{formatCurrency(metrics.ffo, portfolio.base_currency)}</p>
+        <div className="glass rounded-md p-4 border border-zinc-500/20 bg-zinc-500/10 text-center">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">FFO</p>
+          <p className="text-lg font-bold font-mono tabular-nums text-zinc-100">{formatCurrency(metrics.ffo, portfolio.base_currency)}</p>
         </div>
-        <div className="glass rounded-2xl p-4 border border-green-500/20 bg-green-500/10 text-center">
-          <p className="text-green-300/80 text-xs">Yield</p>
-          <p className="text-lg font-bold text-white">{formatPercent(metrics.dividend_yield)}</p>
+        <div className="glass rounded-md p-4 border border-green-500/20 bg-green-500/10 text-center">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Yield</p>
+          <p className="text-lg font-bold font-mono tabular-nums text-zinc-100">{formatPercent(metrics.dividend_yield)}</p>
         </div>
-        <div className="glass rounded-2xl p-4 border border-white/5 text-center">
-          <p className="text-dark-muted text-xs">D/E</p>
-          <p className="text-lg font-bold text-white">{metrics.debt_to_equity.toFixed(2)}</p>
+        <div className="glass rounded-md p-4 border border-zinc-800 text-center">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">D/E</p>
+          <p className="text-lg font-bold font-mono tabular-nums text-zinc-100">{metrics.debt_to_equity.toFixed(2)}</p>
         </div>
-        <div className="glass rounded-2xl p-4 border border-white/5 text-center">
-          <p className="text-dark-muted text-xs">Occupancy</p>
-          <p className="text-lg font-bold text-white">{(metrics.occupancy * 100).toFixed(0)}%</p>
+        <div className="glass rounded-md p-4 border border-zinc-800 text-center">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Occupancy</p>
+          <p className="text-lg font-bold font-mono tabular-nums text-zinc-100">{(metrics.occupancy * 100).toFixed(0)}%</p>
         </div>
-        <div className="glass rounded-2xl p-4 border border-white/5 text-center">
-          <p className="text-dark-muted text-xs">Assets</p>
-          <p className="text-lg font-bold text-white">{metrics.asset_count}</p>
+        <div className="glass rounded-md p-4 border border-zinc-800 text-center">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Assets</p>
+          <p className="text-lg font-bold font-mono tabular-nums text-zinc-100">{metrics.asset_count}</p>
         </div>
       </div>
 
       {/* Risk */}
-      <div className="glass rounded-2xl p-4 border border-white/5 mb-6 flex flex-wrap justify-between items-center gap-4">
+      <div className="glass rounded-md p-4 border border-zinc-800 mb-6 flex flex-wrap justify-between items-center gap-4">
         <div className="flex items-center gap-3">
           <CpuChipIcon className={`w-6 h-6 ${getRiskColor(metrics.climate_risk_score)}`} />
           <div>
@@ -281,24 +281,24 @@ export default function PortfolioDetail() {
         <div className="flex gap-6">
           <div className="text-right">
             <p className="text-dark-muted text-sm">VaR (95%)</p>
-            <p className="font-bold text-amber-400">{formatCurrency(metrics.var_95, portfolio.base_currency)}</p>
+            <p className="font-bold text-amber-400/80">{formatCurrency(metrics.var_95, portfolio.base_currency)}</p>
           </div>
           <div className="text-right">
             <p className="text-dark-muted text-sm">Cap Rate</p>
-            <p className="font-bold text-white">{formatPercent(metrics.cap_rate)}</p>
+            <p className="font-bold text-zinc-100">{formatPercent(metrics.cap_rate)}</p>
           </div>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="glass rounded-2xl border border-white/5 overflow-hidden">
-        <div className="flex overflow-x-auto border-b border-white/10">
+      <div className="glass rounded-md border border-zinc-800 overflow-hidden">
+        <div className="flex overflow-x-auto border-b border-zinc-700">
           {TABS.map((label, i) => (
             <button
               key={label}
               onClick={() => setTabValue(i)}
               className={`shrink-0 px-4 py-3 text-sm font-medium transition-colors whitespace-nowrap ${
-                tabValue === i ? 'text-primary-400 border-b-2 border-primary-500 bg-white/5' : 'text-dark-muted hover:text-white/80'
+                tabValue === i ? 'text-zinc-400 border-b-2 border-zinc-500 bg-zinc-800' : 'text-dark-muted hover:text-zinc-200'
               }`}
             >
               {label}
@@ -310,40 +310,40 @@ export default function PortfolioDetail() {
           {tabValue === 0 && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <h3 className="font-semibold text-white mb-3">Income Metrics</h3>
+                <h3 className="font-semibold text-zinc-100 mb-3">Income Metrics</h3>
                 <div className="space-y-2 text-sm">
                   {[
                     ['NOI', formatCurrency(metrics.noi, portfolio.base_currency)],
                     ['FFO', formatCurrency(metrics.ffo, portfolio.base_currency)],
                     ['AFFO', formatCurrency(metrics.affo, portfolio.base_currency)],
-                    ['Dividend Yield', formatPercent(metrics.dividend_yield), 'text-green-400'],
+                    ['Dividend Yield', formatPercent(metrics.dividend_yield), 'text-green-400/80'],
                     ['Earnings Yield', formatPercent(metrics.earnings_yield)],
                   ].map((row) => {
                     const [k, v, cls] = row as [string, string, string?]
                     return (
-                      <div key={k} className="flex justify-between py-2 border-b border-white/5">
+                      <div key={k} className="flex justify-between py-2 border-b border-zinc-800">
                         <span className="text-dark-muted">{k}</span>
-                        <span className={cls || 'text-white'}>{v}</span>
+                        <span className={cls || 'text-zinc-100'}>{v}</span>
                       </div>
                     )
                   })}
                 </div>
               </div>
               <div>
-                <h3 className="font-semibold text-white mb-3">Leverage & Coverage</h3>
+                <h3 className="font-semibold text-zinc-100 mb-3">Leverage & Coverage</h3>
                 <div className="space-y-2 text-sm">
                   {[
                     ['Debt-to-Equity', metrics.debt_to_equity.toFixed(2)],
                     ['Loan-to-Value', formatPercent(metrics.loan_to_value)],
-                    ['Interest Coverage', `${metrics.interest_coverage.toFixed(2)}x`],
-                    ['YTD Return', formatPercent(metrics.ytd_return), metrics.ytd_return >= 0 ? 'text-green-400' : 'text-red-400'],
+                    ['Interest Coverage', metrics.interest_coverage != null ? `${metrics.interest_coverage.toFixed(2)}x` : '-'],
+                    ['YTD Return', formatPercent(metrics.ytd_return), metrics.ytd_return >= 0 ? 'text-green-400/80' : 'text-red-400/80'],
                     ['Total GFA', `${metrics.total_gfa_m2.toLocaleString()} m²`],
                   ].map((row) => {
                     const [k, v, cls] = row as [string, string, string?]
                     return (
-                      <div key={k} className="flex justify-between py-2 border-b border-white/5">
+                      <div key={k} className="flex justify-between py-2 border-b border-zinc-800">
                         <span className="text-dark-muted">{k}</span>
-                        <span className={cls || 'text-white'}>{v}</span>
+                        <span className={cls || 'text-zinc-100'}>{v}</span>
                       </div>
                     )
                   })}
@@ -355,7 +355,7 @@ export default function PortfolioDetail() {
           {tabValue === 1 && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <h3 className="font-semibold text-white mb-3">Sector Allocation</h3>
+                <h3 className="font-semibold text-zinc-100 mb-3">Sector Allocation</h3>
                 {Object.entries(metrics.sector_allocation).length === 0 ? (
                   <p className="text-dark-muted">No sector data</p>
                 ) : (
@@ -363,11 +363,11 @@ export default function PortfolioDetail() {
                     {Object.entries(metrics.sector_allocation).map(([sector, pct]) => (
                       <div key={sector}>
                         <div className="flex justify-between text-sm mb-1">
-                          <span className="text-white/80">{sector}</span>
-                          <span className="font-semibold text-white">{pct.toFixed(1)}%</span>
+                          <span className="text-zinc-200">{sector}</span>
+                          <span className="font-semibold text-zinc-100">{pct.toFixed(1)}%</span>
                         </div>
-                        <div className="h-2 rounded-full bg-white/10 overflow-hidden">
-                          <div className="h-full bg-primary-500 rounded-full" style={{ width: `${pct}%` }} />
+                        <div className="h-2 rounded-full bg-zinc-700 overflow-hidden">
+                          <div className="h-full bg-zinc-500 rounded-full" style={{ width: `${pct}%` }} />
                         </div>
                       </div>
                     ))}
@@ -375,7 +375,7 @@ export default function PortfolioDetail() {
                 )}
               </div>
               <div>
-                <h3 className="font-semibold text-white mb-3">Geographic Allocation</h3>
+                <h3 className="font-semibold text-zinc-100 mb-3">Geographic Allocation</h3>
                 {Object.entries(metrics.geographic_allocation).length === 0 ? (
                   <p className="text-dark-muted">No geographic data</p>
                 ) : (
@@ -383,11 +383,11 @@ export default function PortfolioDetail() {
                     {Object.entries(metrics.geographic_allocation).map(([country, pct]) => (
                       <div key={country}>
                         <div className="flex justify-between text-sm mb-1">
-                          <span className="text-white/80">{country}</span>
-                          <span className="font-semibold text-white">{pct.toFixed(1)}%</span>
+                          <span className="text-zinc-200">{country}</span>
+                          <span className="font-semibold text-zinc-100">{pct.toFixed(1)}%</span>
                         </div>
-                        <div className="h-2 rounded-full bg-white/10 overflow-hidden">
-                          <div className="h-full bg-purple-500 rounded-full" style={{ width: `${pct}%` }} />
+                        <div className="h-2 rounded-full bg-zinc-700 overflow-hidden">
+                          <div className="h-full bg-zinc-500 rounded-full" style={{ width: `${pct}%` }} />
                         </div>
                       </div>
                     ))}
@@ -403,45 +403,45 @@ export default function PortfolioDetail() {
                 <select
                   value={stressScenario}
                   onChange={(e) => setStressScenario(e.target.value)}
-                  className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white min-w-[200px] focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                  className="px-3 py-2 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-100 min-w-[200px] focus:outline-none focus:ring-2 focus:ring-zinc-500/50"
                 >
                   <option value="rate_rise" className="bg-dark-card">Rate Rise (+200bps)</option>
                   <option value="rezone" className="bg-dark-card">Regulatory Rezoning</option>
                   <option value="climate" className="bg-dark-card">Climate Stress</option>
                 </select>
-                <button onClick={runStressTest} className="px-4 py-2 rounded-xl bg-primary-500 text-white font-medium hover:bg-primary-600">
+                <button onClick={runStressTest} className="px-4 py-2 rounded-md bg-zinc-500 text-zinc-100 font-medium hover:bg-zinc-600">
                   Run Stress Test
                 </button>
               </div>
               {stressResult && (
                 <div className="space-y-4">
                   <div
-                    className={`p-4 rounded-xl border ${
+                    className={`p-4 rounded-md border ${
                       stressResult.nav_change_pct < -10
                         ? 'bg-red-500/10 border-red-500/30'
                         : stressResult.nav_change_pct < -5
                         ? 'bg-amber-500/10 border-amber-500/30'
-                        : 'bg-blue-500/10 border-blue-500/30'
+                        : 'bg-zinc-500/10 border-zinc-500/30'
                     }`}
                   >
-                    <p className="font-semibold text-white">{stressResult.impact_description}</p>
+                    <p className="font-semibold text-zinc-100">{stressResult.impact_description}</p>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="p-4 rounded-xl border border-white/10 text-center">
+                    <div className="p-4 rounded-md border border-zinc-700 text-center">
                       <p className="text-dark-muted text-sm mb-1">NAV Impact</p>
-                      <p className={`text-2xl font-bold ${stressResult.nav_change_pct >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      <p className={`text-2xl font-bold font-mono tabular-nums ${stressResult.nav_change_pct >= 0 ? 'text-green-400/80' : 'text-red-400/80'}`}>
                         {stressResult.nav_change_pct.toFixed(1)}%
                       </p>
-                      <p className="text-sm text-white/70 mt-1">
+                      <p className="text-sm text-zinc-300 mt-1">
                         {formatCurrency(stressResult.base_nav, portfolio.base_currency)} → {formatCurrency(stressResult.stressed_nav, portfolio.base_currency)}
                       </p>
                     </div>
-                    <div className="p-4 rounded-xl border border-white/10 text-center">
+                    <div className="p-4 rounded-md border border-zinc-700 text-center">
                       <p className="text-dark-muted text-sm mb-1">Yield Impact</p>
-                      <p className={`text-2xl font-bold ${stressResult.yield_change_pct >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      <p className={`text-2xl font-bold font-mono tabular-nums ${stressResult.yield_change_pct >= 0 ? 'text-green-400/80' : 'text-red-400/80'}`}>
                         {stressResult.yield_change_pct.toFixed(1)}%
                       </p>
-                      <p className="text-sm text-white/70 mt-1">
+                      <p className="text-sm text-zinc-300 mt-1">
                         {formatPercent(stressResult.base_yield)} → {formatPercent(stressResult.stressed_yield)}
                       </p>
                     </div>
@@ -454,39 +454,39 @@ export default function PortfolioDetail() {
           {tabValue === 3 && (
             <div>
               <div className="flex flex-wrap gap-2 mb-6">
-                <button onClick={() => runOptimization('maximize_yield')} className="px-4 py-2 rounded-xl bg-primary-500 text-white font-medium hover:bg-primary-600">
+                <button onClick={() => runOptimization('maximize_yield')} className="px-4 py-2 rounded-md bg-zinc-500 text-zinc-100 font-medium hover:bg-zinc-600">
                   Maximize Yield
                 </button>
-                <button onClick={() => runOptimization('minimize_risk')} className="px-4 py-2 rounded-xl border border-white/10 text-white/80 hover:bg-white/5">
+                <button onClick={() => runOptimization('minimize_risk')} className="px-4 py-2 rounded-md border border-zinc-700 text-zinc-200 hover:bg-zinc-800">
                   Minimize Risk
                 </button>
-                <button onClick={() => runOptimization('balanced')} className="px-4 py-2 rounded-xl border border-white/10 text-white/80 hover:bg-white/5">
+                <button onClick={() => runOptimization('balanced')} className="px-4 py-2 rounded-md border border-zinc-700 text-zinc-200 hover:bg-zinc-800">
                   Balanced
                 </button>
               </div>
               {optimization && (
                 <div className="space-y-3">
-                  <h3 className="font-semibold text-white">
+                  <h3 className="font-semibold text-zinc-100">
                     Recommendations ({optimization.objective.replace('_', ' ')})
                   </h3>
                   {optimization.recommendations.length === 0 ? (
-                    <div className="p-4 rounded-xl bg-green-500/10 border border-green-500/20 text-green-300">
+                    <div className="p-4 rounded-md bg-green-500/10 border border-green-500/20 text-green-300">
                       Portfolio is well optimized for this objective
                     </div>
                   ) : (
                     optimization.recommendations.map((rec, i) => (
                       <div
                         key={i}
-                        className={`p-4 rounded-xl border flex gap-3 ${
-                          rec.priority === 'high' ? 'bg-amber-500/10 border-amber-500/20' : 'bg-blue-500/10 border-blue-500/20'
+                        className={`p-4 rounded-md border flex gap-3 ${
+                          rec.priority === 'high' ? 'bg-amber-500/10 border-amber-500/20' : 'bg-zinc-500/10 border-zinc-500/20'
                         }`}
                       >
                         {rec.priority === 'high' ? (
-                          <ExclamationTriangleIcon className="w-5 h-5 text-amber-400 shrink-0" />
+                          <ExclamationTriangleIcon className="w-5 h-5 text-amber-400/80 shrink-0" />
                         ) : (
-                          <CheckCircleIcon className="w-5 h-5 text-blue-400 shrink-0" />
+                          <CheckCircleIcon className="w-5 h-5 text-zinc-400 shrink-0" />
                         )}
-                        <p className="text-sm text-white/90">
+                        <p className="text-sm text-zinc-100">
                           <strong>[{rec.type}]</strong> {rec.description}
                         </p>
                       </div>
@@ -499,14 +499,14 @@ export default function PortfolioDetail() {
 
           {tabValue === 4 && (
             <div>
-              <h3 className="font-semibold text-white mb-4">Portfolio Assets</h3>
+              <h3 className="font-semibold text-zinc-100 mb-4">Portfolio Assets</h3>
               {assets.length === 0 ? (
                 <p className="text-dark-muted">No assets in portfolio</p>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-white/10 text-left">
+                      <tr className="border-b border-zinc-700 text-left">
                         <th className="py-3 px-4 text-dark-muted font-medium">Asset ID</th>
                         <th className="py-3 px-4 text-dark-muted font-medium text-right">Ownership %</th>
                         <th className="py-3 px-4 text-dark-muted font-medium text-right">Value</th>
@@ -521,22 +521,22 @@ export default function PortfolioDetail() {
                         <tr
                           key={asset.id}
                           onClick={() => navigate(`/assets/${asset.asset_id}`)}
-                          className="border-b border-white/5 hover:bg-white/5 cursor-pointer"
+                          className="border-b border-zinc-800 hover:bg-zinc-800 cursor-pointer"
                         >
-                          <td className="py-3 px-4 font-mono text-white/80">{asset.asset_id.slice(0, 8)}...</td>
-                          <td className="py-3 px-4 text-right text-white">{asset.share_pct.toFixed(0)}%</td>
-                          <td className="py-3 px-4 text-right text-white">{formatCurrency(asset.current_value, portfolio.base_currency)}</td>
-                          <td className="py-3 px-4 text-right text-white">{asset.weight_pct?.toFixed(1) || '-'}%</td>
-                          <td className="py-3 px-4 text-right text-white">{formatPercent(asset.target_irr)}</td>
+                          <td className="py-3 px-4 font-mono text-zinc-200">{asset.asset_id.slice(0, 8)}...</td>
+                          <td className="py-3 px-4 text-right text-zinc-100">{asset.share_pct.toFixed(0)}%</td>
+                          <td className="py-3 px-4 text-right text-zinc-100">{formatCurrency(asset.current_value, portfolio.base_currency)}</td>
+                          <td className="py-3 px-4 text-right text-zinc-100">{asset.weight_pct?.toFixed(1) || '-'}%</td>
+                          <td className="py-3 px-4 text-right text-zinc-100">{formatPercent(asset.target_irr)}</td>
                           <td
                             className={`py-3 px-4 text-right font-medium ${
-                              (asset.actual_irr || 0) >= (asset.target_irr || 0) ? 'text-green-400' : 'text-red-400'
+                              (asset.actual_irr || 0) >= (asset.target_irr || 0) ? 'text-green-400/80' : 'text-red-400/80'
                             }`}
                           >
                             {formatPercent(asset.actual_irr)}
                           </td>
                           <td className="py-3 px-4">
-                            <span className="text-xs px-2 py-0.5 rounded border border-white/10">
+                            <span className="text-xs px-2 py-0.5 rounded border border-zinc-700">
                               {asset.investment_strategy || 'core'}
                             </span>
                           </td>

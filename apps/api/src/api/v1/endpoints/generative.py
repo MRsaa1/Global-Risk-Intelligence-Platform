@@ -16,10 +16,10 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
-from src.core.security import get_current_user_optional
+from src.core.security import get_current_user
 from src.models.user import User
 from src.services.generative_ai import (
-    alert_explanation,
+    alert_explanation as gen_alert_explanation,
     disclosure_draft as gen_disclosure_draft,
     explain_scenario as gen_explain_scenario,
     explain_zone as gen_explain_zone,
@@ -72,7 +72,7 @@ class AlertExplanationRequest(BaseModel):
 @router.post("/explain-zone")
 async def explain_zone(
     request: ExplainZoneRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Explain why a zone is at risk or answer a custom question about it.
@@ -88,7 +88,7 @@ async def explain_zone(
 @router.post("/explain-scenario")
 async def explain_scenario(
     request: ExplainScenarioRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Explain what a scenario means (e.g. NGFS SSP5, San Francisco +0.5m).
@@ -105,7 +105,7 @@ async def explain_scenario(
 @router.post("/recommendations")
 async def recommendations_text(
     request: RecommendationsRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Generate textual recommendations: mitigation, next steps, zone priorities.
@@ -122,7 +122,7 @@ async def recommendations_text(
 @router.post("/disclosure-draft")
 async def disclosure_draft(
     request: DisclosureDraftRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Draft disclosure or explanatory note for stress tests under EBA, Fed, or NGFS.
@@ -137,7 +137,7 @@ async def disclosure_draft(
 @router.post("/synthesize")
 async def synthesize(
     request: SynthesizeRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Synthesize multiple sources (weather, geodata, historical events) into one coherent summary.
@@ -149,12 +149,12 @@ async def synthesize(
 @router.post("/alert-explanation")
 async def alert_explanation(
     request: AlertExplanationRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Short explanation of an alert for SENTINEL / UI: what it means and why it matters.
     """
-    text = await alert_explanation(
+    text = await gen_alert_explanation(
         alert_title=request.alert_title,
         alert_message=request.alert_message,
         alert_type=request.alert_type,

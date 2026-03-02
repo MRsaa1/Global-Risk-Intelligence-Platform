@@ -3,9 +3,10 @@ Regulatory Compliance Layer for stress tests.
 
 Maps entity type + jurisdiction to applicable regulations (NIS2, DORA, Solvency II,
 EBA/TCFD, etc.) and returns required metrics and disclosure flags for reports.
+Provides get_applicable_frameworks() for Compliance Dashboard and stress-test verification.
 """
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 # Entity type -> list of applicable regulation IDs
 ENTITY_REGULATIONS: Dict[str, List[str]] = {
@@ -45,6 +46,41 @@ REGULATION_LABELS: Dict[str, Dict[str, str]] = {
     "SEC": {"label": "SEC", "metrics": "disclosure, climate"},
     "OCC": {"label": "OCC", "metrics": "banking supervision"},
     "FEMA": {"label": "FEMA", "metrics": "disaster preparedness, flood"},
+    # Canada
+    "OSFI_B15": {"label": "OSFI B-15", "metrics": "climate risk, disclosure"},
+    "CSA_NI_51_107": {"label": "CSA NI 51-107", "metrics": "climate-related disclosure"},
+}
+
+# Regulation ID -> Compliance Dashboard framework_id (used by dashboard and compliance agent)
+REGULATION_TO_DASHBOARD_FRAMEWORK: Dict[str, str] = {
+    "Basel_IV": "basel",
+    "CRR_II": "basel",
+    "CRD_V": "basel",
+    "Solvency_II": "solvency_ii",
+    "TCFD": "tcfd",
+    "EBA_Climate": "tcfd",
+    "NGFS": "tcfd",
+    "ISSB": "issb",
+    "CSRD": "tcfd",
+    "SEC_CLIMATE": "tcfd",
+    "OSFI_B15": "tcfd",
+    "CSA_NI_51_107": "tcfd",
+    "DORA": "dora",
+    "NIS2": "nis2",
+    "EU_AI_ACT": "eu_ai_act",
+    "GDPR": "gdpr",
+}
+
+# Dashboard framework_id -> display name and domain (for get_applicable_frameworks)
+DASHBOARD_FRAMEWORK_META: Dict[str, Dict[str, str]] = {
+    "basel": {"name": "Basel III / IV", "domain": "financial"},
+    "solvency_ii": {"name": "Solvency II", "domain": "financial"},
+    "tcfd": {"name": "TCFD", "domain": "climate"},
+    "issb": {"name": "ISSB S1 / S2", "domain": "climate"},
+    "dora": {"name": "DORA", "domain": "cyber"},
+    "nis2": {"name": "NIS2", "domain": "cyber"},
+    "eu_ai_act": {"name": "EU AI Act", "domain": "ai"},
+    "gdpr": {"name": "GDPR", "domain": "privacy"},
 }
 
 # Jurisdiction -> regulations for CITY_REGION (override EU defaults)
@@ -54,6 +90,7 @@ JURISDICTION_CITY_REGION_REGULATIONS: Dict[str, List[str]] = {
     "UK": ["TCFD", "NGFS", "EBA_Climate"],
     "EU": ["TCFD", "NGFS", "EBA_Climate"],
     "Australia": ["TCFD", "NGFS"],
+    "Canada": ["TCFD", "NGFS", "OSFI_B15", "CSA_NI_51_107"],
 }
 
 
@@ -97,6 +134,32 @@ def get_applicable_regulations(
         required_metrics=required_metrics[:10],
         labels=labels,
     )
+
+
+def get_applicable_frameworks(
+    entity_type: str,
+    jurisdiction: str = "EU",
+    severity: float = 0.0,
+) -> List[Dict[str, Any]]:
+    """
+    Return list of Compliance Dashboard framework_ids applicable for this entity and jurisdiction.
+    Each item: { "framework_id": str, "name": str, "domain": str }.
+    """
+    ctx = get_applicable_regulations(entity_type, jurisdiction, severity)
+    seen: Dict[str, bool] = {}
+    out: List[Dict[str, Any]] = []
+    for rid in ctx.regulations:
+        fw_id = REGULATION_TO_DASHBOARD_FRAMEWORK.get(rid)
+        if not fw_id or seen.get(fw_id):
+            continue
+        seen[fw_id] = True
+        meta = DASHBOARD_FRAMEWORK_META.get(fw_id, {"name": fw_id, "domain": "other"})
+        out.append({
+            "framework_id": fw_id,
+            "name": meta["name"],
+            "domain": meta["domain"],
+        })
+    return out
 
 
 def validate_stress_test_results(

@@ -29,9 +29,10 @@
   --border-subtle: rgba(255, 255, 255, 0.06);
   --border-light: rgba(255, 255, 255, 0.1);
   
-  /* Typography */
-  --font-sans: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
+  /* Typography — JetBrains Mono only (platform-wide) */
+  --font-sans: 'JetBrains Mono', monospace;
+  --font-display: 'JetBrains Mono', monospace;
+  --font-mono: 'JetBrains Mono', monospace;
   
   /* Sizing */
   --header-height: 60px;

@@ -257,7 +257,7 @@ function Overlay() {
 
 export default function DigitalTwinView() {
   return (
-    <div className="relative w-full h-full bg-gradient-to-br from-[#030810] to-[#0a1525]">
+    <div className="relative w-full h-full bg-gradient-to-br from-zinc-950 to-zinc-950">
       <Canvas 
         camera={{ position: [3, 2, 3], fov: 40 }}
         gl={{ antialias: true }}

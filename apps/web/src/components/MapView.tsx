@@ -1,20 +1,20 @@
 /**
  * Geospatial Map View using Deck.gl + Mapbox.
- * 
+ *
  * Displays:
  * - Assets as 3D buildings
  * - Climate risk heatmaps
  * - Infrastructure networks
  * - Flood zones
  */
+import 'mapbox-gl/dist/mapbox-gl.css'
 import { useState, useMemo } from 'react'
 import { Map } from 'react-map-gl'
 import DeckGL from '@deck.gl/react'
 import { ScatterplotLayer, IconLayer } from '@deck.gl/layers'
-import { motion } from 'framer-motion'
 
-// Mapbox token (should be in env)
-const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || 'pk.eyJ1IjoibWFwYm94IiwiYSI6ImNrcm9uem4ycjBnM2gybm8zam9hN2p2c3gifQ.example'
+const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN ?? ''
+const hasValidMapboxToken = MAPBOX_TOKEN.length > 0 && !MAPBOX_TOKEN.endsWith('.example')
 
 interface MapViewProps {
   assets?: Array<{
@@ -106,8 +106,21 @@ export default function MapView({
     buildingLayer,
   ].filter(Boolean)
 
+  if (!hasValidMapboxToken) {
+    return (
+      <div className="relative w-full h-full rounded-md overflow-hidden flex items-center justify-center bg-zinc-800 border border-zinc-700">
+        <div className="text-center p-6 max-w-sm">
+          <p className="text-zinc-200 text-sm mb-2">2D map (Mapbox) requires a valid token.</p>
+          <p className="text-zinc-400 text-xs">
+            Set <code className="bg-zinc-700 px-1 rounded">VITE_MAPBOX_TOKEN</code> in <code className="bg-zinc-700 px-1 rounded">.env</code> or use <strong>3D (Cesium)</strong> view.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="relative w-full h-full rounded-xl overflow-hidden">
+    <div className="relative w-full h-full rounded-md overflow-hidden">
       <DeckGL
         viewState={viewState}
         onViewStateChange={({ viewState }) => setViewState(viewState)}
@@ -122,7 +135,7 @@ export default function MapView({
       </DeckGL>
 
       {/* Legend */}
-      <div className="absolute bottom-4 left-4 glass rounded-xl p-4">
+      <div className="absolute bottom-4 left-4 glass rounded-md p-4">
         <p className="text-sm font-medium mb-3">Risk Legend</p>
         <div className="space-y-2 text-xs">
           <div className="flex items-center gap-2">
@@ -141,7 +154,7 @@ export default function MapView({
       </div>
 
       {/* Controls */}
-      <div className="absolute top-4 right-4 glass rounded-xl p-2 space-y-2">
+      <div className="absolute top-4 right-4 glass rounded-md p-2 space-y-2">
         <button
           onClick={() => setViewState({ ...viewState, zoom: viewState.zoom + 1 })}
           className="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-dark-card transition-colors"

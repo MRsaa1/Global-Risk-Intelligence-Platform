@@ -109,13 +109,15 @@ def _nvidia_nim_fourcastnet_status() -> dict[str, Any]:
     """FourCastNet NIM."""
     url = (getattr(settings, "fourcastnet_nim_url", "") or "").strip()
     use_local = getattr(settings, "use_local_nim", False)
+    use_nim_weather = getattr(settings, "use_nim_weather", True)
     return {
         "product": "Earth-2 FourCastNet NIM",
         "used_for": "Weather forecasting, climate stress pipeline",
         "configured": use_local and bool(url),
+        "enabled": use_nim_weather,
         "url": url or "(not set)",
-        "status": "enabled" if (use_local and url) else "disabled",
-        "source": "Config: USE_LOCAL_NIM, fourcastnet_nim_url",
+        "status": "enabled" if (use_local and url and use_nim_weather) else "disabled",
+        "source": "Config: USE_LOCAL_NIM, use_nim_weather, fourcastnet_nim_url",
         "call": f"GET {url}/v1/health/ready" if url else "—",
     }
 
@@ -138,13 +140,15 @@ def _nvidia_nim_corrdiff_status() -> dict[str, Any]:
 def _nvidia_nim_flux_status() -> dict[str, Any]:
     """FLUX NIM."""
     url = (getattr(settings, "flux_nim_url", "") or "").strip()
+    use_nim_flux = getattr(settings, "use_nim_flux", True)
     return {
         "product": "FLUX.1-dev NIM",
         "used_for": "REPORTER agent image generation",
         "configured": bool(url),
+        "enabled": use_nim_flux,
         "url": url or "(not set)",
-        "status": "enabled" if url else "disabled",
-        "source": "Config: flux_nim_url",
+        "status": "enabled" if (url and use_nim_flux) else "disabled",
+        "source": "Config: use_nim_flux, flux_nim_url",
         "call": f"GET {url}/v1/health/ready" if url else "—",
     }
 
@@ -329,9 +333,11 @@ async def _false() -> bool:
 async def get_nvidia_services_status() -> dict[str, dict[str, Any]]:
     """
     Полный чеклист: статус конфигурации + по возможности проверка доступности NIM и Riva.
+    Добавляет recommended_actions когда сервис недоступен (например fallback на Open-Meteo для погоды).
     """
     status = get_nvidia_services_status_sync()
     use_local = getattr(settings, "use_local_nim", False)
+    recommendations: list[str] = []
 
     if use_local:
         fourcastnet_url = (getattr(settings, "fourcastnet_nim_url", "") or "").strip()
@@ -345,10 +351,16 @@ async def get_nvidia_services_status() -> dict[str, dict[str, Any]]:
         )
         if fourcastnet_url:
             status["fourcastnet_nim"]["ready"] = r_f
+            if not r_f:
+                recommendations.append("FourCastNet NIM unavailable — weather via Open-Meteo/Weather adapter.")
         if corrdiff_url:
             status["corrdiff_nim"]["ready"] = r_c
+            if not r_c:
+                recommendations.append("CorrDiff NIM unavailable — high-res climate downscaling disabled.")
         if flux_url:
             status["flux_nim"]["ready"] = r_fx
+            if not r_fx:
+                recommendations.append("FLUX NIM unavailable — image generation via cloud or disabled.")
 
     # Riva health (when enabled)
     if status.get("riva", {}).get("configured"):
@@ -373,6 +385,18 @@ async def get_nvidia_services_status() -> dict[str, dict[str, Any]]:
             status["triton"]["ready"] = await _check_triton_ready(triton_url)
         else:
             status["triton"]["ready"] = False
+
+    # LLM: when local NIM is configured but not ready, recommend cloud fallback
+    if getattr(settings, "nvidia_mode", "cloud") == "local":
+        llama_url = (getattr(settings, "llama_nim_url", "") or "").strip()
+        if llama_url:
+            llama_ready = await _check_nim_ready(llama_url)
+            status.setdefault("nvidia_llm", {})["local_nim_ready"] = llama_ready
+            if not llama_ready:
+                recommendations.append("Local Llama NIM unavailable — set nvidia_mode=cloud to use NVIDIA API.")
+
+    if recommendations:
+        status["recommended_actions"] = {"messages": recommendations}
 
     return status
 

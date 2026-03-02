@@ -81,7 +81,7 @@ export default function SceneScenarioOverlay({ value, onChange }: SceneScenarioO
     <div className="pointer-events-auto">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="glass rounded-xl px-3 py-2 flex items-center gap-2 border border-white/10 hover:border-white/20 transition-colors"
+        className="glass rounded-md px-3 py-2 flex items-center gap-2 border border-white/10 hover:border-white/20 transition-colors"
       >
         <SparklesIcon className="w-4 h-4 text-primary-300" />
         <span className="text-xs text-white/80 truncate max-w-[180px]">{selected.name}</span>
@@ -94,7 +94,7 @@ export default function SceneScenarioOverlay({ value, onChange }: SceneScenarioO
             initial={{ opacity: 0, y: 8, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.98 }}
-            className="mt-2 glass rounded-xl border border-white/10 overflow-hidden w-[320px] max-h-[320px]"
+            className="mt-2 glass rounded-md border border-white/10 overflow-hidden w-[320px] max-h-[320px]"
           >
             <div className="max-h-[320px] overflow-y-auto custom-scrollbar">
               {options.map((opt) => (

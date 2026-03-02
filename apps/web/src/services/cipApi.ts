@@ -134,14 +134,24 @@ export async function getCIPStatus(): Promise<{
 }
 
 /**
- * Get available infrastructure types and criticality levels
+ * Get available infrastructure types (for register form dropdown)
  */
 export async function getInfrastructureTypes(): Promise<{
-  infrastructure_types: string[]
-  criticality_levels: string[]
+  types: Array<{ value: string; name: string }>
 }> {
   const response = await fetch(`${API_BASE}/types`)
   if (!response.ok) throw new Error('Failed to fetch infrastructure types')
+  return response.json()
+}
+
+/**
+ * Get criticality levels (for register form dropdown)
+ */
+export async function getCriticalityLevels(): Promise<{
+  levels: Array<{ value: string; name: string; description?: string }>
+}> {
+  const response = await fetch(`${API_BASE}/criticality-levels`)
+  if (!response.ok) throw new Error('Failed to fetch criticality levels')
   return response.json()
 }
 
@@ -150,8 +160,8 @@ export async function getInfrastructureTypes(): Promise<{
  */
 export async function registerInfrastructure(
   data: RegisterInfrastructureRequest
-): Promise<{ success: boolean; infrastructure: Infrastructure }> {
-  const response = await fetch(`${API_BASE}/infrastructure/register`, {
+): Promise<Infrastructure> {
+  const response = await fetch(`${API_BASE}/infrastructure`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -187,19 +197,25 @@ export async function listInfrastructure(filters?: {
   if (filters?.limit) params.set('limit', filters.limit.toString())
   if (filters?.offset) params.set('offset', filters.offset.toString())
   
-  const url = params.toString() 
-    ? `${API_BASE}/infrastructure?${params}` 
+  const url = params.toString()
+    ? `${API_BASE}/infrastructure?${params}`
     : `${API_BASE}/infrastructure`
-  
   const response = await fetch(url)
   if (!response.ok) throw new Error('Failed to list infrastructure')
-  return response.json()
+  const data = await response.json()
+  const list = Array.isArray(data) ? data : (data.infrastructure || [])
+  return {
+    infrastructure: list,
+    count: list.length,
+    limit: filters?.limit ?? 100,
+    offset: filters?.offset ?? 0,
+  }
 }
 
 /**
  * Get single infrastructure by ID
  */
-export async function getInfrastructure(id: string): Promise<{ infrastructure: Infrastructure }> {
+export async function getInfrastructure(id: string): Promise<Infrastructure> {
   const response = await fetch(`${API_BASE}/infrastructure/${id}`)
   if (!response.ok) throw new Error('Infrastructure not found')
   return response.json()
@@ -225,6 +241,94 @@ export async function getInfrastructureDependencies(
 }
 
 /**
+ * Run cascade simulation (FR-CIP-006)
+ */
+export async function runCascadeSimulation(data: {
+  initial_failure_ids: string[]
+  time_horizon_hours?: number
+  name?: string
+}): Promise<{
+  id: string
+  name: string
+  timeline: Array<{ step: number; hour: number; affected_ids: string[]; impact_score: number }>
+  affected_assets: Array<{ infrastructure_id: string; depth: number }>
+  impact_score: number
+  recovery_time_hours: number
+  total_affected: number
+  population_affected: number
+}> {
+  const response = await fetch(`${API_BASE}/simulations/cascade`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}))
+    throw new Error(err.detail || 'Failed to run cascade simulation')
+  }
+  return response.json()
+}
+
+/**
+ * List cascade simulations
+ */
+export async function listCascadeSimulations(limit = 20): Promise<
+  Array<{ id: string; name: string; total_affected: number; impact_score: number; created_at: string }>
+> {
+  const response = await fetch(`${API_BASE}/simulations?limit=${limit}`)
+  if (!response.ok) throw new Error('Failed to list simulations')
+  return response.json()
+}
+
+/**
+ * Get cascade simulation by ID
+ */
+export async function getCascadeSimulation(id: string): Promise<{
+  id: string
+  name: string
+  timeline: Array<{ step: number; hour: number; affected_ids: string[]; impact_score: number }>
+  affected_assets: Array<{ infrastructure_id: string; depth: number }>
+  impact_score: number
+  recovery_time_hours: number
+}> {
+  const response = await fetch(`${API_BASE}/simulations/${id}`)
+  if (!response.ok) throw new Error('Simulation not found')
+  return response.json()
+}
+
+/**
+ * Get full dependency graph (nodes + edges) for map/graph visualization
+ */
+export async function getDependenciesGraph(limit: number = 500): Promise<{
+  nodes: Array<{
+    id: string
+    cip_id: string
+    name: string
+    infrastructure_type: string
+    criticality_level: string
+    operational_status: string
+    latitude?: number
+    longitude?: number
+    country_code?: string
+    region?: string
+    city?: string
+    cascade_risk_score?: number | null
+    vulnerability_score?: number | null
+  }>
+  edges: Array<{
+    id: string
+    source_id: string
+    target_id: string
+    strength: number
+    dependency_type: string
+  }>
+}> {
+  const response = await fetch(`${API_BASE}/dependencies/graph?limit=${limit}`)
+  if (!response.ok) throw new Error('Failed to get dependency graph')
+  return response.json()
+}
+
+/**
  * Add dependency between infrastructure
  */
 export async function addDependency(data: {
@@ -234,7 +338,7 @@ export async function addDependency(data: {
   strength?: number
   propagation_delay_minutes?: number
   description?: string
-}): Promise<{ success: boolean; dependency: Dependency }> {
+}): Promise<Dependency> {
   const response = await fetch(`${API_BASE}/dependencies`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -271,9 +375,9 @@ export async function getVulnerabilityAssessment(id: string): Promise<Vulnerabil
 }
 
 /**
- * Run cascade failure simulation
+ * Run cascade failure scenario (legacy: single source, /scenarios/cascade)
  */
-export async function runCascadeSimulation(params: {
+export async function runCascadeScenarioSimulation(params: {
   source_infrastructure_id: string
   failure_severity?: number
   max_depth?: number

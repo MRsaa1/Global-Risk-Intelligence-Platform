@@ -29,28 +29,28 @@ const iconMap = {
 
 const colorMap = {
   stress_test: {
-    bg: 'bg-amber-500/10',
-    border: 'border-amber-500/20',
-    text: 'text-amber-400',
-    progress: 'bg-amber-500',
+    bg: 'bg-zinc-800',
+    border: 'border-zinc-700',
+    text: 'text-zinc-400',
+    progress: 'bg-zinc-500',
   },
   zone_selection: {
-    bg: 'bg-blue-500/10',
-    border: 'border-blue-500/20',
-    text: 'text-blue-400',
-    progress: 'bg-blue-500',
+    bg: 'bg-zinc-800',
+    border: 'border-zinc-700',
+    text: 'text-zinc-400',
+    progress: 'bg-zinc-500',
   },
   digital_twin: {
-    bg: 'bg-purple-500/10',
-    border: 'border-purple-500/20',
-    text: 'text-purple-400',
-    progress: 'bg-purple-500',
+    bg: 'bg-zinc-800',
+    border: 'border-zinc-700',
+    text: 'text-zinc-400',
+    progress: 'bg-zinc-500',
   },
   simulation: {
-    bg: 'bg-emerald-500/10',
-    border: 'border-emerald-500/20',
-    text: 'text-emerald-400',
-    progress: 'bg-emerald-500',
+    bg: 'bg-zinc-800',
+    border: 'border-zinc-700',
+    text: 'text-zinc-400',
+    progress: 'bg-zinc-500',
   },
 }
 
@@ -70,7 +70,7 @@ export default function ActiveOperationBadge({
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.9, y: -10 }}
       className={`
-        flex items-center gap-3 px-4 py-2 rounded-xl
+        flex items-center gap-3 px-4 py-2 rounded-md
         ${colors.bg} border ${colors.border}
       `}
     >
@@ -84,19 +84,19 @@ export default function ActiveOperationBadge({
             {name}
           </span>
           {status === 'running' && (
-            <span className="text-xs text-white/40">Running...</span>
+            <span className="text-xs text-zinc-500">Running...</span>
           )}
           {status === 'completed' && (
-            <span className="text-xs text-emerald-400">Completed</span>
+            <span className="text-xs text-emerald-400/80">Completed</span>
           )}
           {status === 'failed' && (
-            <span className="text-xs text-red-400">Failed</span>
+            <span className="text-xs text-red-400/80">Failed</span>
           )}
         </div>
         
         {/* Progress bar */}
         {progress !== undefined && status === 'running' && (
-          <div className="mt-1.5 h-1 bg-white/5 rounded-full overflow-hidden">
+          <div className="mt-1.5 h-1 bg-zinc-800 rounded-full overflow-hidden">
             <motion.div
               className={`h-full ${colors.progress}`}
               initial={{ width: 0 }}
@@ -109,7 +109,7 @@ export default function ActiveOperationBadge({
       
       {/* Progress percentage */}
       {progress !== undefined && (
-        <span className="text-xs text-white/50 font-mono">
+        <span className="text-xs text-zinc-400 font-mono">
           {progress}%
         </span>
       )}

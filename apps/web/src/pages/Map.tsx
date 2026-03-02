@@ -30,7 +30,7 @@ export default function Map() {
     }))
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col bg-zinc-950">
       {/* Header */}
       <div className="p-6 border-b border-dark-border">
         <div className="flex items-center justify-between">
@@ -41,7 +41,7 @@ export default function Map() {
             </p>
           </div>
           <div className="flex gap-2">
-            <label className="flex items-center gap-2 px-4 py-2 bg-dark-card rounded-xl cursor-pointer hover:bg-dark-bg transition-colors">
+            <label className="flex items-center gap-2 px-4 py-2 bg-dark-card rounded-md cursor-pointer hover:bg-dark-bg transition-colors">
               <input
                 type="checkbox"
                 checked={showRiskHeatmap}
@@ -50,7 +50,7 @@ export default function Map() {
               />
               <span className="text-sm">Risk Heatmap</span>
             </label>
-            <label className="flex items-center gap-2 px-4 py-2 bg-dark-card rounded-xl cursor-pointer hover:bg-dark-bg transition-colors">
+            <label className="flex items-center gap-2 px-4 py-2 bg-dark-card rounded-md cursor-pointer hover:bg-dark-bg transition-colors">
               <input
                 type="checkbox"
                 checked={showInfrastructure}

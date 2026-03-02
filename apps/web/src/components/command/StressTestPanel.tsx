@@ -8,6 +8,7 @@
  * - Results at bottom
  */
 import { useState, useRef, useMemo } from 'react'
+import { getApiBase } from '../../config/env'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 
@@ -17,6 +18,10 @@ interface StressTestPanelProps {
     expectedLoss: number
     capitalImpact: number
   }
+  /** When set, show "Play 4D Timeline" button; required for timeline playback */
+  completedStressTestId?: string | null
+  /** Called with CZML URL when user clicks "Play 4D Timeline" */
+  onPlayTimeline?: (url: string) => void
 }
 
 // Europe from space - realistic satellite view
@@ -222,7 +227,8 @@ function EuropeFromSpace() {
   )
 }
 
-export default function StressTestPanel({ data }: StressTestPanelProps) {
+
+export default function StressTestPanel({ data, completedStressTestId, onPlayTimeline }: StressTestPanelProps) {
   const [scenarios, setScenarios] = useState(data.scenarios)
   const [sliderValue, setSliderValue] = useState(50)
 
@@ -233,27 +239,27 @@ export default function StressTestPanel({ data }: StressTestPanelProps) {
   }
 
   return (
-    <div className="h-full flex flex-col bg-[#000510]">
+    <div className="h-full flex flex-col bg-[#09090b]">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-[#1a2535]">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-[#27272a]">
         <div className="flex items-center gap-2">
-          <svg className="w-4 h-4 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
+          <svg className="w-4 h-4 text-zinc-400" fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M7 2a1 1 0 00-.707 1.707L7 4.414v3.758a1 1 0 01-.293.707l-4 4C.817 14.769 2.156 18 4.828 18h10.343c2.673 0 4.012-3.231 2.122-5.121l-4-4A1 1 0 0113 8.172V4.414l.707-.707A1 1 0 0013 2H7zm2 6.172V4h2v4.172a3 3 0 00.879 2.12l1.027 1.028a4 4 0 00-2.171.102l-.47.156a4 4 0 01-2.53 0l-.563-.187a1.993 1.993 0 00-.114-.035l1.063-1.063A3 3 0 009 8.172z" clipRule="evenodd" />
           </svg>
-          <span className="text-white font-medium text-sm">Global Stress Testing</span>
+          <span className="text-zinc-100 font-medium text-sm">Global Stress Testing</span>
         </div>
         <div className="flex gap-2">
-          <button className="p-1 text-gray-500 hover:text-white">
+          <button className="p-1 text-zinc-500 hover:text-zinc-100">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-          <button className="p-1 text-gray-500 hover:text-white">
+          <button className="p-1 text-zinc-500 hover:text-zinc-100">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
             </svg>
           </button>
-          <button className="p-1 text-gray-500 hover:text-white">
+          <button className="p-1 text-zinc-500 hover:text-zinc-100">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
@@ -265,9 +271,9 @@ export default function StressTestPanel({ data }: StressTestPanelProps) {
       <div className="flex-1 flex relative">
         {/* Left - Scenarios */}
         <div className="w-44 p-3 space-y-2 z-10">
-          <div className="flex items-center gap-1.5 text-gray-500 text-[10px] mb-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></div>
-            <span className="text-amber-400">Stress Lab</span>
+          <div className="flex items-center gap-1.5 text-zinc-500 text-[10px] mb-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-zinc-500 animate-pulse"></div>
+            <span className="text-zinc-400">Stress Lab</span>
             <span>Simulation</span>
           </div>
 
@@ -277,25 +283,25 @@ export default function StressTestPanel({ data }: StressTestPanelProps) {
               onClick={() => toggleScenario(scenario.id)}
               className={`p-2 rounded border cursor-pointer transition-all ${
                 scenario.active
-                  ? 'border-amber-500/50 bg-amber-500/10'
-                  : 'border-[#1a2535] hover:border-gray-600'
+                  ? 'border-zinc-600 bg-zinc-700'
+                  : 'border-[#27272a] hover:border-zinc-600'
               }`}
             >
               <div className="flex items-center gap-1.5">
-                <span className={`text-xs font-bold ${scenario.active ? 'text-amber-500' : 'text-gray-600'}`}>
+                <span className={`text-xs font-bold ${scenario.active ? 'text-zinc-400' : 'text-zinc-600'}`}>
                   {index + 1}.
                 </span>
-                <span className={`text-xs ${scenario.active ? 'text-amber-400' : 'text-gray-500'}`}>
+                <span className={`text-xs ${scenario.active ? 'text-zinc-400' : 'text-zinc-500'}`}>
                   {scenario.name}
                 </span>
                 {scenario.value && (
-                  <span className={`text-xs font-medium ml-auto ${scenario.active ? 'text-white' : 'text-gray-600'}`}>
+                  <span className={`text-xs font-medium ml-auto ${scenario.active ? 'text-zinc-100' : 'text-zinc-600'}`}>
                     {scenario.value}
                   </span>
                 )}
               </div>
               {!scenario.value && (
-                <div className="flex items-center gap-1 mt-1 text-gray-600">
+                <div className="flex items-center gap-1 mt-1 text-zinc-600">
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
@@ -314,14 +320,14 @@ export default function StressTestPanel({ data }: StressTestPanelProps) {
       </div>
 
       {/* Bottom - Controls & Results */}
-      <div className="px-4 py-2.5 border-t border-[#1a2535] bg-[#0a0f18]/90 backdrop-blur-sm space-y-2">
+      <div className="px-4 py-2.5 border-t border-[#27272a] bg-[#09090b]/90 space-y-2">
         {/* Slider */}
         <div className="flex items-center gap-3 text-xs">
-          <span className="text-gray-400 w-14">Baseline</span>
+          <span className="text-zinc-500 w-14">Baseline</span>
           <div className="flex-1 relative">
-            <div className="h-1 bg-[#1a2535] rounded-full">
+            <div className="h-1 bg-[#27272a] rounded-full">
               <div 
-                className="h-full bg-amber-500 rounded-full"
+                className="h-full bg-zinc-500 rounded-full"
                 style={{ width: `${sliderValue}%` }}
               />
             </div>
@@ -333,7 +339,7 @@ export default function StressTestPanel({ data }: StressTestPanelProps) {
               onChange={(e) => setSliderValue(parseInt(e.target.value))}
               className="absolute inset-0 w-full opacity-0 cursor-pointer"
             />
-            <div className="flex justify-between text-gray-600 mt-1 text-[10px]">
+            <div className="flex justify-between text-zinc-600 mt-1 text-[10px]">
               <span>Scenario A</span>
               <span>Scenario B</span>
               <span>O</span>
@@ -342,14 +348,30 @@ export default function StressTestPanel({ data }: StressTestPanelProps) {
         </div>
 
         {/* Results */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 flex-wrap">
           <div className="flex items-center gap-2">
-            <span className="text-gray-400 text-xs">Expected Loss:</span>
-            <span className="text-amber-500 font-bold">${data.expectedLoss}B</span>
+            <span className="text-zinc-500 text-xs">Expected Loss:</span>
+            <span className="text-zinc-400 font-bold">${data.expectedLoss}B</span>
           </div>
+
+          {completedStressTestId && onPlayTimeline && (
+            <button
+              type="button"
+              title="Load timeline on globe; controls appear at bottom of globe"
+              onClick={() => {
+                const base = getApiBase()
+                const path = `/api/v1/stress-tests/${completedStressTestId}/czml`
+                const url = base ? `${base.replace(/\/+$/, '')}${path}` : path
+                onPlayTimeline(url)
+              }}
+              className="px-3 py-1.5 rounded text-xs font-medium bg-amber-600 hover:bg-amber-500 text-black border border-amber-500"
+            >
+              Play 4D Timeline
+            </button>
+          )}
           
-          <div className="flex items-center gap-2 px-2 py-1 rounded bg-[#111827] border border-[#1a2535]">
-            <span className="text-gray-400 text-xs">Capital Impact:</span>
+          <div className="flex items-center gap-2 px-2 py-1 rounded bg-[#18181b] border border-[#27272a]">
+            <span className="text-zinc-500 text-xs">Capital Impact:</span>
             <span className="text-red-500 font-bold flex items-center gap-0.5">
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
@@ -371,7 +393,7 @@ export default function StressTestPanel({ data }: StressTestPanelProps) {
               />
             ))}
           </div>
-          <div className="flex gap-3 text-[9px] text-gray-500">
+          <div className="flex gap-3 text-[9px] text-zinc-500">
             <span>T0</span>
             <span>+1 Year</span>
             <span>+3 Years</span>

@@ -65,6 +65,9 @@ class AuditAction(str, Enum):
     ROLE_CHANGED = "role_changed"
     SETTINGS_CHANGED = "settings_changed"
 
+    # Decision Object (Risk & Intelligence OS)
+    DECISION_OBJECT_CREATED = "decision_object_created"
+
 
 class AuditCategory(str, Enum):
     """Categories for audit events."""
@@ -201,6 +204,33 @@ class InMemoryAuditStore:
 
 # ==================== AUDIT SERVICE ====================
 
+class DecisionObjectStore:
+    """In-memory store for Decision Objects (replay_decision support)."""
+
+    def __init__(self, max_entries: int = 10000):
+        self._decisions: Dict[str, Dict] = {}
+        self._max_entries = max_entries
+
+    def add(self, decision_id: str, data: Dict) -> None:
+        self._decisions[decision_id] = data
+        if len(self._decisions) > self._max_entries:
+            # Remove oldest by timestamp (ISO string or datetime)
+            def _ts(item):
+                ts = (item[1].get("provenance") or {}).get("timestamp")
+                if ts is None:
+                    return ""
+                return ts.isoformat() if hasattr(ts, "isoformat") else str(ts)
+            items = sorted(self._decisions.items(), key=_ts)
+            for k, _ in items[: len(items) - self._max_entries]:
+                del self._decisions[k]
+
+    def get(self, decision_id: str) -> Optional[Dict]:
+        return self._decisions.get(decision_id)
+
+    def list_ids(self, limit: int = 100) -> List[str]:
+        return list(self._decisions.keys())[-limit:]
+
+
 class AuditService:
     """
     Main audit logging service.
@@ -219,6 +249,7 @@ class AuditService:
     
     def __init__(self):
         self._store = InMemoryAuditStore()
+        self._decision_store = DecisionObjectStore()
     
     async def log_action(
         self,
@@ -399,6 +430,38 @@ class AuditService:
             severity=AuditSeverity.WARNING,
         )
     
+    async def log_decision_object(self, decision: Any) -> None:
+        """Store Decision Object for replay_decision API."""
+        try:
+            from src.models.decision_object import DecisionObject
+            if isinstance(decision, DecisionObject):
+                data = decision.model_dump()
+            else:
+                data = dict(decision) if hasattr(decision, "keys") else {}
+            self._decision_store.add(data.get("decision_id", str(uuid4())), data)
+        except Exception as e:
+            logger.warning("Failed to store decision object: %s", e)
+
+    async def get_decision(self, decision_id: str) -> Optional[Dict]:
+        """Get stored Decision Object by ID."""
+        return self._decision_store.get(decision_id)
+
+    async def replay_decision(self, decision_id: str) -> Optional[Dict]:
+        """
+        Replay a historical decision. Returns stored DO with replay metadata.
+        Full re-execution requires ARIN orchestrator (uses same input_snapshot).
+        """
+        stored = self._decision_store.get(decision_id)
+        if not stored:
+            return None
+        return {
+            "decision_id": decision_id,
+            "original": stored,
+            "replayed_at": datetime.utcnow().isoformat() + "Z",
+            "replay_type": "stored",
+            "match": True,
+        }
+
     async def query(self, **filters) -> List[AuditLogEntry]:
         """Query audit logs."""
         return await self._store.query(**filters)

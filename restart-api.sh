@@ -32,12 +32,21 @@ fi
 
 # Активировать venv и установить зависимости при первом запуске
 source .venv/bin/activate
+
+# Ensure package is installed (fixes ModuleNotFoundError: src.services.cache)
+if ! python -c "from src.services.cache import get_cache" 2>/dev/null; then
+  echo "📦 Устанавливаю пакет API (pip install -e .)..."
+  pip install -e . -q 2>/dev/null || pip install -e '.[dev]' -q 2>/dev/null
+fi
 if ! python -c "import uvicorn" 2>/dev/null; then
   echo "📦 Устанавливаю зависимости (pip install)..."
   pip install -e '.[dev]' 2>/dev/null || pip install -e . 2>/dev/null || pip install "uvicorn[standard]" fastapi pydantic pydantic-settings
 fi
 
+# Ensure modules resolve when running from this directory
+export PYTHONPATH="${API_DIR}:${PYTHONPATH:-}"
+
 echo "🚀 Запуск API на http://0.0.0.0:9002"
 echo "   Документация: http://localhost:9002/docs"
 echo ""
-exec uvicorn src.main:app --reload --host 0.0.0.0 --port 9002
+exec uvicorn src.main:app --reload --host 0.0.0.0 --port 9002 --no-access-log

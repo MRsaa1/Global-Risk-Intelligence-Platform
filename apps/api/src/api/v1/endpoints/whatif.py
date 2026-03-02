@@ -302,7 +302,6 @@ async def run_sensitivity_analysis(request: SensitivityRequest):
             num_points=request.num_points,
             base_exposure=request.base_exposure,
         )
-        
         return SensitivityResponse(
             parameter_name=result.parameter_name,
             base_value=result.base_value,
@@ -314,6 +313,9 @@ async def run_sensitivity_analysis(request: SensitivityRequest):
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("Sensitivity analysis failed")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/compare", response_model=ComparisonResponse)
@@ -371,7 +373,45 @@ async def optimize_mitigation(request: OptimizeRequest):
     }
 
 
-# ==================== CASCADE ANALYSIS ENDPOINTS ====================
+class AutonomousWhatIfRequest(BaseModel):
+    """Request for autonomous what-if scenario generation."""
+    asset_id: Optional[str] = Field(None, description="Asset to analyze; default 'default'")
+    context: Optional[Dict[str, Any]] = Field(None, description="Context dict (asset details, risk data, graph)")
+    num_scenarios: int = Field(20, ge=1, le=100, description="Number of scenarios to generate")
+
+
+@router.post("/autonomous")
+async def autonomous_whatif(body: Optional[AutonomousWhatIfRequest] = None):
+    """
+    Autonomously generate what-if scenarios for an asset.
+    Uses WhatIfGenerator (LLM + optional CascadeEngine) to produce scenarios and run cascade.
+    """
+    from src.services.whatif_generator import get_whatif_generator
+    req = body or AutonomousWhatIfRequest()
+    generator = get_whatif_generator()
+    results = await generator.generate_scenarios(
+        asset_id=req.asset_id or "default",
+        context=req.context or {},
+        num_scenarios=req.num_scenarios,
+    )
+    return {
+        "scenarios": [
+            {
+                "scenario": {
+                    "scenario_id": r.scenario.scenario_id,
+                    "name": r.scenario.name,
+                    "parameters": r.scenario.parameters,
+                    "severity": r.scenario.severity,
+                    "description": r.scenario.description,
+                },
+                "cascade_result": r.cascade_result,
+                "unexpected_findings": r.unexpected_findings,
+            }
+            for r in results
+        ],
+        "count": len(results),
+    }
+
 
 @router.get("")
 async def whatif_root():
@@ -521,18 +561,24 @@ async def simulate_cascade(request: CascadeSimRequest):
 
 @router.get("/cascade/vulnerability", response_model=VulnerabilityResponse)
 async def analyze_vulnerability():
-    """Analyze network vulnerability."""
-    result = await cascade_gnn_service.analyze_vulnerability()
-    
-    return VulnerabilityResponse(
-        most_critical_nodes=[
-            {"node_id": n, "criticality": c}
-            for n, c in result.most_critical_nodes
-        ],
-        single_points_of_failure=result.single_points_of_failure,
-        network_resilience_score=result.network_resilience_score,
-        recommendations=result.recommendations,
-    )
+    """Analyze network vulnerability. Uses current graph in memory (from sample or build-from-context)."""
+    try:
+        result = await cascade_gnn_service.analyze_vulnerability()
+        return VulnerabilityResponse(
+            most_critical_nodes=[
+                {"node_id": str(n), "criticality": float(c)}
+                for n, c in result.most_critical_nodes
+            ],
+            single_points_of_failure=[str(s) for s in result.single_points_of_failure],
+            network_resilience_score=result.network_resilience_score,
+            recommendations=result.recommendations or [],
+        )
+    except Exception as e:
+        logger.exception("cascade vulnerability analysis failed: %s", e)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Vulnerability analysis failed: {str(e)}. Ensure the graph is loaded (use Reset Graph first).",
+        ) from e
 
 
 @router.get("/cascade/graph")

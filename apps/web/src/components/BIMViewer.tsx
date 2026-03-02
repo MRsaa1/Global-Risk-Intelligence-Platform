@@ -525,11 +525,11 @@ function IFCModel({ ifcUrl, ifcData, onLoad, onError, selectedElementId, onEleme
     return (
       <Html center>
         <div className="text-center">
-          <div className="w-16 h-16 mx-auto mb-3 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
-            <BuildingOffice2Icon className="w-8 h-8 text-white animate-pulse" />
+          <div className="w-16 h-16 mx-auto mb-3 rounded-md bg-gradient-to-br from-zinc-500 to-zinc-600 flex items-center justify-center">
+            <BuildingOffice2Icon className="w-8 h-8 text-zinc-100 animate-pulse" />
           </div>
-          <p className="text-sm text-white/80 mb-1">Loading BIM model...</p>
-          <p className="text-xs text-white/50">{loadingStatus}</p>
+          <p className="text-sm text-zinc-200 mb-1">Loading BIM model...</p>
+          <p className="text-xs text-zinc-500">{loadingStatus}</p>
         </div>
       </Html>
     )
@@ -539,11 +539,11 @@ function IFCModel({ ifcUrl, ifcData, onLoad, onError, selectedElementId, onEleme
     return (
       <Html center>
         <div className="text-center max-w-xs">
-          <div className="w-12 h-12 mx-auto mb-2 rounded-xl bg-red-500/20 flex items-center justify-center">
-            <CubeIcon className="w-6 h-6 text-red-400" />
+          <div className="w-12 h-12 mx-auto mb-2 rounded-md bg-red-500/20 flex items-center justify-center">
+            <CubeIcon className="w-6 h-6 text-red-400/80" />
           </div>
-          <p className="text-red-400 mb-2 font-medium">Error loading BIM</p>
-          <p className="text-xs text-white/50">{error}</p>
+          <p className="text-red-400/80 mb-2 font-medium">Error loading BIM</p>
+          <p className="text-xs text-zinc-500">{error}</p>
         </div>
       </Html>
     )
@@ -553,11 +553,11 @@ function IFCModel({ ifcUrl, ifcData, onLoad, onError, selectedElementId, onEleme
     return (
       <Html center>
         <div className="text-center">
-          <div className="w-12 h-12 mx-auto mb-2 rounded-xl bg-white/10 flex items-center justify-center">
-            <CubeTransparentIcon className="w-6 h-6 text-white/40" />
+          <div className="w-12 h-12 mx-auto mb-2 rounded-md bg-zinc-700 flex items-center justify-center">
+            <CubeTransparentIcon className="w-6 h-6 text-zinc-500" />
           </div>
-          <p className="text-sm text-white/60">No IFC file loaded</p>
-          <p className="text-xs text-white/40 mt-1">Upload an IFC file to view</p>
+          <p className="text-sm text-zinc-400">No IFC file loaded</p>
+          <p className="text-xs text-zinc-500 mt-1">Upload an IFC file to view</p>
         </div>
       </Html>
     )
@@ -590,8 +590,11 @@ export default function BIMViewer({ ifcUrl, ifcData, assetId, onBimUploaded, onL
     return () => {
       if (glRef.current) {
         try {
+          const gl = glRef.current.getContext()
+          if (gl && typeof (gl as WebGLRenderingContext).isContextLost === 'function' && !(gl as WebGLRenderingContext).isContextLost()) {
+            glRef.current.forceContextLoss()
+          }
           glRef.current.dispose()
-          glRef.current.forceContextLoss()
         } catch {
           // Ignore disposal errors
         }
@@ -655,22 +658,22 @@ export default function BIMViewer({ ifcUrl, ifcData, assetId, onBimUploaded, onL
 
   if (hasNoIfc) {
     return (
-      <div className="relative w-full h-full min-h-[320px] bg-[#0a0f1a] rounded-xl overflow-hidden flex items-center justify-center">
+      <div className="relative w-full h-full min-h-[320px] bg-[#09090b] rounded-md overflow-hidden flex items-center justify-center">
         <div className="text-center px-6 py-8 max-w-lg">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-white/10 flex items-center justify-center">
-            <CubeTransparentIcon className="w-8 h-8 text-white/50" />
+          <div className="w-16 h-16 mx-auto mb-4 rounded-md bg-zinc-700 flex items-center justify-center">
+            <CubeTransparentIcon className="w-8 h-8 text-zinc-500" />
           </div>
-          <p className="text-base font-medium text-white/90 mb-1">No IFC file loaded</p>
-          <p className="text-sm text-white/50 mb-4">Load a demo model or upload your own IFC file.</p>
+          <p className="text-base font-medium text-zinc-100 mb-1">No IFC file loaded</p>
+          <p className="text-sm text-zinc-500 mb-4">Load a demo model or upload your own IFC file.</p>
 
           {demoLoadError && (
-            <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-left">
+            <div className="mb-4 p-3 rounded-md bg-red-500/10 border border-red-500/20 text-left">
               <p className="text-sm text-red-300 mb-2">{demoLoadError}</p>
-              <p className="text-xs text-white/50 mb-2">Remote demos often fail (CORS/404). For a reliable test: use &quot;Local demo&quot; after placing a .ifc in <code className="text-cyan-400/80">public/samples/demo.ifc</code>, or use &quot;Upload from disk&quot;.</p>
+              <p className="text-xs text-zinc-500 mb-2">Remote demos often fail (CORS/404). For a reliable test: use &quot;Local demo&quot; after placing a .ifc in <code className="text-zinc-400">public/samples/demo.ifc</code>, or use &quot;Upload from disk&quot;.</p>
               <button
                 type="button"
                 onClick={() => setDemoLoadError(null)}
-                className="text-xs text-cyan-400 hover:text-cyan-300"
+                className="text-xs text-zinc-400 hover:text-zinc-300"
               >
                 Try another
               </button>
@@ -678,14 +681,14 @@ export default function BIMViewer({ ifcUrl, ifcData, assetId, onBimUploaded, onL
           )}
 
           <div className="mb-4">
-            <p className="text-xs text-white/50 mb-2 uppercase tracking-wide">Demo models</p>
+            <p className="text-xs text-zinc-500 mb-2 uppercase tracking-wide">Demo models</p>
             <div className="flex flex-wrap gap-2 justify-center">
               {DEMO_PRESETS.map((preset) => (
                 <button
                   key={preset.id}
                   type="button"
                   onClick={() => handleLoadDemo(preset.url)}
-                  className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-cyan-500/20 border border-cyan-500/30 text-cyan-200 text-sm font-medium hover:bg-cyan-500/30 transition-colors"
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-zinc-700 border border-zinc-600 text-zinc-200 text-sm font-medium hover:bg-zinc-600 transition-colors"
                 >
                   <CubeIcon className="w-4 h-4" />
                   {preset.name}
@@ -708,7 +711,7 @@ export default function BIMViewer({ ifcUrl, ifcData, assetId, onBimUploaded, onL
                 type="button"
                 onClick={handleUploadClick}
                 disabled={uploading}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary-500 text-white font-medium hover:bg-primary-600 disabled:opacity-50 transition-colors"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-zinc-500 text-zinc-100 font-medium hover:bg-zinc-600 disabled:opacity-50 transition-colors"
               >
                 <ArrowUpTrayIcon className="w-5 h-5" />
                 {uploading ? 'Uploading…' : 'Upload from disk'}
@@ -716,13 +719,13 @@ export default function BIMViewer({ ifcUrl, ifcData, assetId, onBimUploaded, onL
             </div>
           )}
 
-          <p className="text-xs text-white/40">
+          <p className="text-xs text-zinc-500">
             Don&apos;t have IFC?{' '}
             <a
               href={SAMPLE_IFC_DOWNLOAD}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-cyan-400 hover:text-cyan-300 underline"
+              className="text-zinc-400 hover:text-zinc-300 underline"
             >
               Download sample IFC files
             </a>
@@ -731,13 +734,13 @@ export default function BIMViewer({ ifcUrl, ifcData, assetId, onBimUploaded, onL
               href={DOC_IFC_SOURCES}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-cyan-400 hover:text-cyan-300 underline"
+              className="text-zinc-400 hover:text-zinc-300 underline"
             >
               More sources
             </a>
           </p>
           {uploadError && (
-            <p className="text-sm text-red-400 mt-2">{uploadError}</p>
+            <p className="text-sm text-red-400/80 mt-2">{uploadError}</p>
           )}
         </div>
       </div>
@@ -745,13 +748,13 @@ export default function BIMViewer({ ifcUrl, ifcData, assetId, onBimUploaded, onL
   }
 
   return (
-    <div className="relative w-full h-full bg-[#0a0f1a] rounded-xl overflow-hidden">
+    <div className="relative w-full h-full bg-[#09090b] rounded-md overflow-hidden">
       {webglContextLost && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-          <div className="text-center max-w-xs p-4 rounded-xl bg-amber-500/20 border border-amber-500/40">
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/80">
+          <div className="text-center max-w-xs p-4 rounded-md bg-amber-500/20 border border-amber-500/40">
             <p className="text-amber-200 font-medium mb-1">WebGL context lost</p>
-            <p className="text-sm text-white/70 mb-3">Refresh the page or close other heavy 3D tabs to restore.</p>
-            <button type="button" onClick={() => setWebglContextLost(false)} className="text-xs text-cyan-400 hover:text-cyan-300">Dismiss</button>
+            <p className="text-sm text-zinc-300 mb-3">Refresh the page or close other heavy 3D tabs to restore.</p>
+            <button type="button" onClick={() => setWebglContextLost(false)} className="text-xs text-zinc-400 hover:text-zinc-300">Dismiss</button>
           </div>
         </div>
       )}
@@ -763,7 +766,7 @@ export default function BIMViewer({ ifcUrl, ifcData, assetId, onBimUploaded, onL
         }}
       >
         <WebGLContextHandler onContextLost={() => setWebglContextLost(true)} onContextRestored={() => setWebglContextLost(false)} />
-        <color attach="background" args={['#0a0f1a']} />
+        <color attach="background" args={['#09090b']} />
         <PerspectiveCamera makeDefault position={[15, 15, 15]} fov={50} />
         
         <ambientLight intensity={0.5} />
@@ -775,7 +778,7 @@ export default function BIMViewer({ ifcUrl, ifcData, assetId, onBimUploaded, onL
           shadow-mapSize-height={2048}
         />
         <directionalLight position={[-10, 10, -10]} intensity={0.3} />
-        <hemisphereLight intensity={0.3} groundColor="#0a0f1a" />
+        <hemisphereLight intensity={0.3} groundColor="#09090b" />
         
         <IFCModel 
           ifcUrl={effectiveIfcUrl} 
@@ -793,8 +796,8 @@ export default function BIMViewer({ ifcUrl, ifcData, assetId, onBimUploaded, onL
           sectionSize={5}
           sectionThickness={0.6}
           fadeDistance={50}
-          cellColor="#1a2030"
-          sectionColor="#2a3040"
+          cellColor="#27272a"
+          sectionColor="#3f3f46"
         />
         
         <OrbitControls
@@ -806,23 +809,23 @@ export default function BIMViewer({ ifcUrl, ifcData, assetId, onBimUploaded, onL
           maxPolarAngle={Math.PI / 2 + 0.1}
         />
         
-        <fog attach="fog" args={['#0a0f1a', 40, 100]} />
+        <fog attach="fog" args={['#09090b', 40, 100]} />
       </Canvas>
 
       {/* Top-left info overlay */}
-      <div className="absolute top-4 left-4 bg-black/60 backdrop-blur-sm border border-white/10 rounded-xl p-3">
+      <div className="absolute top-4 left-4 bg-black/60 border border-zinc-700 rounded-md p-3">
         <div className="flex items-center gap-2 mb-2">
-          <CubeTransparentIcon className="w-5 h-5 text-cyan-400" />
-          <p className="text-sm font-medium text-white">BIM Viewer</p>
+          <CubeTransparentIcon className="w-5 h-5 text-zinc-400" />
+          <p className="text-sm font-medium text-zinc-100">BIM Viewer</p>
         </div>
-        <p className="text-xs text-white/50">
+        <p className="text-xs text-zinc-500">
           web-ifc + Three.js
         </p>
         {demoIfcUrl && (
           <button
             type="button"
             onClick={() => setDemoIfcUrl(null)}
-            className="mt-2 text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
+            className="mt-2 text-xs text-zinc-400 hover:text-zinc-300 transition-colors"
           >
             Close demo model
           </button>
@@ -830,7 +833,7 @@ export default function BIMViewer({ ifcUrl, ifcData, assetId, onBimUploaded, onL
         {metadata && (
           <button
             onClick={() => setShowMetadata(!showMetadata)}
-            className="mt-2 text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
+            className="mt-2 text-xs text-zinc-400 hover:text-zinc-300 transition-colors"
           >
             {showMetadata ? 'Hide' : 'Show'} metadata
           </button>
@@ -839,43 +842,43 @@ export default function BIMViewer({ ifcUrl, ifcData, assetId, onBimUploaded, onL
       
       {/* Metadata panel */}
       {metadata && showMetadata && (
-        <div className="absolute top-4 left-48 bg-black/80 backdrop-blur-sm border border-white/10 rounded-xl p-4 max-w-xs">
-          <h3 className="text-sm font-semibold text-white mb-3">Model Info</h3>
+        <div className="absolute top-4 left-48 bg-black/80 border border-zinc-700 rounded-md p-4 max-w-xs">
+          <h3 className="text-sm font-display font-semibold text-zinc-100 mb-3">Model Info</h3>
           <div className="space-y-2 text-xs">
             <div className="flex justify-between">
-              <span className="text-white/50">Project:</span>
-              <span className="text-white">{metadata.projectName}</span>
+              <span className="text-zinc-500">Project:</span>
+              <span className="text-zinc-100">{metadata.projectName}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-white/50">Schema:</span>
-              <span className="text-white">{metadata.schema}</span>
+              <span className="text-zinc-500">Schema:</span>
+              <span className="text-zinc-100">{metadata.schema}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-white/50">Elements:</span>
-              <span className="text-white">{metadata.elementCount.toLocaleString()}</span>
+              <span className="text-zinc-500">Elements:</span>
+              <span className="text-zinc-100">{metadata.elementCount.toLocaleString()}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-white/50">Geometries:</span>
-              <span className="text-white">{metadata.geometryCount.toLocaleString()}</span>
+              <span className="text-zinc-500">Geometries:</span>
+              <span className="text-zinc-100">{metadata.geometryCount.toLocaleString()}</span>
             </div>
             {metadata.storeys.length > 0 && (
               <div>
-                <span className="text-white/50 block mb-1">Storeys:</span>
+                <span className="text-zinc-500 block mb-1">Storeys:</span>
                 <div className="flex flex-wrap gap-1">
                   {metadata.storeys.map((s, i) => (
-                    <span key={i} className="px-2 py-0.5 bg-white/10 rounded text-white text-xs">{s}</span>
+                    <span key={i} className="px-2 py-0.5 bg-zinc-700 rounded text-zinc-100 text-xs">{s}</span>
                   ))}
                 </div>
               </div>
             )}
             {Object.keys(metadata.categories).length > 0 && (
-              <div className="pt-2 border-t border-white/10">
-                <span className="text-white/50 block mb-1">Categories:</span>
+              <div className="pt-2 border-t border-zinc-700">
+                <span className="text-zinc-500 block mb-1">Categories:</span>
                 <div className="grid grid-cols-2 gap-1">
                   {Object.entries(metadata.categories).map(([name, count]) => (
                     <div key={name} className="flex justify-between text-xs">
-                      <span className="text-white/60">{name}:</span>
-                      <span className="text-white">{count}</span>
+                      <span className="text-zinc-400">{name}:</span>
+                      <span className="text-zinc-100">{count}</span>
                     </div>
                   ))}
                 </div>
@@ -887,30 +890,30 @@ export default function BIMViewer({ ifcUrl, ifcData, assetId, onBimUploaded, onL
       
       {/* Selected element info */}
       {selectedInfo && (
-        <div className="absolute bottom-4 left-4 bg-black/80 backdrop-blur-sm border border-cyan-500/30 rounded-xl p-4 max-w-xs">
+        <div className="absolute bottom-4 left-4 bg-black/80 border border-zinc-600 rounded-md p-4 max-w-xs">
           <div className="flex items-center gap-2 mb-2">
-            <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-            <h3 className="text-sm font-semibold text-white">Selected Element</h3>
+            <div className="w-2 h-2 rounded-full bg-zinc-400 animate-pulse" />
+            <h3 className="text-sm font-display font-semibold text-zinc-100">Selected Element</h3>
           </div>
           <div className="space-y-1 text-xs">
             <div className="flex justify-between">
-              <span className="text-white/50">ID:</span>
-              <span className="text-cyan-400 font-mono">{selectedInfo.expressID}</span>
+              <span className="text-zinc-500">ID:</span>
+              <span className="text-zinc-400 font-mono">{selectedInfo.expressID}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-white/50">Type:</span>
-              <span className="text-white">{selectedInfo.type}</span>
+              <span className="text-zinc-500">Type:</span>
+              <span className="text-zinc-100">{selectedInfo.type}</span>
             </div>
             {selectedInfo.name && (
               <div className="flex justify-between">
-                <span className="text-white/50">Name:</span>
-                <span className="text-white">{selectedInfo.name}</span>
+                <span className="text-zinc-500">Name:</span>
+                <span className="text-zinc-100">{selectedInfo.name}</span>
               </div>
             )}
             {selectedInfo.description && (
               <div className="pt-1">
-                <span className="text-white/50 block">Description:</span>
-                <span className="text-white/80">{selectedInfo.description}</span>
+                <span className="text-zinc-500 block">Description:</span>
+                <span className="text-zinc-200">{selectedInfo.description}</span>
               </div>
             )}
           </div>
@@ -919,7 +922,7 @@ export default function BIMViewer({ ifcUrl, ifcData, assetId, onBimUploaded, onL
               setSelectedId(null)
               setSelectedInfo(null)
             }}
-            className="mt-3 w-full text-xs text-white/50 hover:text-white py-1 border border-white/10 rounded transition-colors"
+            className="mt-3 w-full text-xs text-zinc-500 hover:text-zinc-100 py-1 border border-zinc-700 rounded transition-colors"
           >
             Clear selection
           </button>
@@ -927,11 +930,11 @@ export default function BIMViewer({ ifcUrl, ifcData, assetId, onBimUploaded, onL
       )}
       
       {/* Controls hint */}
-      <div className="absolute bottom-4 right-4 bg-black/40 backdrop-blur-sm rounded-lg px-3 py-2">
-        <p className="text-[10px] text-white/40">
-          <span className="text-white/60">LMB</span> Rotate • 
-          <span className="text-white/60 ml-1">RMB</span> Pan • 
-          <span className="text-white/60 ml-1">Scroll</span> Zoom
+      <div className="absolute bottom-4 right-4 bg-black/40 rounded-md px-3 py-2">
+        <p className="text-[10px] text-zinc-500">
+          <span className="text-zinc-400">LMB</span> Rotate • 
+          <span className="text-zinc-400 ml-1">RMB</span> Pan • 
+          <span className="text-zinc-400 ml-1">Scroll</span> Zoom
         </p>
       </div>
     </div>

@@ -1,6 +1,7 @@
 /**
- * Projects Page - Project Finance Management
- * Displays list of projects with IRR/NPV analytics
+ * Project Finance — Infrastructure and development projects with IRR/NPV analysis.
+ * Unified Corporate Style: zinc palette, section labels font-mono text-[10px]
+ * uppercase tracking-widest text-zinc-500, rounded-md only, no glass/blur. See Implementation Audit.
  */
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -9,7 +10,7 @@ import {
   ArrowPathIcon,
   BanknotesIcon,
 } from '@heroicons/react/24/outline'
-import { projectsApi } from '../lib/api'
+import { projectsApi, seedApi } from '../lib/api'
 
 interface Project {
   id: string
@@ -29,11 +30,11 @@ interface Project {
 }
 
 const statusColors: Record<string, string> = {
-  development: 'bg-blue-500/20 text-blue-300',
-  planning: 'bg-white/10 text-white/70',
-  financing: 'bg-amber-500/20 text-amber-300',
-  construction: 'bg-primary-500/20 text-primary-300',
-  commissioning: 'bg-purple-500/20 text-purple-300',
+  development: 'bg-zinc-700 text-zinc-300',
+  planning: 'bg-zinc-700 text-zinc-300',
+  financing: 'bg-zinc-700 text-zinc-300',
+  construction: 'bg-zinc-700 text-zinc-300',
+  commissioning: 'bg-zinc-700 text-zinc-300',
   operation: 'bg-green-500/20 text-green-300',
   decommissioned: 'bg-red-500/20 text-red-300',
 }
@@ -104,204 +105,218 @@ export default function Projects() {
   }
 
   return (
-    <div className="h-full overflow-auto p-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-display font-bold text-white flex items-center gap-2">
-            <BanknotesIcon className="w-8 h-8 text-amber-400" />
-            Project Finance
-          </h1>
-          <p className="text-dark-muted text-sm mt-1">
-            Infrastructure and development projects with IRR/NPV analysis
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={fetchProjects}
-            className="p-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 text-white/70 hover:text-white transition-colors"
-            title="Refresh"
-          >
-            <ArrowPathIcon className="w-5 h-5" />
-          </button>
-          <button
-            onClick={() => navigate('/projects/new')}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary-500 text-white font-medium hover:bg-primary-600 transition-colors"
-          >
-            <PlusIcon className="w-5 h-5" />
-            New Project
-          </button>
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="glass rounded-2xl p-4 border border-white/5 mb-6 flex flex-wrap gap-3">
-        <input
-          type="text"
-          placeholder="Search projects..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white placeholder-white/40 min-w-[200px] focus:outline-none focus:ring-2 focus:ring-primary-500/50"
-        />
-        <select
-          value={typeFilter}
-          onChange={(e) => setTypeFilter(e.target.value)}
-          className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white min-w-[150px] focus:outline-none focus:ring-2 focus:ring-primary-500/50"
-        >
-          <option value="">All Types</option>
-          {Object.entries(typeLabels).map(([value, label]) => (
-            <option key={value} value={value} className="bg-dark-card">
-              {label}
-            </option>
-          ))}
-        </select>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white min-w-[150px] focus:outline-none focus:ring-2 focus:ring-primary-500/50"
-        >
-          <option value="">All Statuses</option>
-          <option value="development" className="bg-dark-card">Development</option>
-          <option value="planning" className="bg-dark-card">Planning</option>
-          <option value="financing" className="bg-dark-card">Financing</option>
-          <option value="construction" className="bg-dark-card">Construction</option>
-          <option value="commissioning" className="bg-dark-card">Commissioning</option>
-          <option value="operation" className="bg-dark-card">Operation</option>
-        </select>
-      </div>
-
-      {/* Loading */}
-      {loading && (
-        <div className="h-1 rounded-full bg-white/10 overflow-hidden mb-6">
-          <div className="h-full w-1/3 bg-primary-500 animate-pulse" />
-        </div>
-      )}
-
-      {/* Projects Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredProjects.map((project) => (
-          <div
-            key={project.id}
-            onClick={() => navigate(`/projects/${project.id}`)}
-            className="glass rounded-2xl p-5 border border-white/5 hover:border-primary-500/30 cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-lg"
-          >
-            <div className="flex justify-between items-start mb-3">
-              <div className="min-w-0">
-                <h3 className="font-semibold text-white truncate">{project.name}</h3>
-                <p className="text-dark-muted text-sm font-mono">{project.code}</p>
-              </div>
-              <span
-                className={`shrink-0 text-xs px-2 py-0.5 rounded-full ${
-                  statusColors[project.status] || 'bg-white/10 text-white/70'
-                }`}
-              >
-                {project.status}
-              </span>
+    <div className="min-h-full p-6 bg-zinc-950 pb-16">
+      <div className="w-full max-w-[1920px] mx-auto">
+        {/* Header — Unified Corporate Style */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-zinc-800 rounded-md border border-zinc-700">
+              <BanknotesIcon className="w-8 h-8 text-zinc-400" />
             </div>
-
-            <div className="flex flex-wrap gap-2 mb-3">
-              <span className="text-xs px-2 py-1 rounded-lg border border-white/10 text-white/70">
-                {typeLabels[project.project_type] || project.project_type}
-              </span>
-              {project.city && (
-                <span className="text-dark-muted text-sm">
-                  {project.city}, {project.country_code}
-                </span>
-              )}
+            <div>
+              <h1 className="text-2xl font-display font-semibold text-zinc-100">
+                Project Finance
+              </h1>
+              <p className="text-zinc-500 text-sm mt-1 font-sans">
+                Infrastructure and development projects with IRR/NPV analysis
+              </p>
             </div>
-
-            {project.overall_completion_pct !== null && (
-              <div className="mb-3">
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="text-dark-muted">Progress</span>
-                  <span className="font-medium text-white">
-                    {project.overall_completion_pct.toFixed(0)}%
-                  </span>
-                </div>
-                <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
-                  <div
-                    className="h-full bg-primary-500 rounded-full transition-all"
-                    style={{ width: `${project.overall_completion_pct}%` }}
-                  />
-                </div>
-              </div>
-            )}
-
-            <div className="grid grid-cols-6 gap-2">
-              <div className="col-span-3 p-2 rounded-lg bg-white/5 text-center">
-                <p className="text-dark-muted text-xs">CAPEX</p>
-                <p className="font-semibold text-white text-sm">
-                  {formatCurrency(project.total_capex_planned, project.currency)}
-                </p>
-              </div>
-              <div
-                className={`col-span-1.5 p-2 rounded-lg text-center ${
-                  project.irr ? 'bg-green-500/20 text-green-300' : 'bg-white/5 text-white/50'
-                }`}
-              >
-                <p className="text-xs">IRR</p>
-                <p className="font-semibold text-sm">{formatPercent(project.irr)}</p>
-              </div>
-              <div
-                className={`col-span-1.5 p-2 rounded-lg text-center ${
-                  project.npv ? 'bg-primary-500/20 text-primary-300' : 'bg-white/5 text-white/50'
-                }`}
-              >
-                <p className="text-xs">NPV</p>
-                <p className="font-semibold text-sm">
-                  {project.npv ? formatCurrency(project.npv, project.currency) : '-'}
-                </p>
-              </div>
-            </div>
-
-            {project.sponsor_name && (
-              <p className="text-dark-muted text-xs mt-3">Sponsor: {project.sponsor_name}</p>
-            )}
           </div>
-        ))}
-      </div>
-
-      {/* Empty State */}
-      {!loading && filteredProjects.length === 0 && (
-        <div className="text-center py-16">
-          <BanknotesIcon className="w-16 h-16 mx-auto text-dark-muted/50 mb-4" />
-          <h3 className="text-lg font-semibold text-white/80 mb-2">No projects found</h3>
-          <p className="text-dark-muted mb-4">Create your first project or load sample data for demos</p>
-          <div className="flex flex-wrap items-center justify-center gap-3">
+          <div className="flex gap-2">
             <button
-              onClick={async () => {
-                setSeedError(null)
-                setSeedLoading(true)
-                try {
-                  await seedApi.seedSampleData()
-                  await fetchProjects()
-                } catch (e: unknown) {
-                  setSeedError(e instanceof Error ? e.message : 'Failed to load sample data')
-                } finally {
-                  setSeedLoading(false)
-                }
-              }}
-              disabled={seedLoading}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 text-white font-medium hover:bg-white/15 transition-colors border border-white/20 disabled:opacity-50"
+              onClick={fetchProjects}
+              className="p-2 rounded-md bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-100 transition-colors"
+              title="Refresh"
             >
-              {seedLoading ? (
-                <ArrowPathIcon className="w-5 h-5 animate-spin" />
-              ) : (
-                <ArrowPathIcon className="w-5 h-5" />
-              )}
-              Load sample data
+              <ArrowPathIcon className="w-5 h-5" />
             </button>
             <button
               onClick={() => navigate('/projects/new')}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary-500 text-white font-medium hover:bg-primary-600 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-100 font-medium hover:bg-zinc-700 transition-colors font-sans"
             >
               <PlusIcon className="w-5 h-5" />
-              Create Project
+              New Project
             </button>
           </div>
-          {seedError && <p className="text-amber-400 text-sm mt-3">{seedError}</p>}
         </div>
-      )}
+
+        {/* Filters — corp: bg-zinc-900, section labels */}
+        <div className="rounded-md p-4 border border-zinc-800 bg-zinc-900 mb-6 flex flex-wrap items-center gap-4">
+          <div className="flex-1 min-w-[200px]">
+            <input
+              type="text"
+              placeholder="Search projects..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full px-4 py-2 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-zinc-600 font-sans"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Type:</span>
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              className="px-3 py-1.5 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-100 text-xs font-medium focus:outline-none focus:border-zinc-600 font-sans min-w-[150px]"
+            >
+              <option value="">All Types</option>
+              {Object.entries(typeLabels).map(([value, label]) => (
+                <option key={value} value={value} className="bg-zinc-900">
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Status:</span>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-3 py-1.5 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-100 text-xs font-medium focus:outline-none focus:border-zinc-600 font-sans min-w-[150px]"
+            >
+              <option value="">All Statuses</option>
+              <option value="development" className="bg-zinc-900">Development</option>
+              <option value="planning" className="bg-zinc-900">Planning</option>
+              <option value="financing" className="bg-zinc-900">Financing</option>
+              <option value="construction" className="bg-zinc-900">Construction</option>
+              <option value="commissioning" className="bg-zinc-900">Commissioning</option>
+              <option value="operation" className="bg-zinc-900">Operation</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Loading */}
+        {loading && (
+          <div className="h-1 rounded-full bg-zinc-700 overflow-hidden mb-6">
+            <div className="h-full w-1/3 bg-zinc-500 animate-pulse" />
+          </div>
+        )}
+
+        {/* Projects Grid — corp: bg-zinc-900, no glass, rounded-md */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredProjects.map((project) => (
+            <div
+              key={project.id}
+              onClick={() => navigate(`/projects/${project.id}`)}
+              className="rounded-md p-5 border border-zinc-700 bg-zinc-900 hover:border-zinc-600 cursor-pointer transition-all"
+            >
+              <div className="flex justify-between items-start mb-3">
+                <div className="min-w-0">
+                  <h3 className="font-display font-semibold text-zinc-100 truncate">{project.name}</h3>
+                  <p className="font-mono text-[10px] uppercase tracking-wider text-zinc-500 mt-0.5">{project.code}</p>
+                </div>
+                <span
+                  className={`shrink-0 text-xs px-2 py-0.5 rounded-md font-mono ${
+                    statusColors[project.status] || 'bg-zinc-700 text-zinc-300'
+                  }`}
+                >
+                  {project.status}
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 mb-3">
+                <span className="text-xs px-2 py-1 rounded-md border border-zinc-700 text-zinc-400 font-mono">
+                  {typeLabels[project.project_type] || project.project_type}
+                </span>
+                {project.city && (
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-500">
+                    {project.city}, {project.country_code}
+                  </span>
+                )}
+              </div>
+
+              {project.overall_completion_pct !== null && (
+                <div className="mb-3">
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Progress</span>
+                    <span className="font-medium font-mono text-zinc-100">
+                      {project.overall_completion_pct.toFixed(0)}%
+                    </span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-zinc-700 overflow-hidden">
+                    <div
+                      className="h-full bg-zinc-500 rounded-full transition-all"
+                      style={{ width: `${project.overall_completion_pct}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-6 gap-2">
+                <div className="col-span-3 p-2 rounded-md bg-zinc-800 border border-zinc-700/60 text-center">
+                  <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">CAPEX</p>
+                  <p className="font-semibold font-mono tabular-nums text-zinc-100 text-sm mt-0.5">
+                    {formatCurrency(project.total_capex_planned, project.currency)}
+                  </p>
+                </div>
+                <div
+                  className={`col-span-1.5 p-2 rounded-md text-center ${
+                    project.irr ? 'bg-green-500/10 border border-green-500/30 text-green-400/90' : 'bg-zinc-800 border border-zinc-700/60 text-zinc-500'
+                  }`}
+                >
+                  <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">IRR</p>
+                  <p className="font-semibold font-mono text-sm mt-0.5">{formatPercent(project.irr)}</p>
+                </div>
+                <div
+                  className={`col-span-1.5 p-2 rounded-md text-center bg-zinc-800 border border-zinc-700/60 ${
+                    project.npv ? 'text-zinc-100' : 'text-zinc-500'
+                  }`}
+                >
+                  <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">NPV</p>
+                  <p className="font-semibold font-mono text-sm mt-0.5">
+                    {project.npv ? formatCurrency(project.npv, project.currency) : '-'}
+                  </p>
+                </div>
+              </div>
+
+              {project.sponsor_name && (
+                <p className="font-mono text-[10px] uppercase tracking-wider text-zinc-500 mt-3">Sponsor: {project.sponsor_name}</p>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Empty State — corp */}
+        {!loading && filteredProjects.length === 0 && (
+          <div className="text-center py-16">
+            <BanknotesIcon className="w-16 h-16 mx-auto text-zinc-600 mb-4" />
+            <h3 className="text-lg font-display font-semibold text-zinc-200 mb-2">No projects found</h3>
+            <p className="text-zinc-500/90 font-sans mb-4">Create your first project or load sample data for demos</p>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <button
+                onClick={async () => {
+                  setSeedError(null)
+                  setSeedLoading(true)
+                  try {
+                    await seedApi.seedSampleData()
+                    await fetchProjects()
+                  } catch (e: unknown) {
+                    setSeedError(e instanceof Error ? e.message : 'Failed to load sample data')
+                  } finally {
+                    setSeedLoading(false)
+                  }
+                }}
+                disabled={seedLoading}
+                className="flex items-center gap-2 px-4 py-2 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-100 font-medium hover:bg-zinc-700 transition-colors font-sans disabled:opacity-50"
+              >
+                {seedLoading ? (
+                  <ArrowPathIcon className="w-5 h-5 animate-spin" />
+                ) : (
+                  <ArrowPathIcon className="w-5 h-5" />
+                )}
+                Load sample data
+              </button>
+              <button
+                onClick={() => navigate('/projects/new')}
+                className="flex items-center gap-2 px-4 py-2 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-100 font-medium hover:bg-zinc-700 transition-colors font-sans"
+              >
+                <PlusIcon className="w-5 h-5" />
+                Create Project
+              </button>
+            </div>
+            {seedError && <p className="text-amber-400/80 text-sm mt-3 font-sans">{seedError}</p>}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

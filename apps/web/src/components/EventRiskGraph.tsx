@@ -546,7 +546,7 @@ export default function EventRiskGraph({
       ctx.fillStyle = 'rgba(0,0,0,0.6)'
       ctx.fillRect(0, 0, 256, 48)
       ctx.fillStyle = 'white'
-      ctx.font = 'bold 16px "Space Grotesk", system-ui, sans-serif'
+      ctx.font = 'bold 16px "JetBrains Mono", monospace'
       ctx.textAlign = 'center'
       ctx.fillText(node.name, 128, 30)
       
@@ -581,26 +581,26 @@ export default function EventRiskGraph({
     <div className="space-y-2">
     <div 
       ref={containerRef}
-      className={`relative rounded-xl overflow-hidden border border-white/10 bg-black/40 ${fullWidth ? 'w-full' : ''}`}
+      className={`relative rounded-md overflow-hidden border border-zinc-700 bg-black/40 ${fullWidth ? 'w-full' : ''}`}
       style={fullWidth ? { height: 576, minHeight: 576 } : undefined}
     >
       {/* Header */}
       <div className="absolute top-0 left-0 right-0 z-10 p-3 bg-gradient-to-b from-black/80 to-transparent">
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-white/50 text-[10px] uppercase tracking-wider">Cascade Analysis</div>
-            <div className="text-white text-sm font-light">
+            <div className="text-zinc-400 text-[10px] uppercase tracking-wider">Cascade Analysis</div>
+            <div className="text-zinc-100 text-sm font-light">
               {eventName}{cityName ? ` · ${cityName}` : ''}
             </div>
           </div>
           <div className="flex items-center gap-3 text-xs">
             <div className="text-center">
-              <div className="text-red-400 font-medium">{stats.criticalNodes}</div>
-              <div className="text-white/40 text-[10px]">Critical</div>
+              <div className="text-red-400/80 font-medium">{stats.criticalNodes}</div>
+              <div className="text-zinc-500 text-[10px]">Critical</div>
             </div>
             <div className="text-center">
-              <div className="text-orange-400 font-medium">{stats.criticalLinks}</div>
-              <div className="text-white/40 text-[10px]">Links</div>
+              <div className="text-orange-400/80 font-medium">{stats.criticalLinks}</div>
+              <div className="text-zinc-500 text-[10px]">Links</div>
             </div>
           </div>
         </div>
@@ -629,13 +629,13 @@ export default function EventRiskGraph({
       
       {/* Selected Node Info */}
       {selectedNode && (
-        <div className="absolute bottom-3 left-3 bg-black/70 backdrop-blur-sm rounded-lg p-2 border border-white/10 text-xs">
-          <div className="text-white font-medium">{selectedNode.name}</div>
+        <div className="absolute bottom-3 left-3 bg-black/70 rounded-md p-2 border border-zinc-700 text-xs">
+          <div className="text-zinc-100 font-medium">{selectedNode.name}</div>
           <div className="flex items-center gap-2 mt-1">
-            <span className="text-white/40">Exposure:</span>
-            <span className="text-white">${selectedNode.value}B</span>
-            <span className="text-white/40 ml-2">Risk:</span>
-            <span className={selectedNode.risk > 0.7 ? 'text-red-400' : 'text-orange-400'}>
+            <span className="text-zinc-500">Exposure:</span>
+            <span className="text-zinc-100">${selectedNode.value}B</span>
+            <span className="text-zinc-500 ml-2">Risk:</span>
+            <span className={selectedNode.risk > 0.7 ? 'text-red-400/80' : 'text-orange-400/80'}>
               {(selectedNode.risk * 100).toFixed(0)}%
             </span>
           </div>
@@ -647,15 +647,15 @@ export default function EventRiskGraph({
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1">
             <div className="w-2 h-0.5 bg-blue-500 rounded" />
-            <span className="text-white/50">Supply</span>
+            <span className="text-zinc-400">Supply</span>
           </div>
           <div className="flex items-center gap-1">
             <div className="w-2 h-0.5 bg-purple-500 rounded" />
-            <span className="text-white/50">Financial</span>
+            <span className="text-zinc-400">Financial</span>
           </div>
           <div className="flex items-center gap-1">
             <div className="w-2 h-0.5 bg-orange-500 rounded" />
-            <span className="text-white/50">Operational</span>
+            <span className="text-zinc-400">Operational</span>
           </div>
         </div>
       </div>
@@ -663,18 +663,18 @@ export default function EventRiskGraph({
 
     {/* Expanded legend and summary under the graph */}
     {(showLegend || showSummary) && (
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-white/50">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-zinc-400">
         {showLegend && (
           <>
             <div className="flex items-center gap-2">
-              <span className="text-white/40">Links:</span>
+              <span className="text-zinc-500">Links:</span>
               <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 bg-blue-500 rounded" />Supply</span>
               <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 bg-purple-500 rounded" />Financial</span>
               <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 bg-orange-500 rounded" />Operational</span>
               <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 bg-green-500 rounded" />Geographic</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-white/40">Risk:</span>
+              <span className="text-zinc-500">Risk:</span>
               <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500" />&gt;80%</span>
               <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-orange-500" />&gt;60%</span>
               <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-yellow-500" />&gt;40%</span>

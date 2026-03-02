@@ -26,6 +26,8 @@ touch "$ENV_FILE"
 
 for line in \
   "USE_SQLITE=true" \
+  "DATABASE_URL=sqlite:///./prod.db" \
+  "ALLOW_SEED_IN_PRODUCTION=true" \
   "USE_DATA_FEDERATION_PIPELINES=true" \
   "USE_LOCAL_NIM=true" \
   "FOURCASTNET_NIM_URL=http://localhost:8001" \
@@ -114,7 +116,7 @@ echo ""
 
 # 7. Next steps
 echo -e "${CYAN}Next:${NC}"
-echo "  • NIM: if not ready, run: export NGC_API_KEY=your_key && ./scripts/brev-start-nim.sh"
+echo "  • NIM: if not ready, run: export NGC_API_KEY=your_key && ./scripts/brev-start-nim.sh  (or NIM_COMPOSE=docker-compose.nim-fourcastnet.yml ./scripts/start-nvidia-nim.sh)"
 echo "  • Web: build/serve from apps/web or use nginx; open Command Center via Port Forward"
 echo "  • E2CC: see docs/OMNIVERSE_E2CC_SETUP.md"
 echo ""

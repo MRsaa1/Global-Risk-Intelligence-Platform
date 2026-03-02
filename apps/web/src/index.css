@@ -2,11 +2,52 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ========== Unified font system (platform-wide) ==========
+ * Corporate: JetBrains Mono only (sans = display = mono).
+ */
+@layer base {
+  html, body, #root {
+    @apply font-sans antialiased;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  html, body {
+    overflow: hidden;
+    height: 100%;
+  }
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply text-dark-text;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display;
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+/* Force platform typography over Cesium/third-party (loads after widgets.css) */
+html, body, #root, .maplibregl-map {
+  font-family: 'JetBrains Mono', monospace !important;
+}
+
 :root {
-  --color-primary: #0056e6;
-  --color-accent: #C9A962;
-  --color-bg: #0a0f1a;
-  --color-card: #111827;
+  --color-primary: #71717a;
+  --color-accent: #71717a;
+  --color-bg: #09090b;
+  --color-card: #18181b;
+  --color-border: #27272a;
+  --font-sans: 'JetBrains Mono', monospace;
+  --font-display: 'JetBrains Mono', monospace;
+  --font-mono: 'JetBrains Mono', monospace;
+  /* Quantum aesthetics: scene depth and glow (Cesium/inline) */
+  --quantum-bg-deep: #0a0a0f;
+  --quantum-bg-top: #030712;
+  --quantum-glow-cyan: #06b6d4;
+  --quantum-glow-cyan-light: #22d3ee;
+  --quantum-glow-violet: #8b5cf6;
+  --quantum-glow-violet-light: #a78bfa;
+  --quantum-uncertainty: rgba(6, 182, 212, 0.2);
 }
 
 /* Custom scrollbar */
@@ -20,12 +61,12 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #374151;
+  background: #3f3f46;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #4b5563;
+  background: #52525b;
 }
 
 /* Custom scrollbar for modals and panels */
@@ -48,28 +89,80 @@
   background: rgba(255, 255, 255, 0.3);
 }
 
-/* Glass effect */
+/* Quick Actions — горизонтальный скролл, всегда видим */
+.quick-actions-scroll {
+  scrollbar-width: thin;
+}
+.quick-actions-scroll::-webkit-scrollbar {
+  height: 10px;
+}
+.quick-actions-scroll::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 5px;
+}
+.quick-actions-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 5px;
+}
+.quick-actions-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+/* Corporate panel: solid zinc, no glass/blur */
 .glass {
-  background: rgba(17, 24, 39, 0.8);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #18181b;
+  border: 1px solid #3f3f46;
 }
 
-/* Gradient text - subtle professional */
+/* Institutional: subtle zinc gradient text only where needed */
 .gradient-text {
-  background: linear-gradient(135deg, #e2e8f0 0%, #94a3b8 100%);
+  background: linear-gradient(135deg, #fafafa 0%, #a1a1aa 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
-/* Accent gradient text */
 .gradient-text-accent {
-  background: linear-gradient(135deg, #C9A962 0%, #b8983a 100%);
+  background: linear-gradient(135deg, #e4e4e7 0%, #71717a 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
+
+@keyframes glow-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+.pie-glow-pulse {
+  animation: glow-pulse 2s ease-in-out infinite;
+}
+
+/* Corporate card — solid zinc, no gradient (Dashboard / institutional) */
+.hero-card {
+  border-radius: 0.375rem;
+  padding: 0;
+  background: transparent;
+}
+.hero-card-inner {
+  border-radius: 0.375rem;
+  background: #18181b;
+  border: 1px solid #27272a;
+}
+
+/* Glow on hover for interactive cards */
+.hover-glow {
+  transition: box-shadow 0.3s ease, border-color 0.3s ease;
+}
+.hover-glow:hover {
+  box-shadow: 0 0 20px rgba(113,113,122,0.15), 0 0 40px rgba(113,113,122,0.05);
+  border-color: rgba(161,161,170,0.25);
+}
+
+/* Risk-level left accent bar */
+.risk-accent-critical { border-left: 3px solid #ef4444; }
+.risk-accent-high { border-left: 3px solid #f97316; }
+.risk-accent-medium { border-left: 3px solid #eab308; }
+.risk-accent-low { border-left: 3px solid #22c55e; }
 
 /* Risk score colors */
 .risk-low { color: #22c55e; }
@@ -85,18 +178,32 @@
   background-size: 50px 50px;
 }
 
-/* Glow effects */
-.glow-primary {
-  box-shadow: 0 0 20px rgba(0, 86, 230, 0.3);
-}
-
+/* Glow: subtle zinc only (no blue/gold) */
+.glow-primary,
 .glow-accent {
-  box-shadow: 0 0 20px rgba(201, 169, 98, 0.3);
+  box-shadow: 0 0 20px rgba(63, 63, 70, 0.25);
 }
 
-/* Map container */
-.maplibregl-map {
-  font-family: 'Space Grotesk', system-ui, sans-serif;
+/* Command Center / globe scene: depth gradient (quantum aesthetics) */
+.scene-bg-quantum {
+  background: linear-gradient(180deg, var(--quantum-bg-top) 0%, var(--quantum-bg-deep) 100%);
+}
+
+/* Active panel: thin observation glow (quantum aesthetics) */
+.panel-glow-quantum {
+  box-shadow: 0 0 0 1px rgba(6, 182, 212, 0.25), 0 0 12px rgba(6, 182, 212, 0.12);
+}
+.panel-glow-quantum-violet {
+  box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.25), 0 0 12px rgba(139, 92, 246, 0.12);
+}
+
+/* Graph node stagger highlight (quantum aesthetics — entanglement metaphor) */
+@keyframes graph-node-highlight {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.graph-node-stagger {
+  animation: graph-node-highlight 0.2s ease-out forwards;
 }
 
 /* Three.js canvas */
@@ -115,13 +222,12 @@
   background: transparent !important;
 }
 
-/* Smooth page transitions */
+/* Smooth page transitions — institutional zinc */
 html, body {
-  background: #0a0f1a;
+  background: #09090b;
 }
 
-/* Prevent white flash on navigation */
 #root {
-  background: #0a0f1a;
+  background: #09090b;
   min-height: 100vh;
 }

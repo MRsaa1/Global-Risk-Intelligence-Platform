@@ -38,6 +38,10 @@ class PDFReportRequest(BaseModel):
     concluding_summary: Optional[str] = None
     report_v2: Optional[Dict[str, Any]] = None
     currency: Optional[str] = None  # USD for US cities, EUR/GBP for EU/UK
+    decision_object: Optional[Dict[str, Any]] = None  # Risk & Intelligence OS: consensus, verdict, suggested_actions
+    event_name: Optional[str] = None  # Scenario name for applicability note (e.g. "Flood Extreme 100Y")
+    disclosure_draft: Optional[str] = None  # NGFS disclosure draft text (when generated in UI)
+    data_sources_used: Optional[List[str]] = None  # Dynamic list of data sources (e.g. from report.dataSourcesUsed)
 
 
 @router.post("/report/pdf")
@@ -81,6 +85,10 @@ async def generate_pdf_report(request: PDFReportRequest):
             historical_comparisons=request.historical_comparisons or [],
             concluding_summary=request.concluding_summary,
             report_v2=request.report_v2,
+            decision_object=request.decision_object,
+            event_name=request.event_name,
+            disclosure_draft=request.disclosure_draft,
+            data_sources_used=request.data_sources_used,
         )
         
         # Create filename

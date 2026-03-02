@@ -174,8 +174,19 @@ This ensures that war zones like Kyiv, Gaza, Damascus are correctly classified a
 |------|-------------|
 | `apps/api/src/data/cities.py` | 85+ cities with coordinates and known risk factors |
 | `apps/api/src/services/city_risk_calculator.py` | Risk calculation engine with conflict boost |
+| `apps/api/src/services/integral_risk.py` | **Integral risk model**: RiskIndex% = 100×ΣScore_i/ΣMaxScore_i, zones 0–25/25–50/50–75/75–100% |
 | `apps/api/src/services/zone_visualization.py` | Zone visualization strategy by event type |
 | `apps/api/src/services/external/usgs_client.py` | USGS earthquake API client |
 | `apps/api/src/services/external/weather_client.py` | OpenWeather API client |
 | `apps/api/src/services/geo_data.py` | GeoJSON preparation service |
 | `apps/api/src/services/cache.py` | Caching layer |
+
+## Integral risk model (alternative)
+
+A separate **integral risk** model is available for composite risk as a weighted sum over all risk types:
+
+- **Per risk:** `Score_i = Sev × Prob × Impact × W_country × W_city × W_influence × (1 − Control)`
+- **Index:** `RiskIndex% = 100 × Σ Score_i / Σ MaxScore_i`
+- **Zones:** 0–25% Low, 25–50% Medium, 50–75% High, 75–100% Critical
+
+Scales (Sev 1–4, Prob 1–5, Impact 1–5) and weight tables are in `integral_risk.py`. Full description and comparison with the current city risk formula: **`docs/RISK_CALCULATION_CURRENT_VS_INTEGRAL.md`**.

@@ -1,362 +1,83 @@
-<!-- Paste into Elementor HTML widget (it supports <style>). -->
-<!-- Investment Dashboard module page — same corporate style as Platform (dark + gold). All content in English. -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<!-- Paste into Elementor HTML widget. Investment Dashboard: dark + gold, JetBrains Mono, 4% to edge (92vw). Section → Layout → Height: Default (не Min Height 100vh). -->
 
 <style>
-  .saa-wp-bleed{
-    position:relative;
-    left:50%;
-    margin-left:-50vw;
-    width:100vw;
-    max-width:100vw;
-    background:#000;
-    overflow:hidden;
-  }
-
-  .saa-wp{
-    --bg-void:#000000;
-    --bg-deep:#0a0908;
-    --bg-surface:#0f0e0a;
-    --bg-elevated:#141310;
-    --bg-card:#1a1815;
-
-    --text-primary:#e4e4e7;
-    --text-secondary:#9a9a9a;
-    --text-muted:#6b6b6b;
-
-    --accent-primary:#C9A962;
-    --accent-primary-hover:#D4AF37;
-    --accent-primary-glow:rgba(201,169,98,0.3);
-
-    --border-subtle:rgba(255,255,255,0.06);
-    --border-light:rgba(255,255,255,0.1);
-
-    --font-sans:'Space Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-    --font-display:'Space Grotesk',-apple-system,BlinkMacSystemFont,sans-serif;
-    --font-mono:'JetBrains Mono','SF Mono','Consolas',monospace;
-
-    --text-xs:11px;
-    --text-sm:12px;
-    --text-base:14px;
-    --text-lg:16px;
-    --text-xl:18px;
-    --text-2xl:24px;
-    --text-3xl:32px;
-
-    color:var(--text-primary);
-    font-family:var(--font-sans) !important;
-    line-height:1.6;
-    -webkit-font-smoothing:antialiased;
-    -moz-osx-font-smoothing:grayscale;
-    text-rendering:optimizeLegibility;
-    font-weight:400;
-    letter-spacing:-0.01em !important;
-    font-feature-settings:'cv02','cv03','cv04','cv11';
-    font-optical-sizing:auto;
-  }
-
-  .saa-wp *{box-sizing:border-box}
-  .saa-wp a{color:var(--accent-primary);text-decoration:none}
-  .saa-wp a:hover{color:var(--accent-primary-hover);text-decoration:underline}
-  .saa-wp .mono{font-family:var(--font-mono)}
-
-  .saa-wp .content,
-  .saa-wp .content *{
-    font-family:var(--font-sans) !important;
-    font-feature-settings:inherit !important;
-    font-optical-sizing:inherit !important;
-    letter-spacing:inherit !important;
-  }
-  .saa-wp .mono,
-  .saa-wp .mono *{
-    font-family:var(--font-mono) !important;
-    letter-spacing:0.02em;
-  }
-
-  /* Unified font and size for body text (same as Risk Analyzer / Team) */
-  .saa-wp .content{
-    font-family:var(--font-sans) !important;
-    font-size:14px !important;
-    font-weight:400 !important;
-    letter-spacing:-0.01em !important;
-    line-height:1.6 !important;
-    -webkit-font-smoothing:antialiased;
-    -moz-osx-font-smoothing:grayscale;
-    text-rendering:optimizeLegibility;
-    font-feature-settings:'cv02','cv03','cv04','cv11';
-    font-optical-sizing:auto;
-  }
-  .saa-wp .content p,
-  .saa-wp .content p *,
-  .saa-wp .content li,
-  .saa-wp .content ul,
-  .saa-wp .content .card,
-  .saa-wp .content .card *,
-  .saa-wp .content .tagline,
-  .saa-wp .content .kpi div:not(.dot){
-    font-family:var(--font-sans) !important;
-    font-size:14px !important;
-    font-weight:400 !important;
-    letter-spacing:-0.01em !important;
-    line-height:1.6 !important;
-  }
-  .saa-wp .content .lead{font-size:var(--text-lg) !important}
-  .saa-wp .content strong{font-weight:600 !important;font-size:14px !important}
-  .saa-wp .content code.mono{font-family:var(--font-mono) !important;font-size:13px !important}
-
-  .saa-wp .bg{
-    position:absolute;
-    inset:-50%;
-    background:
-      radial-gradient(ellipse at 30% 20%, rgba(201, 169, 98, 0.05) 0%, transparent 50%),
-      radial-gradient(ellipse at 70% 80%, rgba(201, 169, 98, 0.03) 0%, transparent 50%);
-    animation:saaGradientMove 20s ease-in-out infinite;
-    pointer-events:none;
-    z-index:0;
-  }
-  @keyframes saaGradientMove{
-    0%,100%{transform:translate(0,0) scale(1)}
-    33%{transform:translate(2%,2%) scale(1.05)}
-    66%{transform:translate(-2%,-2%) scale(0.95)}
-  }
-
-  .saa-wp .content{
-    position:relative;
-    z-index:1;
-    max-width:1200px;
-    margin:0 auto;
-    padding:48px 24px 72px;
-  }
-
-  .saa-wp .topbar{
-    position:sticky;
-    top:0;
-    z-index:2;
-    background:rgba(10,9,8,0.85);
-    backdrop-filter:blur(10px);
-    border-bottom:1px solid var(--border-subtle);
-  }
-  .saa-wp .topbar-inner{
-    max-width:1200px;
-    margin:0 auto;
-    padding:16px 24px;
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-    gap:12px;
-  }
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+  .saa-wp-bleed,.saa-wp-bleed *,.saa-wp-bleed .saa-wp,.saa-wp-bleed .saa-wp *{font-family:'JetBrains Mono',monospace !important}
+  .saa-wp-bleed .brand-logo svg,.saa-wp-bleed .brand-logo svg *{font-family:Georgia,serif !important}
+  .saa-wp-bleed h1,.saa-wp-bleed h2,.saa-wp-bleed h3,.saa-wp-bleed p,.saa-wp-bleed a,.saa-wp-bleed span,.saa-wp-bleed div,.saa-wp-bleed strong,.saa-wp-bleed .btn,.saa-wp-bleed .nav a,.saa-wp-bleed .eyebrow,.saa-wp-bleed .lead,.saa-wp-bleed .muted,.saa-wp-bleed .card,.saa-wp-bleed footer,.saa-wp-bleed .page-footer-copy,.saa-wp-bleed .page-footer-legal a,.saa-wp-bleed ul,.saa-wp-bleed li,.saa-wp-bleed code{font-family:'JetBrains Mono',monospace !important}
+  .saa-wp-bleed{position:relative;background:#000;overflow:hidden !important;min-height:0;display:block;contain:layout style}
+  .saa-wp{position:relative;overflow:hidden;--bg-void:#000000;--bg-deep:#0a0908;--bg-surface:#0f0e0a;--bg-elevated:#141310;--bg-card:#1a1815;--text-primary:#e4e4e7;--text-secondary:#9a9a9a;--text-muted:#6b6b6b;--accent-primary:#C9A962;--accent-primary-hover:#D4AF37;--border-subtle:rgba(255,255,255,0.06);--border-light:rgba(255,255,255,0.1);--font-sans:'JetBrains Mono',monospace;--font-display:'JetBrains Mono',monospace;--font-mono:'JetBrains Mono',monospace;--text-xs:11px;--text-sm:12px;--text-base:14px;--text-lead:15px;--text-xl:20px;--text-2xl:26px;color:var(--text-primary);font-family:var(--font-sans);font-size:var(--text-base);line-height:1.6;-webkit-font-smoothing:antialiased;font-weight:400;letter-spacing:0.02em}
+  .saa-wp *{box-sizing:border-box;font-family:inherit}
+  .saa-wp .saa-body{position:relative;z-index:1;width:100%;max-width:92vw;margin:0 auto;padding:40px 0}
+  .saa-wp .saa-body,.saa-wp .saa-body *{font-family:'JetBrains Mono',monospace !important}
+  .saa-wp .topbar{position:sticky;top:0;z-index:2;background:rgba(10,9,8,0.85);backdrop-filter:blur(10px);border-bottom:1px solid var(--border-subtle)}
+  .saa-wp .topbar-inner{width:100%;max-width:92vw;margin:0 auto;padding:16px 0;display:flex;align-items:center;justify-content:space-between;gap:12px}
   .saa-wp .brand{display:flex;align-items:center;gap:12px;text-decoration:none}
-  .saa-wp .brand-mark{
-    width:36px;height:36px;border:1px solid var(--accent-primary);border-radius:8px;
-    display:flex;align-items:center;justify-content:center;
-    font-family:var(--font-mono) !important;font-size:12px;font-weight:600;color:var(--accent-primary);
-  }
-  .saa-wp .brand-text{color:var(--text-primary);font-size:13px;font-weight:500}
+  .saa-wp .brand-logo{height:36px;width:auto;display:inline-block;flex-shrink:0}
+  .saa-wp .brand-logo svg{height:36px;width:auto;display:block;vertical-align:top}
   .saa-wp .nav{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}
-  .saa-wp .nav a{
-    font-size:13px;color:var(--text-secondary);
-    padding:8px 10px;border-radius:8px;border:1px solid transparent;
-  }
+  .saa-wp .nav a{font-size:13px;color:var(--text-secondary);padding:8px 10px;border-radius:8px;border:1px solid transparent}
   .saa-wp .nav a:hover{color:var(--text-primary);border-color:var(--border-light);text-decoration:none}
-
-  .saa-wp .eyebrow{
-    font-size:var(--text-xs);
-    letter-spacing:0.12em;
-    text-transform:uppercase;
-    color:var(--text-muted);
-    font-family:var(--font-mono) !important;
-  }
-  .saa-wp h1{
-    margin:12px 0 10px;
-    font-size:var(--text-3xl);
-    font-weight:700;
-    letter-spacing:-0.02em;
-    line-height:1.15;
-    font-family:var(--font-display) !important;
-    background:linear-gradient(135deg, var(--text-primary) 0%, var(--accent-primary) 50%, var(--text-primary) 100%);
-    background-size:200% auto;
-    -webkit-background-clip:text;
-    -webkit-text-fill-color:transparent;
-    background-clip:text;
-    animation:saaTitleShift 8s ease infinite;
-  }
+  .saa-wp .bg{position:absolute;inset:-50%;background:radial-gradient(ellipse at 30% 20%, rgba(201,169,98,0.05) 0%, transparent 50%),radial-gradient(ellipse at 70% 80%, rgba(201,169,98,0.03) 0%, transparent 50%);animation:saaGradientMove 20s ease-in-out infinite;pointer-events:none;z-index:0}
+  @keyframes saaGradientMove{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(2%,2%) scale(1.05)}66%{transform:translate(-2%,-2%) scale(0.95)}}
+  .saa-wp .eyebrow{font-size:var(--text-xs);letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);font-family:var(--font-mono) !important;font-weight:500}
+  .saa-wp h1{margin:12px 0 10px;font-size:var(--text-2xl);font-weight:700;letter-spacing:-0.02em;line-height:1.25;font-family:var(--font-display) !important;color:var(--text-primary);background:linear-gradient(135deg, var(--text-primary) 0%, var(--accent-primary) 50%, var(--text-primary) 100%);background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:saaTitleShift 8s ease infinite}
   @keyframes saaTitleShift{0%,100%{background-position:0% center}50%{background-position:200% center}}
-  .saa-wp h2{
-    margin:28px 0 12px;
-    font-size:var(--text-xl);
-    font-weight:600;
-    letter-spacing:-0.01em;
-    font-family:var(--font-display) !important;
-    color:var(--text-primary);
-  }
-  .saa-wp h3{
-    margin:0 0 6px;
-    font-size:var(--text-base);
-    font-weight:600;
-    color:var(--text-primary);
-    font-family:var(--font-display) !important;
-    letter-spacing:-0.01em;
-  }
-  .saa-wp .content p,
-  .saa-wp .content p *{
-    margin:10px 0;
-    color:var(--text-secondary) !important;
-    font-size:var(--text-base) !important;
-    font-weight:400 !important;
-    letter-spacing:-0.01em !important;
-  }
-  .saa-wp .lead{font-size:var(--text-lg) !important;color:var(--text-secondary);max-width:92ch}
-  .saa-wp .muted{color:var(--text-muted)}
-
-  .saa-wp .module-hero-visual{
-    width:100%;
-    max-width:720px;
-    height:200px;
-    margin:20px 0 28px;
-    border-radius:16px;
-    background:linear-gradient(135deg, rgba(212,175,55,0.05) 0%, rgba(10,14,23,0.8) 100%);
-    border:1px solid var(--border-subtle);
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    overflow:hidden;
-    position:relative;
-  }
-  .saa-wp .module-hero-visual .visual-glow{
-    position:absolute;
-    width:120px;
-    height:120px;
-    background:radial-gradient(circle, rgba(212,175,55,0.15) 0%, transparent 70%);
-    border-radius:50%;
-    filter:blur(20px);
-    animation:visualPulseInv 3s ease-in-out infinite;
-  }
-  @keyframes visualPulseInv{
-    0%,100%{opacity:0.5;transform:scale(1)}
-    50%{opacity:0.8;transform:scale(1.1)}
-  }
-  @keyframes barGrowInv{
-    0%{transform:scaleY(0)}
-    100%{transform:scaleY(1)}
-  }
-  @keyframes lineGrowInv{
-    0%{stroke-dashoffset:300}
-    100%{stroke-dashoffset:0}
-  }
-  @keyframes dataPulseInv{
-    0%,100%{opacity:0.3}
-    50%{opacity:1}
-  }
-  .saa-wp .module-hero-visual svg{
-    width:100%;
-    height:100%;
-    object-fit:contain;
-    padding:0 24px;
-  }
-
+  .saa-wp h2{margin:28px 0 10px;font-size:var(--text-xl);font-weight:600;letter-spacing:0.02em;font-family:var(--font-display) !important;color:var(--text-primary);line-height:1.3}
+  .saa-wp h3{margin:0 0 6px;font-size:var(--text-base);font-weight:600;letter-spacing:0.02em;color:var(--text-primary);line-height:1.35}
+  .saa-wp p,.saa-wp .saa-body p{margin:10px 0;color:var(--text-secondary);font-size:var(--text-base);line-height:1.6}
+  .saa-wp .lead{font-size:var(--text-lead);color:var(--text-secondary);max-width:100%;line-height:1.6}
+  .saa-wp .muted{font-size:var(--text-sm);color:var(--text-muted);line-height:1.5}
+  .saa-wp .module-hero-canvas{position:relative;width:100%;max-width:100%;height:280px;margin-top:20px;margin-bottom:28px;border-radius:16px;border:1px solid var(--border-subtle);background:linear-gradient(135deg, rgba(212,175,55,0.02) 0%, rgba(10,14,23,0.8) 100%);overflow:hidden;display:block}
+  .saa-wp .module-hero-canvas canvas{width:100%;height:100%;display:block;vertical-align:top}
   .saa-wp .grid{display:grid;gap:16px}
-  @media (min-width: 900px){ .saa-wp .grid.cols-2{grid-template-columns:1fr 1fr} }
-  .saa-wp .card{
-    background:var(--bg-elevated);
-    border:1px solid var(--border-subtle);
-    border-radius:12px;
-    padding:16px;
-    transition:all .25s ease;
-  }
+  @media (min-width: 900px){.saa-wp .grid.cols-2{grid-template-columns:1fr 1fr}}
+  .saa-wp .card{background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:12px;padding:16px;transition:all .25s ease}
   .saa-wp .card:hover{border-color:rgba(201,169,98,.28);box-shadow:0 12px 30px rgba(0,0,0,.35);transform:translateY(-2px)}
   .saa-wp ul{margin:12px 0 0 18px;padding-left:20px;color:var(--text-secondary);line-height:1.8;font-size:var(--text-base)}
   .saa-wp ul li{margin:0 0 8px}
   .saa-wp .hr{height:1px;background:var(--border-subtle);margin:20px 0}
   .saa-wp .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
-  .saa-wp .btn{
-    display:inline-flex;align-items:center;justify-content:center;gap:10px;
-    padding:10px 14px;
-    border-radius:10px;
-    border:1px solid var(--border-light);
-    background:transparent;
-    color:var(--text-primary);
-    font-size:13px;
-    font-weight:500;
-    cursor:pointer;
-    transition:all .2s ease;
-    text-decoration:none;
-  }
+  .saa-wp .btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;padding:10px 14px;border-radius:10px;border:1px solid var(--border-light);background:transparent;color:var(--text-primary);font-size:13px;font-weight:500;cursor:pointer;transition:all .2s ease;font-family:'JetBrains Mono',monospace !important;text-decoration:none}
   .saa-wp .btn:hover{border-color:var(--accent-primary);color:var(--accent-primary);text-decoration:none}
   .saa-wp .btn.primary{background:var(--accent-primary);border-color:var(--accent-primary);color:#000}
   .saa-wp .btn.primary:hover{background:var(--accent-primary-hover);border-color:var(--accent-primary-hover);color:#000}
-  .saa-wp .page-footer{ margin-top:24px;padding-top:20px;border-top:1px solid var(--border-subtle);display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:20px }
-  .saa-wp .page-footer-copy{ color:var(--text-muted);font-size:12px }
-  .saa-wp .page-footer-legal{ display:flex;align-items:center;gap:8px;flex-wrap:wrap }
-  .saa-wp .page-footer-legal a{ color:var(--text-muted);font-size:12px;text-decoration:none }
-  .saa-wp .page-footer-legal a:hover{ color:var(--text-secondary) }
-  .saa-wp .page-footer-badge img{ height:32px;width:auto;display:block }
-  .saa-wp .page-footer-badge:hover img{ opacity:0.9 }
+  .saa-wp .page-footer{margin-top:24px;padding-top:20px;border-top:1px solid var(--border-subtle);display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:20px}
+  .saa-wp .page-footer-copy{color:var(--text-muted);font-size:var(--text-sm)}
+  .saa-wp .page-footer-legal{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .saa-wp .page-footer-legal a{color:var(--text-muted);font-size:var(--text-sm);text-decoration:none}
+  .saa-wp .page-footer-legal a:hover{color:var(--text-secondary)}
+  .saa-wp .page-footer-badge img{height:32px;width:auto;display:block}
+  .saa-wp .page-footer-badge:hover img{opacity:0.9}
 </style>
-
 <div class="saa-wp-bleed">
   <div class="saa-wp">
     <div class="bg" aria-hidden="true"></div>
-
     <div class="topbar">
-      <div class="topbar-inner">
-        <a class="brand" href="/" aria-label="SAA Alliance home">
-          <div class="brand-mark">SAA</div>
-          <div class="brand-text">Scientific Analytics Alliance</div>
-        </a>
-        <nav class="nav" aria-label="SAA navigation">
-          <a href="/about/">About</a>
+<div class="topbar-inner"><a class="brand" href="/" aria-label="SAA Alliance home">
+<span class="brand-logo" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 200" role="img" aria-label="Scientific Analytics Alliance"><defs><radialGradient id="saa-wp-globe-inv" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#b8962e" stop-opacity="0.2"/><stop offset="100%" stop-color="#b8962e" stop-opacity="0"/></radialGradient><filter id="saa-wp-glow-inv"><feGaussianBlur stdDeviation="2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><rect width="900" height="200" fill="#080808"/><circle cx="100" cy="100" r="72" fill="url(#saa-wp-globe-inv)"/><circle cx="100" cy="100" r="70" fill="none" stroke="#b8962e" stroke-width="0.9" opacity="0.45"/><ellipse cx="100" cy="100" rx="70" ry="15" fill="none" stroke="#b8962e" stroke-width="0.6" opacity="0.28"/><ellipse cx="100" cy="100" rx="61" ry="37" fill="none" stroke="#b8962e" stroke-width="0.6" opacity="0.22"/><ellipse cx="100" cy="100" rx="42" ry="54" fill="none" stroke="#b8962e" stroke-width="0.6" opacity="0.22"/><ellipse cx="100" cy="100" rx="17" ry="67" fill="none" stroke="#b8962e" stroke-width="0.6" opacity="0.22"/><path d="M100,30 Q174,100 100,170" fill="none" stroke="#b8962e" stroke-width="0.6" opacity="0.22"/><path d="M100,30 Q26,100 100,170" fill="none" stroke="#b8962e" stroke-width="0.6" opacity="0.22"/><circle cx="100" cy="38" r="4" fill="#b8962e" filter="url(#saa-wp-glow-inv)"/><circle cx="148" cy="62" r="3" fill="#b8962e" opacity="0.88"/><circle cx="160" cy="108" r="3.5" fill="#b8962e" filter="url(#saa-wp-glow-inv)"/><circle cx="136" cy="150" r="3" fill="#b8962e" opacity="0.85"/><circle cx="64" cy="150" r="3" fill="#b8962e" opacity="0.85"/><circle cx="40" cy="108" r="3.5" fill="#b8962e" filter="url(#saa-wp-glow-inv)"/><circle cx="52" cy="62" r="3" fill="#b8962e" opacity="0.88"/><circle cx="100" cy="100" r="5" fill="#b8962e" filter="url(#saa-wp-glow-inv)"/><g opacity="0.5"><line x1="100" y1="38" x2="148" y2="62" stroke="#b8962e" stroke-width="1.1"/><line x1="148" y1="62" x2="160" y2="108" stroke="#b8962e" stroke-width="1.1"/><line x1="160" y1="108" x2="136" y2="150" stroke="#b8962e" stroke-width="1.1"/><line x1="136" y1="150" x2="64" y2="150" stroke="#b8962e" stroke-width="1.1"/><line x1="64" y1="150" x2="40" y2="108" stroke="#b8962e" stroke-width="1.1"/><line x1="40" y1="108" x2="52" y2="62" stroke="#b8962e" stroke-width="1.1"/><line x1="52" y1="62" x2="100" y2="38" stroke="#b8962e" stroke-width="1.1"/></g><g opacity="0.45"><line x1="100" y1="38" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/><line x1="148" y1="62" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/><line x1="160" y1="108" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/><line x1="136" y1="150" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/><line x1="64" y1="150" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/><line x1="40" y1="108" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/><line x1="52" y1="62" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/></g><g opacity="0.2"><line x1="100" y1="38" x2="160" y2="108" stroke="#b8962e" stroke-width="0.7"/><line x1="148" y1="62" x2="136" y2="150" stroke="#b8962e" stroke-width="0.7"/><line x1="160" y1="108" x2="64" y2="150" stroke="#b8962e" stroke-width="0.7"/><line x1="136" y1="150" x2="40" y2="108" stroke="#b8962e" stroke-width="0.7"/><line x1="64" y1="150" x2="52" y2="62" stroke="#b8962e" stroke-width="0.7"/><line x1="40" y1="108" x2="100" y2="38" stroke="#b8962e" stroke-width="0.7"/></g><line x1="196" y1="30" x2="196" y2="170" stroke="#b8962e" stroke-width="0.8" opacity="0.35"/><text x="375" y="90" font-family="Georgia,serif" font-size="62" font-weight="700" fill="#f0ece0" text-anchor="middle" letter-spacing="10">SAA</text><line x1="240" y1="106" x2="510" y2="106" stroke="#b8962e" stroke-width="1.6"/><text x="375" y="142" font-family="Georgia,serif" font-size="26" font-weight="400" fill="#b8962e" text-anchor="middle" letter-spacing="13">ALLIANCE</text><line x1="556" y1="30" x2="556" y2="170" stroke="#b8962e" stroke-width="0.8" opacity="0.35"/><text x="728" y="88" font-family="Georgia,serif" font-size="13" fill="#f0ece0" opacity="0.85" text-anchor="middle" letter-spacing="3">SCIENTIFIC ANALYTICS ALLIANCE</text><line x1="572" y1="100" x2="884" y2="100" stroke="#b8962e" stroke-width="0.7" opacity="0.4"/><text x="728" y="118" font-family="Georgia,serif" font-size="11" fill="#b8962e" opacity="0.75" text-anchor="middle" letter-spacing="2">AI-Powered Research &amp; Risk Intelligence</text></svg></span>
+</a><nav class="nav" aria-label="SAA navigation"><a href="/about/">About</a>
           <a href="/platform/">Platform</a>
           <a href="/how-it-works/">How it works</a>
           <a href="/team/">Team</a>
-          <a href="/contact/">Contact</a>
-        </nav>
+<a href="/contact/">Contact</a></nav></div>
       </div>
-    </div>
-
-    <div class="content">
+<div class="saa-body">
       <div class="eyebrow">Platform · Equity Analytics</div>
       <h1>Investment Dashboard</h1>
-      <p class="lead">
-        Institutional-grade stock analysis platform for US equities: BlackRock-style HTML reports, real-time analytics, ML valuation, risk, ESG, streaming, and monitoring. Evolved from a report generator into a full ecosystem with API, scoring, and dashboards.
-      </p>
+<p class="lead">Institutional equity analytics with <strong>Report Agent</strong> (multi-step pipeline, tools, SharedContext). Institutional reports V2, <strong>watchlist</strong>, <strong>proactive scan</strong>, <strong>async generation</strong>; audit and session memory. Data: yfinance, SEC EDGAR. Flask/FastAPI, Redis, PostgreSQL, DuckDB. Optional NVIDIA: RAG, DCF reasoning, AI report generator. invest.saa-alliance.com</p>
 
-      <div class="module-hero-visual" aria-hidden="true">
-        <div class="visual-glow"></div>
-        <svg viewBox="0 0 400 180" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <linearGradient id="barGradInv" x1="0%" y1="100%" x2="0%" y2="0%">
-              <stop offset="0%" stop-color="#d4af37" stop-opacity="0.2"/>
-              <stop offset="100%" stop-color="#d4af37" stop-opacity="0.8"/>
-            </linearGradient>
-          </defs>
-          <rect x="40" y="100" width="30" height="60" rx="4" fill="url(#barGradInv)" style="transform-origin: bottom; animation: barGrowInv 0.8s ease forwards;"/>
-          <rect x="85" y="70" width="30" height="90" rx="4" fill="url(#barGradInv)" style="transform-origin: bottom; animation: barGrowInv 0.8s ease 0.1s forwards;"/>
-          <rect x="130" y="50" width="30" height="110" rx="4" fill="url(#barGradInv)" style="transform-origin: bottom; animation: barGrowInv 0.8s ease 0.2s forwards;"/>
-          <rect x="175" y="80" width="30" height="80" rx="4" fill="url(#barGradInv)" style="transform-origin: bottom; animation: barGrowInv 0.8s ease 0.3s forwards;"/>
-          <rect x="220" y="40" width="30" height="120" rx="4" fill="url(#barGradInv)" style="transform-origin: bottom; animation: barGrowInv 0.8s ease 0.4s forwards;"/>
-          <rect x="265" y="60" width="30" height="100" rx="4" fill="url(#barGradInv)" style="transform-origin: bottom; animation: barGrowInv 0.8s ease 0.5s forwards;"/>
-          <rect x="310" y="30" width="30" height="130" rx="4" fill="#d4af37" style="transform-origin: bottom; animation: barGrowInv 0.8s ease 0.6s forwards;"/>
-          <path d="M55 95 L100 65 L145 45 L190 75 L235 35 L280 55 L325 25" stroke="#d4af37" stroke-width="2" fill="none" opacity="0.6" style="stroke-dasharray: 300; stroke-dashoffset: 300; animation: lineGrowInv 1.5s ease 0.5s forwards;"/>
-          <circle cx="325" cy="25" r="4" fill="#d4af37" style="animation: dataPulseInv 1.5s ease-in-out infinite;"/>
-        </svg>
-      </div>
-
-      <div class="btns">
-        <a class="btn primary" href="https://invest.saa-alliance.com/" target="_blank" rel="noopener">Launch Investment Dashboard</a>
-        <a class="btn" href="/platform/">Back to Platform</a>
-      </div>
-
+<!-- Phase Clocks: canvas + investment-dashboard-hero.js (подключается плагином SAA Berry Phase Hero на странице Investment Dashboard). -->
+<div class="module-hero-canvas" aria-hidden="true"><canvas id="heroCanvasInvest"></canvas></div>
+<div class="btns"><a class="btn primary" href="https://invest.saa-alliance.com/" target="_blank" rel="noopener">Launch Investment Dashboard</a>
+<a class="btn" href="https://saa-alliance.com/platform/">Back to Platform</a></div>
       <h2>About</h2>
-      <p>
-        Professional platform for analysis of major US equities with BlackRock-style HTML reports. The service grew from a simple report generator into a full ecosystem: API, real-time analytics, ML valuation, risk, ESG, streaming, and monitoring.
-      </p>
-
+Investment Dashboard is the institutional equity analytics module of SAA Alliance. At its core is the <strong>Report Agent</strong>: a multi-step pipeline with tools and SharedContext that produces BlackRock-style institutional reports V2. Features include <strong>watchlist</strong>, <strong>proactive scan</strong>, <strong>async report generation</strong>, and <strong>audit/session memory</strong>. Data from yfinance and SEC EDGAR; stack: Flask/FastAPI, Redis, PostgreSQL, DuckDB. Optional NVIDIA (RAG, DCF reasoning, AI report generator). Export to ARIN for unified verdict. Production: invest.saa-alliance.com.
       <h2>Capabilities</h2>
-
       <h3>Reports and analytics</h3>
       <ul>
+ 	<li><strong>Report Agent</strong> — Multi-step pipeline, tools, SharedContext; async report generation; audit and session memory</li>
+ 	<li><strong>Watchlist &amp; proactive scan</strong> — Track tickers, automated scans, alerts</li>
         <li><strong>Institutional reports V2</strong> — BlackRock-style HTML with Executive Summary, scores, and visualizations</li>
         <li><strong>SWOT, technical and fundamental analysis</strong> — RSI, MACD, volume, key metrics</li>
         <li><strong>Valuation</strong> — DCF, EV/Sales, peer multiples, SOTP, Vanguard-style methodology</li>
@@ -365,21 +86,18 @@
         <li><strong>Extended data</strong> — TradingView-style, segments, geography, seasonality</li>
         <li><strong>Bilingual reports</strong> — EN/RU, multilingual translations</li>
       </ul>
-
       <h3>Data and infrastructure</h3>
       <ul>
         <li><strong>Multiple sources</strong> — yfinance, SEC EDGAR (10-K/10-Q), segment loading, CDN</li>
         <li><strong>Cache and storage</strong> — Redis, PostgreSQL, DuckDB for analytics</li>
         <li><strong>Validation and quality</strong> — Data validation, ESG scoring, compliance</li>
       </ul>
-
       <h3>ML and AI (optional)</h3>
       <ul>
         <li><strong>NVIDIA modules</strong> — RAG for peer comparison, DCF reasoning, report generation, translations</li>
         <li><strong>Signals and portfolio</strong> — Signal extraction from news/reports, portfolio optimization (Markowitz)</li>
         <li><strong>Forecasts and sentiment</strong> — Price predictor, sentiment analyzer</li>
       </ul>
-
       <h3>Platform and DevOps</h3>
       <ul>
         <li><strong>Web API</strong> — Flask (stable_server) + FastAPI (app/api/v1), health, metrics, RBAC</li>
@@ -387,29 +105,32 @@
         <li><strong>Monitoring</strong> — Prometheus, Grafana, structlog, health checks</li>
         <li><strong>Deploy</strong> — Docker Compose (web, Redis, Postgres, Nginx, Prometheus, Grafana, Kafka, Airflow, ELK), Kubernetes (deployment, services, ingress, HPA, RBAC)</li>
       </ul>
-
       <h2>Technology stack</h2>
       <div class="grid cols-2">
         <div class="card">
           <h3>Backend</h3>
-          <p>Python 3.9+, Flask 3, FastAPI, Uvicorn, Gunicorn. pandas, numpy, yfinance, scikit-learn, scipy.</p>
+Python 3.9+, Flask 3, FastAPI, Uvicorn, Gunicorn. pandas, numpy, yfinance, scikit-learn, scipy.
+
         </div>
         <div class="card">
           <h3>Database and cache</h3>
-          <p>PostgreSQL (SQLAlchemy, Alembic), DuckDB, Redis (hiredis). Prometheus, Grafana, structlog.</p>
+PostgreSQL (SQLAlchemy, Alembic), DuckDB, Redis (hiredis). Prometheus, Grafana, structlog.
+
         </div>
         <div class="card">
           <h3>Security and infra</h3>
-          <p>python-jose, passlib/bcrypt, RBAC, compliance. Docker, Docker Compose, Kubernetes. Kafka, Zookeeper. Apache Airflow (in docker-compose). Elasticsearch, Kibana (optional).</p>
+python-jose, passlib/bcrypt, RBAC, compliance. Docker, Docker Compose, Kubernetes. Kafka, Zookeeper. Apache Airflow (in docker-compose). Elasticsearch, Kibana (optional).
+
         </div>
         <div class="card">
           <h3>Production</h3>
-          <p>Gunicorn WSGI, port 5001. Report version: V2 (Institutional). Health: <code class="mono">GET /health</code>, <code class="mono">GET /api/report_version</code>.</p>
+Gunicorn WSGI, port 5001. Report version: V2 (Institutional). Health: <code class="mono">GET /health</code>, <code class="mono">GET /api/report_version</code>.
+
         </div>
       </div>
-
       <h2>API (main)</h2>
       <p class="muted">Base: <code class="mono">/api</code></p>
+
       <ul>
         <li><strong>GET</strong> <code class="mono">/</code> — Web UI, ticker selection and report generation</li>
         <li><strong>GET</strong> <code class="mono">/health</code> — Server status</li>
@@ -418,40 +139,23 @@
         <li><strong>POST</strong> <code class="mono">/api/analyze</code> — Bulk analysis: <code class="mono">{"tickers": ["AAPL", "MSFT"]}</code></li>
         <li><strong>GET</strong> <code class="mono">/api/report_version</code> — Report version (v2, Institutional)</li>
       </ul>
-
       <h2>Report structure V2</h2>
-      <p>
         Executive Summary; Quantitative Scores (Valuation, Growth, Quality, Momentum, Risk, Overall); Investment Summary; Valuation Data (multiples, DCF, EV/Sales, SOTP); Technical Analysis (chart, RSI, MACD, volume); Enhanced Analyst Consensus; Advanced Visualizations (Valuation Heatmap, Risk Radar, Peer Benchmarking); Risk Analysis; Peer Comparison; Extended Data &amp; Analytics; Latest News; Financial Statements; SWOT; Professional Trade Idea.
-      </p>
-
       <h2>Quick start</h2>
-      <p>
         Requirements: Python 3.9+, 4GB+ RAM. <code class="mono">pip install -r requirements.txt</code>. Optional .env: TELEGRAM_*, ALPHA_VANTAGE_API_KEY, REDIS_URL, POSTGRES_URL. Run <code class="mono">python stable_server.py</code> → http://localhost:5001. CLI: <code class="mono">python main.py</code>.
-      </p>
-
       <h2>Disclaimer</h2>
-      <p class="muted">
-        The project is for educational purposes. Analysis is not investment advice. Decisions should be based on your own analysis and consultation with financial advisors.
-      </p>
+<p class="muted">The project is for educational purposes. Analysis is not investment advice. Decisions should be based on your own analysis and consultation with financial advisors.</p>
 
+<h2>Related</h2>
+Investment Dashboard is one of six production modules in the SAA Alliance Risk &amp; Intelligence OS. The others: Global Risk Platform, Risk Analyzer, ARIN Platform, Crypto Analytics Portal, News Analytics — see <a href="https://saa-alliance.com/platform/">Platform</a> and the main site.
       <div class="hr"></div>
-      <div class="btns">
-        <a class="btn primary" href="https://invest.saa-alliance.com/" target="_blank" rel="noopener">Launch Investment Dashboard</a>
-        <a class="btn" href="/platform/">All modules</a>
-        <a class="btn" href="/contact/">Contact</a>
-      </div>
+<div class="btns"><a class="btn primary" href="https://invest.saa-alliance.com/" target="_blank" rel="noopener">Launch Investment Dashboard</a>
+<a class="btn" href="https://saa-alliance.com/platform/">All modules</a>
+<a class="btn" href="/contact/">Contact</a></div>
+<footer class="page-footer" role="contentinfo"><span class="page-footer-copy">© 2026 Scientific Analytics Alliance Inc. • Premium Research &amp; Wealth Intelligence</span>
+<div class="page-footer-legal"><a href="/privacy-policy/">Privacy Policy</a><span class="muted"> • </span><a href="/terms/">Terms of Use</a></div>
+<a class="page-footer-badge" href="https://www.nvidia.com/en-us/startups/" target="_blank" rel="noopener" aria-label="NVIDIA Inception Program"><img src="https://saa-alliance.com/wp-content/uploads/2026/01/nvidia-inception-program-badge-rgb-1c-blk-for-screen.png" alt="NVIDIA Inception Program Member" /></a>
 
-      <footer class="page-footer" role="contentinfo">
-        <span class="page-footer-copy">© 2025 Scientific Analytics Alliance • Premium Research & Wealth Intelligence</span>
-        <div class="page-footer-legal">
-          <a href="/privacy-policy/">Privacy Policy</a>
-          <span class="muted" style="font-size:12px">•</span>
-          <a href="/terms/">Terms of Use</a>
-        </div>
-        <a href="https://www.nvidia.com/en-us/startups/" target="_blank" rel="noopener" class="page-footer-badge" aria-label="NVIDIA Inception Program">
-          <img src="https://saa-alliance.com/wp-content/uploads/2026/01/nvidia-inception-program-badge-rgb-1c-blk-for-screen.png" alt="NVIDIA Inception Program Member" loading="lazy" decoding="async">
-        </a>
-      </footer>
-    </div>
+</footer></div>
   </div>
 </div>

@@ -11,9 +11,22 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
+# Use NGC_API_KEY from env, or from apps/api/.env if already configured
+if [ -z "$NGC_API_KEY" ] && [ -f "apps/api/.env" ]; then
+  set -a
+  # shellcheck source=/dev/null
+  source "apps/api/.env" 2>/dev/null || true
+  set +a
+fi
+if [ -z "$NGC_API_KEY" ] && [ -f "apps/api/.env" ]; then
+  NGC_API_KEY=$(grep -E '^NGC_API_KEY=' apps/api/.env 2>/dev/null | sed 's/^NGC_API_KEY=//' | tr -d '"' | sed "s/^'//;s/'$//")
+  export NGC_API_KEY
+fi
+
 if [ -z "$NGC_API_KEY" ]; then
   echo -e "${RED}Error: NGC_API_KEY not set${NC}"
   echo "  export NGC_API_KEY=your_key"
+  echo "  Or add NGC_API_KEY=... to apps/api/.env"
   echo "  Get key: https://ngc.nvidia.com → Setup → API Key"
   exit 1
 fi

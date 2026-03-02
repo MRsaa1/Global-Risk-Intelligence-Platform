@@ -1,0 +1,28 @@
+name: Stagflation + Energy Crisis
+description: 2024 base case - Energy price spike + interest rate shock
+initial_shocks:
+  - type: energy_price_spike
+    magnitude: 3.0
+    affected_regions: [EU, ASIA]
+    duration_days: 180
+  - type: interest_rate_shock
+    magnitude: 300
+    central_banks: [FED, ECB, BOE]
+    speed: rapid
+transmission_channels:
+  direct_exposure:
+    banks_to_energy_sector: 450e9
+    insurance_to_energy_bonds: 120e9
+  indirect_effects:
+    fire_sales_trigger: 0.15
+    margin_call_cascade: true
+    confidence_shock_threshold: 0.20
+interventions:
+  - day: 7
+    type: emergency_liquidity
+    amount_usd: 500e9
+    recipients: [systemically_important_banks]
+  - day: 14
+    type: circuit_breaker
+    markets: [derivatives, credit]
+    duration_days: 3

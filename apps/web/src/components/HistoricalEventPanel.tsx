@@ -921,24 +921,24 @@ export default function HistoricalEventPanel({ isOpen, onClose, eventId, onEvent
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
       >
-        <div className="h-full bg-black/95 backdrop-blur-xl rounded-2xl border border-white/10 overflow-hidden flex items-center justify-center">
+        <div className="h-full bg-black/95 rounded-md border border-zinc-700 overflow-hidden flex items-center justify-center">
           <div className="text-center p-8 max-w-md">
-            <div className="w-16 h-16 mx-auto mb-6 bg-amber-500/20 rounded-full flex items-center justify-center">
-              <svg className="w-8 h-8 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="w-16 h-16 mx-auto mb-6 bg-zinc-700 rounded-full flex items-center justify-center">
+              <svg className="w-8 h-8 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
-            <h2 className="text-white text-xl font-light mb-2">Event Analysis Coming Soon</h2>
-            <p className="text-white/50 text-sm mb-4">
+            <h2 className="text-zinc-100 text-xl font-light mb-2">Event Analysis Coming Soon</h2>
+            <p className="text-zinc-400 text-sm mb-4">
               Detailed analysis for "{eventId.replace(/[_-]/g, ' ').replace(/\d+/g, ' $&').trim()}" 
               is being prepared by our research team.
             </p>
-            <p className="text-white/30 text-xs mb-6">
+            <p className="text-zinc-500 text-xs mb-6">
               Event ID: {eventId}
             </p>
             <button
               onClick={onClose}
-              className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm transition-colors"
+              className="px-6 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-100 rounded-md text-sm transition-colors"
             >
               Close
             </button>
@@ -985,11 +985,11 @@ export default function HistoricalEventPanel({ isOpen, onClose, eventId, onEvent
   }
   
   const typeColors: Record<string, { bg: string; text: string; border: string }> = {
-    financial: { bg: 'bg-blue-500/20', text: 'text-blue-400', border: 'border-blue-500/30' },
-    climate: { bg: 'bg-amber-500/20', text: 'text-amber-400', border: 'border-amber-500/30' },
-    pandemic: { bg: 'bg-purple-500/20', text: 'text-purple-400', border: 'border-purple-500/30' },
-    geopolitical: { bg: 'bg-orange-500/20', text: 'text-orange-400', border: 'border-orange-500/30' },
-    infrastructure: { bg: 'bg-yellow-500/20', text: 'text-yellow-400', border: 'border-yellow-500/30' },
+    financial: { bg: 'bg-zinc-700', text: 'text-zinc-300', border: 'border-zinc-600' },
+    climate: { bg: 'bg-zinc-700', text: 'text-zinc-300', border: 'border-zinc-600' },
+    pandemic: { bg: 'bg-zinc-700', text: 'text-zinc-300', border: 'border-zinc-600' },
+    geopolitical: { bg: 'bg-zinc-700', text: 'text-zinc-300', border: 'border-zinc-600' },
+    infrastructure: { bg: 'bg-zinc-700', text: 'text-zinc-300', border: 'border-zinc-600' },
   }
   
   const colors = typeColors[event.type] || typeColors.financial
@@ -1004,7 +1004,7 @@ export default function HistoricalEventPanel({ isOpen, onClose, eventId, onEvent
           exit={{ opacity: 0, scale: 0.95 }}
           transition={{ duration: 0.3 }}
         >
-          <div className="h-full bg-black/95 backdrop-blur-xl rounded-2xl border border-white/10 overflow-hidden flex">
+          <div className="h-full bg-black/95 rounded-md border border-zinc-700 overflow-hidden flex">
             {/* Main Report Content */}
             <div className="flex-1 p-8 overflow-auto">
               {/* Header */}
@@ -1013,37 +1013,37 @@ export default function HistoricalEventPanel({ isOpen, onClose, eventId, onEvent
                   <span className={`px-2 py-0.5 rounded text-xs font-medium uppercase tracking-wider ${colors.bg} ${colors.text} ${colors.border} border`}>
                     {event.type}
                   </span>
-                  <span className="text-white/40 text-sm">{event.year}</span>
+                  <span className="text-zinc-500 text-sm">{event.year}</span>
                 </div>
-                <h1 className="text-white text-3xl font-light mb-2">{event.name}</h1>
-                <p className="text-white/60 text-sm leading-relaxed max-w-3xl">{event.summary}</p>
+                <h1 className="text-zinc-100 text-3xl font-light mb-2">{event.name}</h1>
+                <p className="text-zinc-400 text-sm leading-relaxed max-w-3xl">{event.summary}</p>
               </div>
               
               {/* Key Metrics */}
               <div className="grid grid-cols-4 gap-4 mb-8">
-                <div className="bg-white/5 rounded-xl p-4 border border-white/10">
-                  <div className="text-white/50 text-xs uppercase tracking-wider mb-1">GDP Impact</div>
-                  <div className="text-red-400 text-2xl font-light">
+                <div className="bg-zinc-800 rounded-md p-4 border border-zinc-700">
+                  <div className="text-zinc-400 text-xs uppercase tracking-wider mb-1">GDP Impact</div>
+                  <div className="text-red-400/80 text-2xl font-light">
                     ${Math.abs(event.gdpImpact).toLocaleString()}B
                   </div>
-                  <div className="text-white/30 text-xs">Global</div>
+                  <div className="text-zinc-500 text-xs">Global</div>
                 </div>
-                <div className="bg-white/5 rounded-xl p-4 border border-white/10">
-                  <div className="text-white/50 text-xs uppercase tracking-wider mb-1">Economic Loss</div>
-                  <div className="text-orange-400 text-2xl font-light">
+                <div className="bg-zinc-800 rounded-md p-4 border border-zinc-700">
+                  <div className="text-zinc-400 text-xs uppercase tracking-wider mb-1">Economic Loss</div>
+                  <div className="text-orange-400/80 text-2xl font-light">
                     ${event.economicLoss.toLocaleString()}B
                   </div>
-                  <div className="text-white/30 text-xs">Total</div>
+                  <div className="text-zinc-500 text-xs">Total</div>
                 </div>
-                <div className="bg-white/5 rounded-xl p-4 border border-white/10">
-                  <div className="text-white/50 text-xs uppercase tracking-wider mb-1">Duration</div>
-                  <div className="text-white text-lg font-light">{event.duration.split(' ')[0]}</div>
-                  <div className="text-white/30 text-xs">{event.duration.split(' ').slice(1).join(' ')}</div>
+                <div className="bg-zinc-800 rounded-md p-4 border border-zinc-700">
+                  <div className="text-zinc-400 text-xs uppercase tracking-wider mb-1">Duration</div>
+                  <div className="text-zinc-100 text-lg font-light">{event.duration.split(' ')[0]}</div>
+                  <div className="text-zinc-500 text-xs">{event.duration.split(' ').slice(1).join(' ')}</div>
                 </div>
-                <div className="bg-white/5 rounded-xl p-4 border border-white/10">
-                  <div className="text-white/50 text-xs uppercase tracking-wider mb-1">Recovery</div>
-                  <div className="text-green-400 text-lg font-light">{event.recoveryTimeline.split(' ')[0]}</div>
-                  <div className="text-white/30 text-xs">{event.recoveryTimeline.split(' ').slice(1).join(' ')}</div>
+                <div className="bg-zinc-800 rounded-md p-4 border border-zinc-700">
+                  <div className="text-zinc-400 text-xs uppercase tracking-wider mb-1">Recovery</div>
+                  <div className="text-green-400/80 text-lg font-light">{event.recoveryTimeline.split(' ')[0]}</div>
+                  <div className="text-zinc-500 text-xs">{event.recoveryTimeline.split(' ').slice(1).join(' ')}</div>
                 </div>
               </div>
               
@@ -1051,10 +1051,10 @@ export default function HistoricalEventPanel({ isOpen, onClose, eventId, onEvent
               <div className="grid grid-cols-2 gap-6 mb-8">
                 {/* Affected Regions */}
                 <div>
-                  <h3 className="text-white/70 text-sm uppercase tracking-wider mb-3">Affected Regions</h3>
+                  <h3 className="text-zinc-300 text-sm uppercase tracking-wider mb-3">Affected Regions</h3>
                   <div className="flex flex-wrap gap-2">
                     {event.affectedRegions.map((region) => (
-                      <span key={region} className="px-2 py-1 bg-white/5 rounded text-white/70 text-xs border border-white/10">
+                      <span key={region} className="px-2 py-1 bg-zinc-800 rounded text-zinc-300 text-xs border border-zinc-700">
                         {region}
                       </span>
                     ))}
@@ -1063,10 +1063,10 @@ export default function HistoricalEventPanel({ isOpen, onClose, eventId, onEvent
                 
                 {/* Industries */}
                 <div>
-                  <h3 className="text-white/70 text-sm uppercase tracking-wider mb-3">Industries Impacted</h3>
+                  <h3 className="text-zinc-300 text-sm uppercase tracking-wider mb-3">Industries Impacted</h3>
                   <div className="flex flex-wrap gap-2">
                     {event.industries.map((industry) => (
-                      <span key={industry} className="px-2 py-1 bg-white/5 rounded text-white/70 text-xs border border-white/10">
+                      <span key={industry} className="px-2 py-1 bg-zinc-800 rounded text-zinc-300 text-xs border border-zinc-700">
                         {industry}
                       </span>
                     ))}
@@ -1076,7 +1076,7 @@ export default function HistoricalEventPanel({ isOpen, onClose, eventId, onEvent
               
               {/* Cascade Analysis Graph - Full Width, Fixed Height */}
               <div className="mb-8">
-                <h3 className="text-white/70 text-sm uppercase tracking-wider mb-3">Cascade Analysis</h3>
+                <h3 className="text-zinc-300 text-sm uppercase tracking-wider mb-3">Cascade Analysis</h3>
                 <div className="w-full">
                   <EventRiskGraph
                     eventId={event.id}
@@ -1091,14 +1091,14 @@ export default function HistoricalEventPanel({ isOpen, onClose, eventId, onEvent
               
               {/* Lessons Learned */}
               <div className="mb-8">
-                <h3 className="text-white/70 text-sm uppercase tracking-wider mb-3">Key Lessons</h3>
+                <h3 className="text-zinc-300 text-sm uppercase tracking-wider mb-3">Key Lessons</h3>
                 <div className="space-y-2">
                   {event.lessonsLearned.map((lesson, i) => (
                     <div key={i} className="flex items-start gap-2">
-                      <svg className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-4 h-4 text-zinc-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                      <span className="text-white/60 text-sm">{lesson}</span>
+                      <span className="text-zinc-400 text-sm">{lesson}</span>
                     </div>
                   ))}
                 </div>
@@ -1106,7 +1106,7 @@ export default function HistoricalEventPanel({ isOpen, onClose, eventId, onEvent
               
               {/* Comparable Events */}
               <div className="mb-8">
-                <h3 className="text-white/70 text-sm uppercase tracking-wider mb-3">Comparable Events</h3>
+                <h3 className="text-zinc-300 text-sm uppercase tracking-wider mb-3">Comparable Events</h3>
                 <div className="flex flex-wrap gap-2">
                   {event.comparableEvents.map((ev) => {
                     const targetId = typeof ev === 'string' && HISTORICAL_EVENTS[ev] ? ev : EVENT_NAME_TO_ID[ev]
@@ -1117,10 +1117,10 @@ export default function HistoricalEventPanel({ isOpen, onClose, eventId, onEvent
                       <button
                         key={ev}
                         onClick={() => handleComparableClick(ev)}
-                        className={`px-3 py-1.5 rounded-lg text-xs border transition-colors flex items-center gap-1.5 ${
+                        className={`px-3 py-1.5 rounded-md text-xs border transition-colors flex items-center gap-1.5 ${
                           isAvailable
-                            ? 'bg-white/5 text-white/70 border-white/10 hover:bg-white/15 hover:text-white'
-                            : 'bg-white/5 text-white/30 border-white/5 cursor-not-allowed'
+                            ? 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700 hover:text-white'
+                            : 'bg-zinc-800 text-zinc-500 border-zinc-800 cursor-not-allowed'
                         }`}
                       >
                         {isAvailable && (
@@ -1139,7 +1139,7 @@ export default function HistoricalEventPanel({ isOpen, onClose, eventId, onEvent
               <div className="flex gap-3">
                 <button 
                   onClick={handleExport}
-                  className="px-4 py-2 bg-amber-500/20 text-amber-400 rounded-lg border border-amber-500/30 hover:bg-amber-500/30 transition-colors text-sm flex items-center gap-2"
+                  className="px-4 py-2 bg-zinc-700 text-zinc-300 rounded-md border border-zinc-600 hover:bg-zinc-600 transition-colors text-sm flex items-center gap-2"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -1148,7 +1148,7 @@ export default function HistoricalEventPanel({ isOpen, onClose, eventId, onEvent
                 </button>
                 <button 
                   onClick={handleRunScenario}
-                  className="px-4 py-2 bg-amber-500/20 text-amber-400 rounded-lg border border-amber-500/30 hover:bg-amber-500/30 transition-colors text-sm flex items-center gap-2"
+                  className="px-4 py-2 bg-zinc-700 text-zinc-300 rounded-md border border-zinc-600 hover:bg-zinc-600 transition-colors text-sm flex items-center gap-2"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
@@ -1157,7 +1157,7 @@ export default function HistoricalEventPanel({ isOpen, onClose, eventId, onEvent
                 </button>
                 <button 
                   onClick={handleShare}
-                  className="px-4 py-2 bg-white/5 text-white/60 rounded-lg border border-white/10 hover:bg-white/10 transition-colors text-sm flex items-center gap-2"
+                  className="px-4 py-2 bg-zinc-800 text-zinc-400 rounded-md border border-zinc-700 hover:bg-zinc-700 transition-colors text-sm flex items-center gap-2"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
@@ -1173,9 +1173,9 @@ export default function HistoricalEventPanel({ isOpen, onClose, eventId, onEvent
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: 20 }}
-                    className="fixed bottom-6 left-1/2 -translate-x-1/2 px-4 py-2 bg-white/10 backdrop-blur-xl rounded-lg border border-white/20 text-white text-sm flex items-center gap-2"
+                    className="fixed bottom-6 left-1/2 -translate-x-1/2 px-4 py-2 bg-zinc-700 rounded-md border border-zinc-600 text-zinc-100 text-sm flex items-center gap-2"
                   >
-                    <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4 text-green-400/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
                     {notification}
@@ -1185,45 +1185,45 @@ export default function HistoricalEventPanel({ isOpen, onClose, eventId, onEvent
             </div>
             
             {/* Sidebar - Timeline & Meta */}
-            <div className="w-72 border-l border-white/10 p-6 bg-white/[0.02]">
+            <div className="w-72 border-l border-zinc-700 p-6 bg-zinc-900/50">
               <div className="mb-6">
-                <h3 className="text-white/50 text-xs uppercase tracking-wider mb-3">Event Timeline</h3>
+                <h3 className="text-zinc-400 text-xs uppercase tracking-wider mb-3">Event Timeline</h3>
                 <div className="space-y-3">
                   <div className="flex items-center gap-3">
                     <div className="w-2 h-2 rounded-full bg-red-500" />
                     <div>
-                      <div className="text-white text-xs">Peak Impact</div>
-                      <div className="text-white/40 text-[10px]">{event.peakDate}</div>
+                      <div className="text-zinc-100 text-xs">Peak Impact</div>
+                      <div className="text-zinc-500 text-[10px]">{event.peakDate}</div>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="w-2 h-2 rounded-full bg-yellow-500" />
                     <div>
-                      <div className="text-white text-xs">Duration</div>
-                      <div className="text-white/40 text-[10px]">{event.duration}</div>
+                      <div className="text-zinc-100 text-xs">Duration</div>
+                      <div className="text-zinc-500 text-[10px]">{event.duration}</div>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="w-2 h-2 rounded-full bg-green-500" />
                     <div>
-                      <div className="text-white text-xs">Recovery</div>
-                      <div className="text-white/40 text-[10px]">{event.recoveryTimeline}</div>
+                      <div className="text-zinc-100 text-xs">Recovery</div>
+                      <div className="text-zinc-500 text-[10px]">{event.recoveryTimeline}</div>
                     </div>
                   </div>
                 </div>
               </div>
               
               {event.casualties && (
-                <div className="mb-6 p-3 bg-red-500/10 rounded-lg border border-red-500/20">
-                  <div className="text-white/50 text-xs uppercase tracking-wider mb-1">Human Cost</div>
-                  <div className="text-red-400 text-xl font-light">{event.casualties.toLocaleString()}</div>
-                  <div className="text-white/30 text-xs">casualties</div>
+                <div className="mb-6 p-3 bg-red-500/10 rounded-md border border-red-500/20">
+                  <div className="text-zinc-400 text-xs uppercase tracking-wider mb-1">Human Cost</div>
+                  <div className="text-red-400/80 text-xl font-light">{event.casualties.toLocaleString()}</div>
+                  <div className="text-zinc-500 text-xs">casualties</div>
                 </div>
               )}
               
               <div className="mb-6">
-                <h3 className="text-white/50 text-xs uppercase tracking-wider mb-3">Data Sources</h3>
-                <div className="text-white/40 text-xs space-y-1">
+                <h3 className="text-zinc-400 text-xs uppercase tracking-wider mb-3">Data Sources</h3>
+                <div className="text-zinc-500 text-xs space-y-1">
                   <div>• World Bank</div>
                   <div>• IMF</div>
                   <div>• Bloomberg</div>
@@ -1231,7 +1231,7 @@ export default function HistoricalEventPanel({ isOpen, onClose, eventId, onEvent
                 </div>
               </div>
               
-              <div className="text-white/20 text-[10px] mt-auto">
+              <div className="text-zinc-600 text-[10px] mt-auto">
                 Report generated by PFRP Analytics Engine.<br/>
                 Data verified as of 2024.
               </div>
@@ -1240,9 +1240,9 @@ export default function HistoricalEventPanel({ isOpen, onClose, eventId, onEvent
             {/* Close button */}
             <button
               onClick={onClose}
-              className="absolute top-4 right-4 p-2 bg-white/10 rounded-lg hover:bg-white/20 transition-colors"
+              className="absolute top-4 right-4 p-2 bg-zinc-700 rounded-md hover:bg-zinc-600 transition-colors"
             >
-              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5 text-zinc-100" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>

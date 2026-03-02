@@ -644,6 +644,23 @@ GUARDRAILS_CONFIG_PATH=config/guardrails.yml
 
 ---
 
+## Running fine-tuning and RL (Phase C2)
+
+### Fine-tuning (NeMo Customizer)
+
+- **Config:** `apps/api/config/nemo_finetune.yaml` — `base_model`, `epochs`, `task`, `datasets.default_path`, `output_dir`, `result_file`.
+- **Data:** Place training data (JSON/JSONL/CSV per [SPECIALIZED_RISK_AGENT.md](SPECIALIZED_RISK_AGENT.md)) under `data/finetune/` or the path set in `datasets.default_path` (and optional per-dataset entries under `datasets`).
+- **Script:** From `apps/api`: `PYTHONPATH=src python -m scripts.run_nemo_finetune [--config config/nemo_finetune.yaml] [--dataset-id my_dataset]`. The script calls `nemo_customizer.run_fine_tune`, then writes `model_id` and `model_path` to `result_file` (e.g. `data/finetune_output/last_run.json`) for use by the API or downstream config.
+- **Real NeMo:** Set `NEMO_CUSTOMIZER_API_URL` to the fine-tune API endpoint; the service in `apps/api/src/services/nemo_customizer.py` will call it instead of returning a mock `model_id`.
+
+### RL & Gym (one scenario: ADVISOR policy)
+
+- **Service:** `apps/api/src/services/nemo_rl_gym.py` — `StressTestGym` (state: scenario/portfolio, actions, reward) and `NeMoRLService.run_advisor_policy_experiment(episodes, reward_signals)`.
+- **Behaviour:** Without real APIs, the Gym returns stub states/rewards and the RL service runs a short mock experiment and returns a mock `policy_version`. Set `NEMO_GYM_API_URL` and `NEMO_RL_API_URL` to use real NeMo Gym/RL endpoints.
+- **Pipeline:** Use `nemo_rl_service.run_advisor_policy_experiment()` from a scheduled job or from an agent-orchestration step; the resulting policy version can be referenced in config to switch the ADVISOR agent to the updated model when supported.
+
+---
+
 ## 📚 Resources
 
 - [NVIDIA NeMo Documentation](https://docs.nvidia.com/nemo/)

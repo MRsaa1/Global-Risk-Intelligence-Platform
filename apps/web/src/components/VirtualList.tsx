@@ -165,7 +165,7 @@ export function VirtualAssetList({
   selectedAssetId,
 }: VirtualAssetListProps) {
   const getRiskLevel = (score?: number): { color: string; label: string } => {
-    if (!score) return { color: 'text-white/30', label: '-' }
+    if (!score) return { color: 'text-zinc-500', label: '-' }
     if (score >= 80) return { color: 'text-red-400', label: 'Critical' }
     if (score >= 60) return { color: 'text-orange-400', label: 'High' }
     if (score >= 40) return { color: 'text-yellow-400', label: 'Medium' }
@@ -190,14 +190,14 @@ export function VirtualAssetList({
       skeletonCount={6}
       getItemKey={(asset) => asset.id}
       emptyState={
-        <div className="text-center text-white/40 py-8">
+        <div className="text-center text-zinc-500 py-8">
           <p>No assets found</p>
         </div>
       }
       renderSkeleton={() => (
-        <div className="p-3 mx-2 my-1 bg-white/5 rounded-lg animate-pulse">
-          <div className="h-4 bg-white/10 rounded w-3/4 mb-2" />
-          <div className="h-3 bg-white/10 rounded w-1/2" />
+        <div className="p-3 mx-2 my-1 bg-zinc-800 rounded-lg animate-pulse">
+          <div className="h-4 bg-zinc-700 rounded w-3/4 mb-2" />
+          <div className="h-3 bg-zinc-700 rounded w-1/2" />
         </div>
       )}
       renderItem={(asset, index) => {
@@ -213,23 +213,23 @@ export function VirtualAssetList({
             className={`
               p-3 mx-2 my-1 rounded-lg cursor-pointer transition-all
               ${isSelected 
-                ? 'bg-blue-500/20 border border-blue-500/30' 
-                : 'bg-white/5 hover:bg-white/10 border border-transparent'
+                ? 'bg-zinc-700 border border-zinc-600' 
+                : 'bg-zinc-800 hover:bg-zinc-700 border border-transparent'
               }
             `}
             onClick={() => onAssetClick?.(asset)}
           >
             <div className="flex items-center justify-between">
               <div className="flex-1 min-w-0">
-                <h4 className="text-sm font-medium text-white truncate">
+                <h4 className="text-sm font-medium text-zinc-100 truncate">
                   {asset.name}
                 </h4>
                 <div className="flex items-center gap-2 mt-0.5">
                   {asset.city && (
-                    <span className="text-xs text-white/40">{asset.city}</span>
+                    <span className="text-xs text-zinc-500">{asset.city}</span>
                   )}
                   {asset.asset_type && (
-                    <span className="text-xs text-white/30">
+                    <span className="text-xs text-zinc-500">
                       • {asset.asset_type.replace(/_/g, ' ')}
                     </span>
                   )}
@@ -238,7 +238,7 @@ export function VirtualAssetList({
               
               <div className="flex items-center gap-3 ml-2">
                 {asset.current_valuation && (
-                  <span className="text-xs text-white/50">
+                  <span className="text-xs text-zinc-400">
                     €{(asset.current_valuation / 1_000_000).toFixed(1)}M
                   </span>
                 )}
@@ -246,7 +246,7 @@ export function VirtualAssetList({
                   <span className={`text-xs font-medium ${riskLevel.color}`}>
                     {riskLevel.label}
                   </span>
-                  <span className="text-[10px] text-white/30">
+                  <span className="text-[10px] text-zinc-500">
                     {combinedRisk.toFixed(0)}%
                   </span>
                 </div>
@@ -317,17 +317,17 @@ export function VirtualAlertList({
       skeletonCount={4}
       getItemKey={(alert) => alert.id}
       emptyState={
-        <div className="text-center text-white/40 py-8">
+        <div className="text-center text-zinc-500 py-8">
           <p>No alerts</p>
         </div>
       }
       renderSkeleton={() => (
-        <div className="p-3 mx-2 my-1 bg-white/5 rounded-lg animate-pulse">
+        <div className="p-3 mx-2 my-1 bg-zinc-800 rounded-lg animate-pulse">
           <div className="flex gap-2">
-            <div className="w-2 h-2 bg-white/10 rounded-full mt-1.5" />
+            <div className="w-2 h-2 bg-zinc-700 rounded-full mt-1.5" />
             <div className="flex-1">
-              <div className="h-4 bg-white/10 rounded w-1/2 mb-2" />
-              <div className="h-3 bg-white/10 rounded w-3/4" />
+              <div className="h-4 bg-zinc-700 rounded w-1/2 mb-2" />
+              <div className="h-3 bg-zinc-700 rounded w-3/4" />
             </div>
           </div>
         </div>
@@ -349,14 +349,14 @@ export function VirtualAlertList({
               <div className={`w-2 h-2 ${styles.dot} rounded-full mt-1.5 flex-shrink-0`} />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-2">
-                  <h4 className="text-sm font-medium text-white truncate">
+                  <h4 className="text-sm font-medium text-zinc-100 truncate">
                     {alert.title}
                   </h4>
-                  <span className="text-[10px] text-white/40 flex-shrink-0">
+                  <span className="text-[10px] text-zinc-500 flex-shrink-0">
                     {formatTimestamp(alert.timestamp)}
                   </span>
                 </div>
-                <p className="text-xs text-white/60 mt-0.5 line-clamp-2">
+                <p className="text-xs text-zinc-400 mt-0.5 line-clamp-2">
                   {alert.message}
                 </p>
               </div>

@@ -10,12 +10,9 @@ requires-python = ">=3.11"
 license = {text = "Proprietary"}
 
 dependencies = [
-    # Web Framework
     "fastapi>=0.109.0",
     "uvicorn[standard]>=0.27.0",
     "python-multipart>=0.0.6",
-    
-    # Database
     "sqlalchemy>=2.0.25",
     "greenlet>=3.0.0",
     "alembic>=1.13.0",
@@ -23,69 +20,46 @@ dependencies = [
     "psycopg2-binary>=2.9.9",
     "geoalchemy2>=0.14.0",
     "aiosqlite>=0.20.0",
-    
-    # Neo4j (Knowledge Graph)
     "neo4j>=5.15.0",
-    
-    # Redis & Celery
     "redis>=5.0.0",
     "celery[redis]>=5.3.0",
-    
-    # MinIO (Object Storage)
     "minio>=7.2.0",
-    
-    # Data Validation
     "pydantic>=2.5.0",
     "pydantic-settings>=2.1.0",
     "email-validator>=2.0.0",
-    
-    # Security
     "python-jose[cryptography]>=3.3.0",
     "passlib[bcrypt]>=1.7.4",
-    
-    # HTTP Client
     "httpx>=0.26.0",
-    
-    # 3D/BIM Processing (core only - open3d optional)
     "numpy>=1.26.0",
     "trimesh>=4.0.0",
-    
-    # Climate & Geospatial
     "shapely>=2.0.0",
     "pyproj>=3.6.0",
-    
-    # ML/AI (core only - heavy deps optional)
     "scikit-learn>=1.4.0",
-    
-    # High-performance computing (CPU-optimized)
     "numba>=0.59.0",
     "scipy>=1.12.0",
     "pandas>=2.2.0",
     "statsmodels>=0.14.0",
-    
-    # Parallel computing
     "dask[complete]>=2024.1.0",
-    
-    # WebSocket streaming
     "websockets>=12.0",
-    
-    # GraphQL
     "strawberry-graphql>=0.217.0",
-    
-    # Utilities
     "python-dateutil>=2.8.0",
     "orjson>=3.9.0",
     "structlog>=24.1.0",
     "psutil>=5.9.0",
-    
-    # PDF Generation
+    "h3>=3.7.0",
     "weasyprint>=62.0",
     "jinja2>=3.1.0",
     "markdown>=3.5.0",
-    # PDF fallback for macOS (no cairo/pango required)
     "reportlab>=4.0.0",
-    # BCP Word export
     "python-docx>=1.0.0",
+    "pyyaml>=6.0.0",
+    "pypdf>=4.0.0",
+    "apscheduler>=3.10.0",
+    "prometheus-client>=0.19.0",
+    "opentelemetry-api>=1.22.0",
+    "opentelemetry-sdk>=1.22.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.22.0",
+    "opentelemetry-instrumentation-fastapi>=0.43b0",
 ]
 
 [project.optional-dependencies]
@@ -98,12 +72,19 @@ dev = [
     "ruff>=0.1.14",
     "mypy>=1.8.0",
     "pre-commit>=3.6.0",
+    "bandit[toml]>=1.7.0",
 ]
 
 # Optional USD tooling for Omniverse/OpenUSD pipelines
 usd = [
     "usd2gltf>=0.3.5",
     "pillow>=10.0.0",
+]
+
+# Cascade/Replay MP4 export (Phase D)
+video = [
+    "imageio>=2.31.0",
+    "imageio-ffmpeg>=0.4.9",
 ]
 
 # Full ML/AI capabilities (requires Python <3.13)
@@ -128,9 +109,20 @@ climate = [
     "rasterio>=1.3.0",
 ]
 
+# Google Earth Engine (climate, flood, elevation, land use from GEE)
+earth_engine = [
+    "earthengine-api>=1.4.0",
+]
+
 # NVIDIA Riva (Speech AI) — gRPC TTS/STT for voice alerts and report narration (GTC)
 nvidia = [
     "nvidia-riva-client>=2.14.0",
+]
+
+# NVIDIA cuRAG — GPU-accelerated RAG for document indexing and semantic search.
+# Optional: nvidia-rag may require Python 3.12; when not installed, curag_retriever uses a stub.
+curag = [
+    "nvidia-rag>=2.0.0",
 ]
 
 [tool.setuptools.packages.find]

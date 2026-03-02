@@ -7,8 +7,9 @@
  * - Small white nodes
  * - Animated connections
  * - Results panel on right
+ * - Quantum aesthetics: on node click, related nodes highlight with stagger (entanglement metaphor)
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 
 interface RiskGraphPanelProps {
   data: {
@@ -22,6 +23,7 @@ interface RiskGraphPanelProps {
 
 export default function RiskGraphPanel({ data }: RiskGraphPanelProps) {
   const [hoveredNode, setHoveredNode] = useState<string | null>(null)
+  const [selectedNode, setSelectedNode] = useState<string | null>(null)
   const [animPhase, setAnimPhase] = useState(0)
 
   useEffect(() => {
@@ -66,6 +68,21 @@ export default function RiskGraphPanel({ data }: RiskGraphPanelProps) {
     { from: 'office', to: 'port', weight: 0.5 },
   ]
 
+  // Related nodes for selected (connected by edge) — for stagger highlight
+  const { relatedIds, relatedIndex } = useMemo(() => {
+    if (!selectedNode) return { relatedIds: new Set<string>(), relatedIndex: new Map<string, number>() }
+    const ids = new Set<string>([selectedNode])
+    edges.forEach((e) => {
+      if (e.from === selectedNode || e.to === selectedNode) {
+        ids.add(e.from)
+        ids.add(e.to)
+      }
+    })
+    const index = new Map<string, number>()
+    Array.from(ids).forEach((id, i) => index.set(id, i))
+    return { relatedIds: ids, relatedIndex: index }
+  }, [selectedNode])
+
   const getRiskColor = (risk: string) => {
     switch (risk) {
       case 'critical': return '#ef4444'
@@ -85,27 +102,27 @@ export default function RiskGraphPanel({ data }: RiskGraphPanelProps) {
   const getNode = (id: string) => nodes.find(n => n.id === id)
 
   return (
-    <div className="h-full flex flex-col bg-[#000510]">
+    <div className="h-full flex flex-col bg-[#09090b]">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-[#1a2535]">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-[#27272a]">
         <div className="flex items-center gap-2">
-          <svg className="w-4 h-4 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
+          <svg className="w-4 h-4 text-zinc-400" fill="currentColor" viewBox="0 0 20 20">
             <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" />
           </svg>
-          <span className="text-white font-medium text-sm">Portfolio Risk Graph</span>
+          <span className="text-zinc-100 font-medium text-sm">Portfolio Risk Graph</span>
         </div>
         <div className="flex gap-2">
-          <button className="p-1 text-gray-500 hover:text-white">
+          <button className="p-1 text-zinc-500 hover:text-zinc-100">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-          <button className="p-1 text-gray-500 hover:text-white">
+          <button className="p-1 text-zinc-500 hover:text-zinc-100">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
             </svg>
           </button>
-          <button className="p-1 text-gray-500 hover:text-white">
+          <button className="p-1 text-zinc-500 hover:text-zinc-100">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
             </svg>
@@ -181,26 +198,60 @@ export default function RiskGraphPanel({ data }: RiskGraphPanelProps) {
             {/* Main nodes */}
             {nodes.map((node) => {
               if (node.id === 'hub') {
-                // Central hub - orange with glow
+                const isRelated = relatedIds.has(node.id)
+                const staggerMs = relatedIndex.get(node.id) ?? 0
                 return (
-                  <g key={node.id}>
+                  <g
+                    key={node.id}
+                    onClick={(e) => { e.stopPropagation(); setSelectedNode((prev) => (prev === node.id ? null : node.id)) }}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    {isRelated && (
+                      <circle
+                        cx={node.x}
+                        cy={node.y}
+                        r={node.size + 12}
+                        fill="none"
+                        stroke="#06b6d4"
+                        strokeWidth={1.5}
+                        opacity={0.5}
+                        style={{ animationDelay: `${staggerMs * 50}ms` }}
+                        className="graph-node-stagger"
+                      />
+                    )}
                     <circle cx={node.x} cy={node.y} r={node.size + 10} fill="#f59e0b" opacity={0.1} />
                     <circle cx={node.x} cy={node.y} r={node.size + 5} fill="#f59e0b" opacity={0.2} />
                     <circle cx={node.x} cy={node.y} r={node.size} fill="#f59e0b" stroke="#fbbf24" strokeWidth={2} />
                   </g>
                 )
               }
-              
+
               const color = getRiskColor(node.risk)
               const isHovered = hoveredNode === node.id
-              
+              const isRelated = relatedIds.has(node.id)
+              const staggerMs = relatedIndex.get(node.id) ?? 0
+
               return (
                 <g
                   key={node.id}
                   onMouseEnter={() => setHoveredNode(node.id)}
                   onMouseLeave={() => setHoveredNode(null)}
+                  onClick={() => setSelectedNode((prev) => (prev === node.id ? null : node.id))}
                   style={{ cursor: 'pointer' }}
                 >
+                  {isRelated && (
+                    <circle
+                      cx={node.x}
+                      cy={node.y}
+                      r={node.size + 10}
+                      fill="none"
+                      stroke="#06b6d4"
+                      strokeWidth={1.5}
+                      opacity={0.45}
+                      style={{ animationDelay: `${staggerMs * 50}ms` }}
+                      className="graph-node-stagger"
+                    />
+                  )}
                   {/* Glow */}
                   <circle
                     cx={node.x}
@@ -255,15 +306,15 @@ export default function RiskGraphPanel({ data }: RiskGraphPanelProps) {
         </div>
 
         {/* Right - Metrics */}
-        <div className="w-32 p-3 space-y-3 border-l border-[#1a2535]">
+        <div className="w-32 p-3 space-y-3 border-l border-[#27272a]">
           <div>
-            <div className="text-gray-500 text-[10px]">At Risk:</div>
-            <div className="text-white text-xl font-bold">${data.atRisk}B</div>
+            <div className="text-zinc-500 text-[10px]">At Risk:</div>
+            <div className="text-zinc-100 text-xl font-bold">${data.atRisk}B</div>
           </div>
 
           <div>
-            <div className="text-gray-500 text-[10px]">Critical Links:</div>
-            <div className="text-amber-400 text-xl font-bold">{data.criticalLinks}</div>
+            <div className="text-zinc-500 text-[10px]">Critical Links:</div>
+            <div className="text-zinc-400 text-xl font-bold">{data.criticalLinks}</div>
           </div>
 
           {data.cascadeDetected && (
@@ -273,13 +324,13 @@ export default function RiskGraphPanel({ data }: RiskGraphPanelProps) {
           )}
 
           {/* Results chart */}
-          <div className="pt-2 border-t border-[#1a2535]">
-            <div className="text-gray-500 text-[10px] mb-2">Results</div>
+          <div className="pt-2 border-t border-[#27272a]">
+            <div className="text-zinc-500 text-[10px] mb-2">Results</div>
             <div className="flex items-end justify-between h-16 px-1">
               {/* T0 bar */}
               <div className="flex flex-col items-center gap-1">
-                <div className="w-6 bg-[#1a2535] rounded-t flex flex-col justify-end" style={{ height: '100%' }}>
-                  <div className="w-full bg-gray-600 rounded-t" style={{ height: '25%' }} />
+                <div className="w-6 bg-[#27272a] rounded-t flex flex-col justify-end" style={{ height: '100%' }}>
+                  <div className="w-full bg-zinc-600 rounded-t" style={{ height: '25%' }} />
                 </div>
               </div>
               {/* +1 Year bar */}
@@ -297,7 +348,7 @@ export default function RiskGraphPanel({ data }: RiskGraphPanelProps) {
                 </div>
               </div>
             </div>
-            <div className="flex justify-between text-[8px] text-gray-600 mt-1 px-1">
+            <div className="flex justify-between text-[8px] text-zinc-600 mt-1 px-1">
               <span>T0</span>
               <span>+1 Year</span>
               <span>+3 Years</span>

@@ -152,8 +152,22 @@ async def get_twin_geometry_url(
     gtype = (twin.geometry_type or "").lower()
     path = str(twin.geometry_path)
 
+    # Stale paths (old Kenney set no longer in public/) — return fallback so frontend gets a valid GLB
+    _KNOWN_MISSING = (
+        "facility-a.glb", "facility-b.glb", "facility-c.glb",
+        "skyscraper-a.glb", "skyscraper-b.glb", "skyscraper-c.glb", "skyscraper-d.glb",
+        "industrial-a.glb", "residential-a.glb",
+    )
+    if any(path.endswith(p) for p in _KNOWN_MISSING):
+        path = "/models/buildings/beautiful_city.glb"
+        gtype = "glb"
+
     # External GLB URL (e.g. demo or CDN)
     if path.startswith(("http://", "https://")):
+        return {"type": "glb", "url": path, "path": path}
+
+    # Relative web path (e.g. /models/buildings/skyscraper-a.glb served from frontend public/)
+    if path.startswith("/") and gtype in ("glb", "gltf", ""):
         return {"type": "glb", "url": path, "path": path}
 
     # bucket/object form (MinIO)
@@ -464,3 +478,53 @@ async def get_climate_exposures(
         }
     except Exception:
         return _exposures_fallback(str(asset_id), scenario, time_horizon)
+
+
+# ---------------------------------------------------------------------------
+# Regime sync
+# ---------------------------------------------------------------------------
+
+@router.post("/sync-regime")
+async def sync_regime(
+    regime: str = "auto",
+    vix: Optional[float] = None,
+    inflation: Optional[float] = None,
+    gdp_growth: Optional[float] = None,
+    credit_spread: Optional[float] = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Bulk-update all Digital Twins to a market regime.
+
+    Pass regime=bull|late_cycle|crisis|stagflation to set explicitly,
+    or regime=auto with optional indicator params to auto-detect.
+    """
+    from src.services.regime_engine import resolve_regime
+
+    resolved = resolve_regime(
+        regime,
+        {"vix": vix, "inflation": inflation, "gdp_growth": gdp_growth, "credit_spread": credit_spread}
+        if any(v is not None for v in [vix, inflation, gdp_growth, credit_spread])
+        else None,
+    )
+
+    from src.services.regime_twin_sync import sync_twins_to_regime
+    count = await sync_twins_to_regime(db, resolved.value)
+    return {
+        "status": "ok",
+        "regime": resolved.value,
+        "twins_updated": count,
+    }
+
+
+@router.get("/{twin_id}/regime-context")
+async def get_regime_context(
+    twin_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Return the current regime context for a Digital Twin."""
+    from src.services.regime_twin_sync import get_twin_regime_context
+    ctx = await get_twin_regime_context(db, twin_id)
+    if ctx is None:
+        return {"regime_context": None, "message": "No regime context set. Call POST /twins/sync-regime first."}
+    return {"regime_context": ctx}

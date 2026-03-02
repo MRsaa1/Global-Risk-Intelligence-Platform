@@ -1,5 +1,7 @@
 /**
- * Project Detail Page - Individual project with IRR/NPV, Gantt, and 3D assets
+ * Project Detail — Individual project with IRR/NPV, Gantt, and linked assets.
+ * Unified Corporate Style: zinc palette, section labels font-mono text-[10px]
+ * uppercase tracking-widest text-zinc-500, rounded-md only, no glass/blur. See Implementation Audit.
  */
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
@@ -138,205 +140,222 @@ export default function ProjectDetail() {
 
   if (loading) {
     return (
-      <div className="h-full overflow-auto p-8">
-        <div className="h-1 rounded-full bg-white/10 overflow-hidden mb-4">
-          <div className="h-full w-1/3 bg-primary-500 animate-pulse" />
+      <div className="min-h-full p-6 bg-zinc-950 pb-16">
+        <div className="w-full max-w-[1920px] mx-auto">
+          <div className="h-1 rounded-full bg-zinc-700 overflow-hidden mb-4">
+            <div className="h-full w-1/3 bg-zinc-500 animate-pulse" />
+          </div>
+          <p className="text-zinc-500 font-sans">Loading project...</p>
         </div>
-        <p className="text-dark-muted">Loading project...</p>
       </div>
     )
   }
 
   if (!project) {
     return (
-      <div className="h-full overflow-auto p-8">
-        <p className="text-white/80 mb-4">Project not found</p>
-        <button
-          onClick={() => navigate('/projects')}
-          className="flex items-center gap-2 text-primary-400 hover:text-primary-300"
-        >
-          <ArrowLeftIcon className="w-5 h-5" />
-          Back to Projects
-        </button>
+      <div className="min-h-full p-6 bg-zinc-950 pb-16">
+        <div className="w-full max-w-[1920px] mx-auto">
+          <p className="text-zinc-200 mb-4 font-sans">Project not found</p>
+          <button
+            onClick={() => navigate('/projects')}
+            className="flex items-center gap-2 text-zinc-500 hover:text-zinc-300 font-sans"
+          >
+            <ArrowLeftIcon className="w-5 h-5" />
+            Back to Projects
+          </button>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="h-full overflow-auto p-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
-        <div>
-          <button
-            onClick={() => navigate('/projects')}
-            className="flex items-center gap-2 text-dark-muted hover:text-white mb-2"
-          >
-            <ArrowLeftIcon className="w-5 h-5" />
-            Back to Projects
-          </button>
-          <h1 className="text-2xl font-display font-bold text-white flex items-center gap-2">
-            <BanknotesIcon className="w-8 h-8 text-amber-400" />
-            {project.name}
-          </h1>
-          <div className="flex flex-wrap items-center gap-2 mt-2">
-            <span className="text-dark-muted text-sm font-mono">{project.code}</span>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-primary-500/20 text-primary-300">
-              {project.status}
-            </span>
-            <span className="text-xs px-2 py-0.5 rounded border border-white/10 text-white/70">
-              {project.project_type}
-            </span>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={fetchProjectData}
-            className="p-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 text-white/70"
-            title="Refresh"
-          >
-            <ArrowPathIcon className="w-5 h-5" />
-          </button>
-          <button className="flex items-center gap-2 px-4 py-2 rounded-xl border border-white/10 text-white/80 hover:bg-white/5">
-            <DocumentArrowDownIcon className="w-5 h-5" />
-            Export Report
-          </button>
-        </div>
-      </div>
-
-      {/* Key Metrics */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <div className="glass rounded-2xl p-4 border border-white/5 bg-green-500/10 border-green-500/20">
-          <p className="text-green-300/80 text-xs">IRR</p>
-          <p className="text-2xl font-bold text-white">
-            {formatPercent(irrResult?.irr || project.irr)}
-          </p>
-          <p className="text-green-300/60 text-xs">Internal Rate of Return</p>
-        </div>
-        <div className="glass rounded-2xl p-4 border border-white/5 bg-primary-500/10 border-primary-500/20">
-          <p className="text-primary-300/80 text-xs">NPV</p>
-          <p className="text-xl font-bold text-white">
-            {formatCurrency(irrResult?.npv || project.npv, project.currency)}
-          </p>
-          <p className="text-primary-300/60 text-xs">Net Present Value</p>
-        </div>
-        <div className="glass rounded-2xl p-4 border border-white/5">
-          <p className="text-dark-muted text-xs">Payback</p>
-          <p className="text-xl font-bold text-white">
-            {irrResult?.payback_period_years?.toFixed(1) || '-'} yrs
-          </p>
-          <p className="text-dark-muted text-xs">Time to recover</p>
-        </div>
-        <div className="glass rounded-2xl p-4 border border-white/5">
-          <p className="text-dark-muted text-xs">Total CAPEX</p>
-          <p className="text-xl font-bold text-white">
-            {formatCurrency(project.total_capex_planned, project.currency)}
-          </p>
-          <p className="text-dark-muted text-xs">
-            Actual: {formatCurrency(project.total_capex_actual, project.currency)}
-          </p>
-        </div>
-      </div>
-
-      {/* Progress */}
-      {project.overall_completion_pct !== null && (
-        <div className="glass rounded-2xl p-4 border border-white/5 mb-6">
-          <div className="flex justify-between mb-2">
-            <span className="font-semibold text-white">Overall Progress</span>
-            <span className="font-semibold text-white">{project.overall_completion_pct.toFixed(0)}%</span>
-          </div>
-          <div className="h-3 rounded-full bg-white/10 overflow-hidden">
-            <div
-              className="h-full bg-primary-500 rounded-full transition-all"
-              style={{ width: `${project.overall_completion_pct}%` }}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Tabs */}
-      <div className="glass rounded-2xl border border-white/5 overflow-hidden">
-        <div className="flex border-b border-white/10">
-          {TABS.map((label, i) => (
+    <div className="min-h-full p-6 bg-zinc-950 pb-16">
+      <div className="w-full max-w-[1920px] mx-auto">
+        {/* Header — Unified Corporate Style */}
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-8">
+          <div>
             <button
-              key={label}
-              onClick={() => setTabValue(i)}
-              className={`px-4 py-3 text-sm font-medium transition-colors ${
-                tabValue === i
-                  ? 'text-primary-400 border-b-2 border-primary-500 bg-white/5'
-                  : 'text-dark-muted hover:text-white/80'
-              }`}
+              onClick={() => navigate('/projects')}
+              className="flex items-center gap-2 text-zinc-500 hover:text-zinc-100 mb-3 font-sans text-sm"
             >
-              {label}
+              <ArrowLeftIcon className="w-5 h-5" />
+              Back to Projects
             </button>
-          ))}
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-zinc-800 rounded-md border border-zinc-700">
+                <BanknotesIcon className="w-8 h-8 text-zinc-400" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-display font-semibold text-zinc-100">
+                  {project.name}
+                </h1>
+                <div className="flex flex-wrap items-center gap-2 mt-1">
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-500">{project.code}</span>
+                  <span className="text-xs px-2 py-0.5 rounded-md font-mono bg-zinc-700 text-zinc-300">
+                    {project.status}
+                  </span>
+                  <span className="text-xs px-2 py-0.5 rounded-md font-mono border border-zinc-700 text-zinc-400">
+                    {project.project_type}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={fetchProjectData}
+              className="p-2 rounded-md bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-100 transition-colors"
+              title="Refresh"
+            >
+              <ArrowPathIcon className="w-5 h-5" />
+            </button>
+            <button className="flex items-center gap-2 px-4 py-2 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-100 hover:bg-zinc-700 font-sans">
+              <DocumentArrowDownIcon className="w-5 h-5" />
+              Export Report
+            </button>
+          </div>
         </div>
 
-        <div className="p-6">
-          {/* Tab 0: Financial */}
+        {/* Key Metrics — corp: bg-zinc-900, no glass, section labels */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="rounded-md p-4 border border-zinc-800 bg-zinc-900 bg-green-500/5 border-green-500/20">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-green-400/80">IRR</p>
+            <p className="text-2xl font-semibold font-mono tabular-nums text-zinc-100 mt-0.5">
+              {formatPercent(irrResult?.irr || project.irr)}
+            </p>
+            <p className="text-zinc-500 text-xs mt-0.5 font-sans">Internal Rate of Return</p>
+          </div>
+          <div className="rounded-md p-4 border border-zinc-800 bg-zinc-900">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">NPV</p>
+            <p className="text-xl font-semibold font-mono tabular-nums text-zinc-100 mt-0.5">
+              {formatCurrency(irrResult?.npv || project.npv, project.currency)}
+            </p>
+            <p className="text-zinc-500 text-xs mt-0.5 font-sans">Net Present Value</p>
+          </div>
+          <div className="rounded-md p-4 border border-zinc-800 bg-zinc-900">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Payback</p>
+            <p className="text-xl font-semibold font-mono tabular-nums text-zinc-100 mt-0.5">
+              {irrResult?.payback_period_years?.toFixed(1) || '-'} yrs
+            </p>
+            <p className="text-zinc-500 text-xs mt-0.5 font-sans">Time to recover</p>
+          </div>
+          <div className="rounded-md p-4 border border-zinc-800 bg-zinc-900">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Total CAPEX</p>
+            <p className="text-xl font-semibold font-mono tabular-nums text-zinc-100 mt-0.5">
+              {formatCurrency(project.total_capex_planned, project.currency)}
+            </p>
+            <p className="text-zinc-500 text-xs mt-0.5 font-sans">
+              Actual: {formatCurrency(project.total_capex_actual, project.currency)}
+            </p>
+          </div>
+        </div>
+
+        {/* Progress — corp */}
+        {project.overall_completion_pct !== null && (
+          <div className="rounded-md p-4 border border-zinc-800 bg-zinc-900 mb-6">
+            <div className="flex justify-between mb-2">
+              <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Overall Progress</span>
+              <span className="font-semibold font-mono text-zinc-100">{project.overall_completion_pct.toFixed(0)}%</span>
+            </div>
+            <div className="h-3 rounded-full bg-zinc-700 overflow-hidden">
+              <div
+                className="h-full bg-zinc-500 rounded-full transition-all"
+                style={{ width: `${project.overall_completion_pct}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Tabs — corp: bg-zinc-900, no glass */}
+        <div className="rounded-md border border-zinc-800 bg-zinc-900 overflow-hidden">
+          <div className="flex border-b border-zinc-800">
+            {TABS.map((label, i) => (
+              <button
+                key={label}
+                onClick={() => setTabValue(i)}
+                className={`px-4 py-3 text-sm font-medium transition-colors font-sans ${
+                  tabValue === i
+                    ? 'text-zinc-100 border-b-2 border-zinc-500 bg-zinc-800'
+                    : 'text-zinc-500 hover:text-zinc-300'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div className="p-6">
+          {/* Tab 0: Financial — corp labels and selects */}
           {tabValue === 0 && (
             <div>
-              <div className="flex flex-wrap gap-3 mb-6">
-                <select
-                  value={scenario}
-                  onChange={(e) => setScenario(e.target.value)}
-                  className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white min-w-[180px] focus:outline-none focus:ring-2 focus:ring-primary-500/50"
-                >
-                  <option value="" className="bg-dark-card">Base Case</option>
-                  <option value="low_availability" className="bg-dark-card">Low Availability (-15% revenue)</option>
-                  <option value="high_cost" className="bg-dark-card">High Cost (+25% OPEX)</option>
-                  <option value="delayed_construction" className="bg-dark-card">Delayed (+15% CAPEX)</option>
-                </select>
-                <select
-                  value={discountRate}
-                  onChange={(e) => setDiscountRate(Number(e.target.value))}
-                  className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white min-w-[140px] focus:outline-none focus:ring-2 focus:ring-primary-500/50"
-                >
-                  <option value={0.06} className="bg-dark-card">6%</option>
-                  <option value={0.08} className="bg-dark-card">8%</option>
-                  <option value={0.1} className="bg-dark-card">10%</option>
-                  <option value={0.12} className="bg-dark-card">12%</option>
-                </select>
+              <div className="flex flex-wrap items-center gap-4 mb-6">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Scenario:</span>
+                  <select
+                    value={scenario}
+                    onChange={(e) => setScenario(e.target.value)}
+                    className="px-3 py-1.5 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-100 text-sm min-w-[180px] focus:outline-none focus:border-zinc-600 font-sans"
+                  >
+                    <option value="" className="bg-zinc-900">Base Case</option>
+                    <option value="low_availability" className="bg-zinc-900">Low Availability (-15% revenue)</option>
+                    <option value="high_cost" className="bg-zinc-900">High Cost (+25% OPEX)</option>
+                    <option value="delayed_construction" className="bg-zinc-900">Delayed (+15% CAPEX)</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Discount:</span>
+                  <select
+                    value={discountRate}
+                    onChange={(e) => setDiscountRate(Number(e.target.value))}
+                    className="px-3 py-1.5 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-100 text-sm min-w-[100px] focus:outline-none focus:border-zinc-600 font-sans"
+                  >
+                    <option value={0.06} className="bg-zinc-900">6%</option>
+                    <option value={0.08} className="bg-zinc-900">8%</option>
+                    <option value={0.1} className="bg-zinc-900">10%</option>
+                    <option value={0.12} className="bg-zinc-900">12%</option>
+                  </select>
+                </div>
                 <button
                   onClick={recalculateIRR}
-                  className="px-4 py-2 rounded-xl bg-primary-500 text-white font-medium hover:bg-primary-600"
+                  className="px-4 py-2 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-100 font-medium hover:bg-zinc-700 font-sans"
                 >
                   Recalculate
                 </button>
               </div>
               {irrResult && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <h3 className="font-semibold text-white mb-3">Cash Flow Summary</h3>
+                  <div className="rounded-md border border-zinc-800 bg-zinc-800/50 p-4">
+                    <h3 className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-3">Cash Flow Summary</h3>
                     <div className="space-y-2 text-sm">
-                      <div className="flex justify-between py-2 border-b border-white/5">
-                        <span className="text-dark-muted">Total CAPEX</span>
-                        <span className="text-red-400 font-semibold">-{formatCurrency(irrResult.total_capex, project.currency)}</span>
+                      <div className="flex justify-between py-2 border-b border-zinc-700">
+                        <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-500">Total CAPEX</span>
+                        <span className="text-red-400/80 font-semibold font-mono">-{formatCurrency(irrResult.total_capex, project.currency)}</span>
                       </div>
-                      <div className="flex justify-between py-2 border-b border-white/5">
-                        <span className="text-dark-muted">Annual Revenue</span>
-                        <span className="text-green-400">{formatCurrency(irrResult.annual_revenue, project.currency)}</span>
+                      <div className="flex justify-between py-2 border-b border-zinc-700">
+                        <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-500">Annual Revenue</span>
+                        <span className="text-green-400/80 font-mono">{formatCurrency(irrResult.annual_revenue, project.currency)}</span>
                       </div>
-                      <div className="flex justify-between py-2 border-b border-white/5">
-                        <span className="text-dark-muted">Annual OPEX</span>
-                        <span className="text-red-400">-{formatCurrency(irrResult.annual_opex, project.currency)}</span>
+                      <div className="flex justify-between py-2 border-b border-zinc-700">
+                        <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-500">Annual OPEX</span>
+                        <span className="text-red-400/80 font-mono">-{formatCurrency(irrResult.annual_opex, project.currency)}</span>
                       </div>
-                      <div className="flex justify-between py-2 border-b border-white/5 bg-white/5 px-2 -mx-2 rounded">
-                        <span className="font-semibold text-white">Annual Net Cashflow</span>
-                        <span className="font-semibold text-green-400">{formatCurrency(irrResult.annual_net_cashflow, project.currency)}</span>
+                      <div className="flex justify-between py-2 border-b border-zinc-700 bg-zinc-800 px-2 -mx-2 rounded-md">
+                        <span className="font-semibold text-zinc-100 font-sans">Annual Net Cashflow</span>
+                        <span className="font-semibold text-green-400/80 font-mono">{formatCurrency(irrResult.annual_net_cashflow, project.currency)}</span>
                       </div>
                       <div className="flex justify-between py-2">
-                        <span className="text-dark-muted">Breakeven Year</span>
-                        <span>{irrResult.breakeven_year ? `Year ${irrResult.breakeven_year}` : '-'}</span>
+                        <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-500">Breakeven Year</span>
+                        <span className="font-mono">{irrResult.breakeven_year ? `Year ${irrResult.breakeven_year}` : '-'}</span>
                       </div>
                     </div>
                   </div>
-                  <div>
-                    <h3 className="font-semibold text-white mb-3">NPV Sensitivity</h3>
+                  <div className="rounded-md border border-zinc-800 bg-zinc-800/50 p-4">
+                    <h3 className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-3">NPV Sensitivity</h3>
                     <div className="space-y-2 text-sm">
                       {Object.entries(irrResult.npv_sensitivity).map(([key, value]) => (
-                        <div key={key} className="flex justify-between py-2 border-b border-white/5">
-                          <span className="text-dark-muted">{key.replace('discount_', '')}</span>
-                          <span className={value >= 0 ? 'text-green-400' : 'text-red-400'}>
+                        <div key={key} className="flex justify-between py-2 border-b border-zinc-700">
+                          <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-500">{key.replace('discount_', '')}</span>
+                          <span className={`font-mono ${value >= 0 ? 'text-green-400/80' : 'text-red-400/80'}`}>
                             {formatCurrency(value, project.currency)}
                           </span>
                         </div>
@@ -348,37 +367,37 @@ export default function ProjectDetail() {
             </div>
           )}
 
-          {/* Tab 1: Schedule */}
+          {/* Tab 1: Schedule — corp */}
           {tabValue === 1 && (
             <div>
-              <h3 className="font-semibold text-white mb-4">Project Phases</h3>
+              <h3 className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-4">Project Phases</h3>
               {phases.length === 0 ? (
-                <p className="text-dark-muted">No phases defined</p>
+                <p className="text-zinc-500 font-sans">No phases defined</p>
               ) : (
                 <div className="space-y-4">
                   {phases.map((phase) => (
-                    <div key={phase.id} className="p-4 rounded-xl bg-white/5 border border-white/5">
+                    <div key={phase.id} className="p-4 rounded-md bg-zinc-800 border border-zinc-700">
                       <div className="flex justify-between mb-2">
                         <div>
-                          <p className="font-semibold text-white">{phase.name}</p>
-                          <p className="text-dark-muted text-sm">{phase.type}</p>
+                          <p className="font-display font-semibold text-zinc-100">{phase.name}</p>
+                          <p className="font-mono text-[10px] uppercase tracking-wider text-zinc-500 mt-0.5">{phase.type}</p>
                         </div>
                         <div className="text-right">
-                          <p className="text-sm text-white/80">
+                          <p className="text-sm font-mono text-zinc-300">
                             {phase.start && phase.end ? `${phase.start} - ${phase.end}` : 'TBD'}
                           </p>
                           <span
-                            className={`text-xs px-2 py-0.5 rounded-full ${
-                              phase.progress >= 100 ? 'bg-green-500/20 text-green-300' : phase.progress > 0 ? 'bg-primary-500/20 text-primary-300' : 'bg-white/10 text-white/50'
+                            className={`text-xs px-2 py-0.5 rounded-md font-mono mt-1 inline-block ${
+                              phase.progress >= 100 ? 'bg-green-500/20 text-green-300' : phase.progress > 0 ? 'bg-zinc-600 text-zinc-300' : 'bg-zinc-700 text-zinc-500'
                             }`}
                           >
                             {phase.progress}%
                           </span>
                         </div>
                       </div>
-                      <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                      <div className="h-2 rounded-full bg-zinc-700 overflow-hidden">
                         <div
-                          className="h-full bg-primary-500 rounded-full"
+                          className="h-full bg-zinc-500 rounded-full"
                           style={{ width: `${phase.progress}%` }}
                         />
                       </div>
@@ -389,32 +408,32 @@ export default function ProjectDetail() {
             </div>
           )}
 
-          {/* Tab 2: Assets */}
+          {/* Tab 2: Assets — corp */}
           {tabValue === 2 && (
             <div>
-              <h3 className="font-semibold text-white mb-4">Linked Assets</h3>
+              <h3 className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-4">Linked Assets</h3>
               {assets.length === 0 ? (
-                <p className="text-dark-muted">No assets linked</p>
+                <p className="text-zinc-500 font-sans">No assets linked</p>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {assets.map((asset) => (
                     <div
                       key={asset.id}
                       onClick={() => navigate(`/assets/${asset.id}`)}
-                      className="p-4 rounded-xl border border-white/10 hover:border-primary-500/30 cursor-pointer transition-colors"
+                      className="p-4 rounded-md border border-zinc-700 bg-zinc-800/50 hover:border-zinc-600 cursor-pointer transition-colors"
                     >
                       <div className="flex justify-between items-start mb-2">
-                        <p className="font-semibold text-white">{asset.name}</p>
+                        <p className="font-display font-semibold text-zinc-100">{asset.name}</p>
                         {asset.is_primary && (
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-primary-500/20 text-primary-300">Primary</span>
+                          <span className="text-xs px-2 py-0.5 rounded-md font-mono bg-zinc-600 text-zinc-300">Primary</span>
                         )}
                       </div>
-                      <p className="text-dark-muted text-sm mb-2">{asset.type}</p>
-                      <div className="flex justify-between items-center pt-2 border-t border-white/10">
-                        <span className="text-sm">{formatCurrency(asset.valuation, project.currency)}</span>
+                      <p className="font-mono text-[10px] uppercase tracking-wider text-zinc-500 mb-2">{asset.type}</p>
+                      <div className="flex justify-between items-center pt-2 border-t border-zinc-700">
+                        <span className="text-sm font-mono tabular-nums text-zinc-200">{formatCurrency(asset.valuation, project.currency)}</span>
                         <div className="flex gap-1">
-                          {asset.has_bim && <span className="text-xs px-2 py-0.5 rounded bg-blue-500/20 text-blue-300">BIM</span>}
-                          <MapPinIcon className="w-4 h-4 text-white/40" />
+                          {asset.has_bim && <span className="text-xs px-2 py-0.5 rounded-md font-mono bg-zinc-600 text-zinc-300">BIM</span>}
+                          <MapPinIcon className="w-4 h-4 text-zinc-500" />
                         </div>
                       </div>
                     </div>
@@ -424,22 +443,22 @@ export default function ProjectDetail() {
             </div>
           )}
 
-          {/* Tab 3: Sensitivity */}
+          {/* Tab 3: Sensitivity — corp */}
           {tabValue === 3 && irrResult && (
             <div>
-              <h3 className="font-semibold text-white mb-4">IRR Sensitivity</h3>
+              <h3 className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-4">IRR Sensitivity</h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {Object.entries(irrResult.irr_sensitivity).map(([key, value]) => {
                   const label = key.replace('_', ' ').replace(/\+/g, ' +').replace(/-/g, ' -')
                   const baseIrr = irrResult.irr
                   const diff = value - baseIrr
                   return (
-                    <div key={key} className="p-4 rounded-xl border border-white/10 text-center">
-                      <p className="text-dark-muted text-xs mb-1">{label}</p>
-                      <p className={`text-lg font-bold ${value >= baseIrr ? 'text-green-400' : 'text-red-400'}`}>
+                    <div key={key} className="p-4 rounded-md border border-zinc-700 bg-zinc-800/50 text-center">
+                      <p className="font-mono text-[10px] uppercase tracking-wider text-zinc-500 mb-1">{label}</p>
+                      <p className={`text-lg font-semibold font-mono ${value >= baseIrr ? 'text-green-400/80' : 'text-red-400/80'}`}>
                         {formatPercent(value)}
                       </p>
-                      <p className={`text-xs ${diff >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      <p className={`text-xs font-mono ${diff >= 0 ? 'text-green-400/80' : 'text-red-400/80'}`}>
                         {diff >= 0 ? '+' : ''}
                         {(diff * 100).toFixed(2)}%
                       </p>
@@ -449,6 +468,7 @@ export default function ProjectDetail() {
               </div>
             </div>
           )}
+          </div>
         </div>
       </div>
     </div>

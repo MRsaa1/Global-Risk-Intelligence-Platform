@@ -31,6 +31,10 @@ function getEventIcon(eventType: string) {
     return ExclamationTriangleIcon
   } else if (eventType.startsWith('portfolio')) {
     return ChartBarIcon
+  } else if (eventType.startsWith('threat') || eventType.includes('threat')) {
+    return ExclamationTriangleIcon
+  } else if (eventType.startsWith('data.')) {
+    return ChartBarIcon
   } else {
     return ClockIcon
   }
@@ -38,15 +42,15 @@ function getEventIcon(eventType: string) {
 
 function getEventColor(eventType: string): string {
   if (eventType.includes('started') || eventType.includes('opened')) {
-    return 'text-amber-400'
+    return 'text-amber-400/80'
   } else if (eventType.includes('completed')) {
-    return 'text-emerald-400'
+    return 'text-emerald-400/80'
   } else if (eventType.includes('failed') || eventType.includes('alert')) {
-    return 'text-red-400'
+    return 'text-red-400/80'
   } else if (eventType.includes('selected')) {
-    return 'text-blue-400'
+    return 'text-zinc-400'
   } else {
-    return 'text-white/50'
+    return 'text-zinc-400'
   }
 }
 
@@ -66,9 +70,16 @@ function formatEventName(event: PlatformEvent): string {
     [EventTypes.PORTFOLIO_UPDATED]: 'Portfolio updated',
     [EventTypes.ASSET_RISK_UPDATED]: 'Asset risk updated',
     [EventTypes.ALERT_GENERATED]: 'Alert generated',
+    [EventTypes.SOCIAL_THREAT_DETECTED]: 'Threat signal detected',
+    [EventTypes.DATA_REFRESH_COMPLETED]: 'Data refresh completed',
   }
-  
-  return actionMap[event.event_type] || event.event_type.replace(/_/g, ' ').replace(/\./g, ': ')
+  const base = actionMap[event.event_type] || event.event_type.replace(/_/g, ' ').replace(/\./g, ': ')
+  const d = event.data
+  if (event.event_type === EventTypes.SOCIAL_THREAT_DETECTED && d && (d.source || d.risk_type || d.text)) {
+    const extra = [d.source, d.risk_type, typeof d.text === 'string' ? d.text.slice(0, 40) : null].find(Boolean)
+    return extra ? `${base} · ${extra}` : base
+  }
+  return base
 }
 
 function formatTimeAgo(timestamp: string): string {
@@ -90,68 +101,69 @@ export default function RecentActivityPanel({
   
   if (displayEvents.length === 0) {
     return (
-      <div className="glass rounded-xl border border-white/5 p-6">
-        <h3 className="text-sm font-display font-semibold mb-4 text-white/80">
+      <div className="rounded-md bg-zinc-900 border border-zinc-800 p-6">
+        <h3 className="text-sm font-display font-semibold mb-4 text-zinc-300">
           Recent Activity
         </h3>
         <div className="text-center py-8">
-          <ClockIcon className="w-8 h-8 mx-auto text-white/20 mb-2" />
-          <p className="text-xs text-white/40">No recent activity</p>
-          <p className="text-xs text-white/30 mt-1">Actions from Command Center will appear here</p>
+          <ClockIcon className="w-8 h-8 mx-auto text-zinc-700 mb-2" />
+          <p className="text-xs text-zinc-500">No recent activity</p>
+          <p className="text-xs text-zinc-600 mt-1">Run a stress test, open a Digital Twin, or select a zone in Command Center to see activity here.</p>
         </div>
       </div>
     )
   }
   
   return (
-    <div className="glass rounded-xl border border-white/5 p-6">
+    <div className="rounded-md bg-zinc-900 border border-zinc-800 p-6">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-display font-semibold text-white/80">
+        <h3 className="text-sm font-display font-semibold text-zinc-300">
           Recent Activity
         </h3>
-        <span className="text-xs text-white/40">
+        <span className="text-xs text-zinc-500">
           {events.length} events
         </span>
       </div>
       
-      <div className="max-h-[400px] overflow-y-auto custom-scrollbar pr-1">
+      <div>
         <div className="space-y-3">
           {displayEvents.map((event, index) => {
           const Icon = getEventIcon(event.event_type)
           const color = getEventColor(event.event_type)
+          const uniqueKey = event.event_id ? `${event.event_id}-${index}` : `event-${index}`
           
           return (
             <motion.div
-              key={event.event_id}
+              key={uniqueKey}
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: index * 0.05 }}
-              className="flex items-start gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors"
+              className="flex items-start gap-3 p-2 rounded-md hover:bg-zinc-800 transition-colors"
             >
-              <div className={`p-1.5 rounded-lg bg-white/5 ${color}`}>
+              <div className={`p-1.5 rounded-md bg-zinc-800 ${color}`}>
                 <Icon className="w-4 h-4" />
               </div>
               
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-white/70 font-medium">
+                  <span className="text-xs text-zinc-300 font-medium">
                     {formatEventName(event)}
                   </span>
                   {event.intent && (
-                    <span className="text-[10px] text-amber-400/70 bg-amber-500/10 px-1 rounded">
+                    <span className="text-[10px] text-zinc-400 bg-zinc-800 px-1 rounded">
                       pending
                     </span>
                   )}
                 </div>
                 
                 {event.data.name && (
-                  <p className="text-xs text-white/40 truncate">
+                  <p className="text-xs text-zinc-500 truncate">
                     {event.data.name}
                   </p>
                 )}
               </div>
               
-              <span className="text-[10px] text-white/30">
+              <span className="text-[10px] text-zinc-600">
                 {formatTimeAgo(event.timestamp)}
               </span>
             </motion.div>

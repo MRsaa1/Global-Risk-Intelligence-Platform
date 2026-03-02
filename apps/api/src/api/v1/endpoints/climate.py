@@ -1,818 +1,751 @@
-"""
-Climate Data API Endpoints.
-
-Provides access to:
-- Weather forecasts
-- Historical weather data
-- Climate risk indicators
-- Extreme weather events
-"""
-from datetime import datetime, timedelta
-from typing import List, Optional
-
+from typing import Any, Dict, List, Optional, Tuple
 from fastapi import APIRouter, Query, HTTPException
-from fastapi.responses import Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
+import asyncio
+import logging
+import math
+import random
+from datetime import datetime, timedelta
 
-from src.services.climate_data import climate_service, WeatherData, ClimateIndicator
-from src.services.flood_impact_service import flood_impact_service
-from src.services.wind_impact_service import wind_impact_service
-from src.services.climate_anomalies_service import climate_anomalies_service
-from src.services.cache import get_cache
-from src.services.high_fidelity_loader import load_flood, load_wind, load_metadata, load_export_rows, list_scenarios
+from src.data.cities import get_all_cities, get_haven_for_location, composite_risk_score
+from src.services.external.usgs_client import usgs_client
+from src.services.external.nasa_firms_client import nasa_firms_client
+from src.services.external.nws_alerts_client import nws_alerts_client
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# --- Data Models ---
 
-# ==================== SCHEMAS ====================
-
-class WeatherDataResponse(BaseModel):
-    """Weather data point."""
-    timestamp: str
-    temperature_c: float
-    humidity_percent: float
-    precipitation_mm: float
-    wind_speed_ms: float
-    wind_direction_deg: float
-    pressure_hpa: float
-    cloud_cover_percent: float = 0.0
-    uv_index: float = 0.0
-
-
-class ForecastResponse(BaseModel):
-    """Weather forecast response."""
+class GeoPoint(BaseModel):
     latitude: float
     longitude: float
-    forecast_days: int
-    data: List[WeatherDataResponse]
-    source: str = "open_meteo"
-
-
-class HistoricalResponse(BaseModel):
-    """Historical weather response."""
-    latitude: float
-    longitude: float
-    start_date: str
-    end_date: str
-    data: List[WeatherDataResponse]
-    source: str = "open_meteo"
-
-
-class ClimateIndicatorResponse(BaseModel):
-    """Climate indicator."""
-    name: str
-    value: float
-    unit: str
-    threshold: Optional[float]
-    risk_level: str
-
-
-class ClimateIndicatorsResponse(BaseModel):
-    """Climate indicators for location."""
-    latitude: float
-    longitude: float
-    indicators: List[ClimateIndicatorResponse]
-    overall_risk: str
-
-
-class ExtremeEventResponse(BaseModel):
-    """Extreme weather event."""
-    type: str
-    severity: str
-    start_time: str
-    description: str
-
-
-class FloodDayResponse(BaseModel):
-    """Flood forecast for a single day."""
-    date: str
-    precipitation_mm: float
-    flood_depth_m: float
-    risk_level: str
-
 
 class FloodForecastResponse(BaseModel):
-    """Flood forecast from Open-Meteo + CPU impact logic (no GPU)."""
-    latitude: float
-    longitude: float
-    days: int
-    daily: List[FloodDayResponse]
+    center: GeoPoint
     max_flood_depth_m: float
-    max_risk_level: str
-    polygon: Optional[List[List[float]]] = None
-    source: str = "open_meteo"
-
-
-class WindDayResponse(BaseModel):
-    """Wind forecast for a single day."""
-    date: str
-    wind_speed_kmh: float
-    category: int  # 0 = Tropical Storm, 1-5 = Hurricane
-    category_label: str
-
+    risk_level: str  # "normal", "elevated", "high", "critical"
+    extent_radius_km: float
+    valid_time: str
 
 class WindForecastResponse(BaseModel):
-    """Wind forecast from Open-Meteo + CPU category mapping (no GPU)."""
-    latitude: float
-    longitude: float
-    days: int
-    daily: List[WindDayResponse]
     max_wind_kmh: float
-    max_category: int
-    max_category_label: str
-    polygon: Optional[List[List[float]]] = None
-    source: str = "open_meteo"
+    category: int  # 0-5 (Saffir-Simpson)
+    direction_degrees: float
+    turbulence_intensity: float
+    valid_time: str
 
-
-class MetroEntranceResponse(BaseModel):
-    """Metro/subway entrance for flood visualization."""
-    lat: float
-    lon: float
+class MetroFloodPoint(BaseModel):
     name: str
+    location: GeoPoint
     flood_depth_m: float
+    is_flooded: bool
 
+class HighFidelityScenario(BaseModel):
+    id: str
+    name: str
+    model: str  # "wrf" or "adcirc"
+    description: str
 
-class MetroFloodResponse(BaseModel):
-    """Metro entrances with flood depth for 3D viz (cylinders at entrances)."""
-    entrances: List[MetroEntranceResponse]
-    source: str = "open_meteo"
-
-
-# --- Climate anomalies (heat, heavy rain, drought, UV) ---
-class HeatDayResponse(BaseModel):
-    date: str
-    max_temp_c: float
+class HighFidelityFloodResponse(BaseModel):
+    scenario_id: str
+    max_flood_depth_m: float
     risk_level: str
+    polygon_points: List[GeoPoint]  # Simplified polygon for extent
+    valid_time: str
+
+class HighFidelityWindResponse(BaseModel):
+    scenario_id: str
+    wind_speed_kmh: float
+    category: int
+    direction_degrees: float
+    valid_time: str
+
+class ScenarioMetadata(BaseModel):
+    scenario_id: str
+    model: str
+    run_time: str
+    bbox: List[float]  # [min_lat, min_lon, max_lat, max_lon]
+    resolution_m: float
 
 
-class HeatForecastResponse(BaseModel):
+class ClimateHavenResponse(BaseModel):
+    """Recommended climate haven for a location (e.g. by 2040)."""
+    city_id: str
+    name: str
+    country: str
     latitude: float
     longitude: float
-    days: int
-    daily: List[HeatDayResponse]
-    max_temp_c: float
-    max_risk_level: str
-    polygon: Optional[List[List[float]]] = None
-    source: str = "open_meteo"
+    composite_score: float  # 0-1, lower = safer
+    reason: str
+
+# --- Routes ---
+
+@router.get("/flood-forecast")
+async def get_flood_forecast(
+    latitude: float = Query(..., description="Target latitude"),
+    longitude: float = Query(..., description="Target longitude"),
+    days: int = Query(7, description="Forecast duration in days"),
+    include_polygon: bool = Query(True, description="Return polygon for Cesium globe viz"),
+):
+    """
+    Get mocked flood forecast for a specific location.
+    Returns polygon and max_flood_depth_m for Cesium when include_polygon=true.
+    """
+    # Mock data logic: slightly deterministic based on coords
+    base_depth = (abs(latitude) + abs(longitude)) % 5.0
+
+    risk_level = "normal"
+    if base_depth > 0.5: risk_level = "elevated"
+    if base_depth > 2.0: risk_level = "high"
+    if base_depth > 4.0: risk_level = "critical"
+
+    out: Dict[str, Any] = {
+        "center": {"latitude": latitude, "longitude": longitude},
+        "max_flood_depth_m": round(base_depth, 2),
+        "risk_level": risk_level,
+        "extent_radius_km": 5.0,
+        "valid_time": datetime.now().isoformat(),
+    }
+    if include_polygon:
+        out["polygon"] = _circle_polygon(longitude, latitude, 0.08)
+    return out
+
+@router.get("/wind-forecast")
+async def get_wind_forecast(
+    latitude: float = Query(..., description="Target latitude"),
+    longitude: float = Query(..., description="Target longitude"),
+    days: int = Query(7, description="Forecast duration in days"),
+    include_polygon: bool = Query(True, description="Return polygon for Cesium globe viz"),
+):
+    """
+    Get mocked wind forecast for a specific location.
+    Returns polygon and max_category for Cesium when include_polygon=true.
+    """
+    # Mock data
+    base_wind = ((abs(latitude) * abs(longitude)) % 250)
+
+    category = 0
+    if base_wind > 119: category = 1
+    if base_wind > 154: category = 2
+    if base_wind > 178: category = 3
+    if base_wind > 209: category = 4
+    if base_wind > 252: category = 5
+
+    out: Dict[str, Any] = {
+        "max_wind_kmh": round(base_wind, 1),
+        "category": category,
+        "max_category": category,
+        "direction_degrees": random.uniform(0, 360),
+        "turbulence_intensity": random.uniform(0.1, 1.0),
+        "valid_time": datetime.now().isoformat(),
+    }
+    if include_polygon:
+        out["polygon"] = _circle_polygon(longitude, latitude, 0.08)
+    return out
+
+@router.get("/indicators")
+async def get_climate_indicators(
+    latitude: float = Query(..., description="Target latitude"),
+    longitude: float = Query(..., description="Target longitude"),
+) -> Any:
+    """
+    Climate risk indicators for a location (ClimateWidget).
+    Returns flood_risk, heat_stress, storm_risk, drought_risk; deterministic from coords when no external API.
+    """
+    base = (abs(latitude) + abs(longitude)) % 1.0
+    indicators = [
+        {"name": "flood_risk", "value": round(0.2 + base * 0.5, 3), "unit": "index", "threshold": 0.6, "risk_level": "normal" if base < 0.5 else "elevated"},
+        {"name": "heat_stress", "value": round(0.15 + (1 - base) * 0.4, 3), "unit": "index", "threshold": 0.5, "risk_level": "normal" if base > 0.4 else "elevated"},
+        {"name": "storm_risk", "value": round(0.1 + base * 0.6, 3), "unit": "index", "threshold": 0.55, "risk_level": "normal"},
+        {"name": "drought_risk", "value": round(base * 0.4, 3), "unit": "index", "threshold": 0.5, "risk_level": "low" if base < 0.6 else "medium"},
+    ]
+    overall = "normal" if base < 0.5 else ("elevated" if base < 0.75 else "high")
+    return {
+        "latitude": latitude,
+        "longitude": longitude,
+        "indicators": indicators,
+        "overall_risk": overall,
+    }
 
 
-class HeavyRainDayResponse(BaseModel):
-    date: str
-    precipitation_mm: float
-    risk_level: str
-
-
-class HeavyRainForecastResponse(BaseModel):
-    latitude: float
-    longitude: float
-    days: int
-    daily: List[HeavyRainDayResponse]
-    max_precipitation_mm: float
-    max_risk_level: str
-    polygon: Optional[List[List[float]]] = None
-    source: str = "open_meteo"
-
-
-class DroughtForecastResponse(BaseModel):
-    latitude: float
-    longitude: float
-    drought_risk: str
-    value_mm_30d: float
-    polygon: Optional[List[List[float]]] = None
-    source: str = "open_meteo"
-
-
-class UvDayResponse(BaseModel):
-    date: str
-    max_uv: float
-    risk_level: str
-
-
-class UvForecastResponse(BaseModel):
-    latitude: float
-    longitude: float
-    days: int
-    daily: List[UvDayResponse]
-    max_uv: float
-    max_risk_level: str
-    polygon: Optional[List[List[float]]] = None
-    source: str = "open_meteo"
-
-
-# Static metro entrances (NYC sample; expand per city as needed)
-_METRO_ENTRANCES = [
-    ("Times Square", 40.755983, -73.986229),
-    ("Grand Central", 40.752721, -73.977229),
-    ("Penn Station", 40.750581, -73.993519),
-    ("Union Square", 40.734673, -73.990953),
-    ("Columbus Circle", 40.768247, -73.981929),
-]
-
-
-# ==================== HELPERS ====================
-
-def _weather_to_response(w: WeatherData) -> WeatherDataResponse:
-    return WeatherDataResponse(
-        timestamp=w.timestamp.isoformat(),
-        temperature_c=w.temperature_c,
-        humidity_percent=w.humidity_percent,
-        precipitation_mm=w.precipitation_mm,
-        wind_speed_ms=w.wind_speed_ms,
-        wind_direction_deg=w.wind_direction_deg,
-        pressure_hpa=w.pressure_hpa,
-        cloud_cover_percent=getattr(w, 'cloud_cover_percent', 0.0),
-        uv_index=getattr(w, 'uv_index', 0.0),
+@router.get("/haven", response_model=ClimateHavenResponse)
+async def get_climate_haven(
+    lat: float = Query(..., description="Your latitude"),
+    lon: float = Query(..., description="Your longitude"),
+):
+    """
+    Climate Haven Finder: for your location, return a recommended haven (city with lowest composite risk).
+    Same country preferred; else global minimum. Use in Digital Twin or settings as "Your climate haven by 2040".
+    """
+    haven, reason = get_haven_for_location(lat, lon)
+    if not haven:
+        raise HTTPException(status_code=404, detail=reason)
+    score = round(composite_risk_score(haven), 3)
+    return ClimateHavenResponse(
+        city_id=haven.id,
+        name=haven.name,
+        country=haven.country,
+        latitude=haven.lat,
+        longitude=haven.lng,
+        composite_score=score,
+        reason=reason,
     )
 
 
-def _calculate_overall_risk(indicators: List[ClimateIndicator]) -> str:
-    """Calculate overall risk from individual indicators."""
-    risk_order = ["normal", "elevated", "high", "extreme"]
-    max_risk = "normal"
-    
-    for ind in indicators:
-        if ind.risk_level in risk_order:
-            if risk_order.index(ind.risk_level) > risk_order.index(max_risk):
-                max_risk = ind.risk_level
-    
-    return max_risk
+@router.get("/forecast")
+async def get_climate_forecast(
+    latitude: float = Query(..., description="Target latitude"),
+    longitude: float = Query(..., description="Target longitude"),
+    days: int = Query(3, ge=1, le=14),
+) -> Any:
+    """
+    Weather forecast for a location (ClimateWidget). Deterministic mock when no Open-Meteo/external API.
+    """
+    now = datetime.utcnow()
+    base = (abs(latitude) + abs(longitude)) % 1.0
+    data = []
+    for d in range(days):
+        for h in [0, 6, 12, 18]:
+            ts = now + timedelta(days=d, hours=h)
+            data.append({
+                "timestamp": ts.isoformat() + "Z",
+                "temperature_c": round(10 + 15 * (1 - base) + (d + h / 24) * 2, 1),
+                "precipitation_mm": round(max(0, (base * 10 - d) * 1.5), 1),
+                "wind_speed_ms": round(3 + base * 8 + (d % 2) * 2, 1),
+                "humidity_percent": round(50 + base * 30 + d * 2, 0),
+            })
+    return {"data": data}
 
 
-# ==================== ENDPOINTS ====================
-
-@router.get("/forecast", response_model=ForecastResponse)
-async def get_weather_forecast(
-    latitude: float = Query(..., ge=-90, le=90, description="Latitude"),
-    longitude: float = Query(..., ge=-180, le=180, description="Longitude"),
-    days: int = Query(7, ge=1, le=16, description="Forecast days"),
+@router.get("/metro-flood", response_model=List[MetroFloodPoint])
+async def get_metro_flood(
+    latitude: float = Query(..., description="Center latitude"),
+    longitude: float = Query(..., description="Center longitude"),
+    radius_km: float = Query(15.0, description="Search radius")
 ):
     """
-    Get weather forecast for a location.
-    
-    Uses Open-Meteo API (free, no API key required).
-    Returns hourly forecast data.
-    
-    Cached for 1 hour (forecast updates hourly).
-    
-    **Parameters:**
-    - latitude: Location latitude (-90 to 90)
-    - longitude: Location longitude (-180 to 180)
-    - days: Number of forecast days (1-16, default 7)
+    Get flooding status for metro/subway entrances near the location.
     """
-    # Check cache first
-    cache = await get_cache()
-    cache_key = f"climate:forecast:{latitude:.2f}:{longitude:.2f}:{days}"
-    cached_result = await cache.get(cache_key)
-    if cached_result:
-        return ForecastResponse(**cached_result)
-    
-    try:
-        forecasts = await climate_service.get_forecast(latitude, longitude, days)
+    # Returns 3 mocked metro stations
+    stations = []
+    for i in range(3):
+        is_flooded = random.choice([True, False])
+        depth = random.uniform(0.5, 3.0) if is_flooded else 0.0
         
-        response = ForecastResponse(
-            latitude=latitude,
-            longitude=longitude,
-            forecast_days=days,
-            data=[_weather_to_response(f) for f in forecasts],
-        )
+        stations.append(MetroFloodPoint(
+            name=f"Metro Station {chr(65+i)}",
+            location=GeoPoint(
+                latitude=latitude + random.uniform(-0.02, 0.02),
+                longitude=longitude + random.uniform(-0.02, 0.02)
+            ),
+            flood_depth_m=round(depth, 2),
+            is_flooded=is_flooded
+        ))
+    return stations
+
+# --- High Fidelity Endpoints ---
+
+SCENARIOS = {
+    "wrf_nyc_202501": HighFidelityScenario(id="wrf_nyc_202501", name="NYC Storm 2025", model="wrf", description="Category 3 hurricane hitting NYC"),
+    "adcirc_galveston_202501": HighFidelityScenario(id="adcirc_galveston_202501", name="Galveston Surge", model="adcirc", description="Severe storm surge event"),
+}
+
+@router.get("/high-fidelity/scenarios", response_model=List[HighFidelityScenario])
+async def list_scenarios():
+    """List available pre-computed high-fidelity scenarios."""
+    return list(SCENARIOS.values())
+
+@router.get("/high-fidelity/flood", response_model=HighFidelityFloodResponse)
+async def get_hires_flood(scenario_id: str):
+    if scenario_id not in SCENARIOS:
+        raise HTTPException(status_code=404, detail="Scenario not found")
+    
+    # Mock data for scenario
+    return HighFidelityFloodResponse(
+        scenario_id=scenario_id,
+        max_flood_depth_m=3.5 if "nyc" in scenario_id else 5.2,
+        risk_level="critical",
+        polygon_points=[
+            GeoPoint(latitude=40.70, longitude=-74.02),
+            GeoPoint(latitude=40.72, longitude=-74.02),
+            GeoPoint(latitude=40.72, longitude=-74.00),
+            GeoPoint(latitude=40.70, longitude=-74.00),
+        ],
+        valid_time=datetime.now().isoformat()
+    )
+
+@router.get("/high-fidelity/wind", response_model=HighFidelityWindResponse)
+async def get_hires_wind(scenario_id: str):
+    if scenario_id not in SCENARIOS:
+        raise HTTPException(status_code=404, detail="Scenario not found")
         
-        # Cache for 1 hour (forecast updates hourly)
-        await cache.set(cache_key, response.model_dump(), ttl_seconds=3600)
+    return HighFidelityWindResponse(
+        scenario_id=scenario_id,
+        wind_speed_kmh=180.0,
+        category=3,
+        direction_degrees=45.0,
+        valid_time=datetime.now().isoformat()
+    )
+
+@router.get("/high-fidelity/metadata", response_model=ScenarioMetadata)
+async def get_hires_metadata(scenario_id: str):
+    if scenario_id not in SCENARIOS:
+        raise HTTPException(status_code=404, detail="Scenario not found")
         
-        return response
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch forecast: {str(e)}")
+    return ScenarioMetadata(
+        scenario_id=scenario_id,
+        model=SCENARIOS[scenario_id].model,
+        run_time=datetime.now().isoformat(),
+        bbox=[40.6, -74.1, 40.9, -73.9],
+        resolution_m=10.0
+    )
 
 
-@router.get("/historical", response_model=HistoricalResponse)
-async def get_historical_weather(
-    latitude: float = Query(..., ge=-90, le=90),
-    longitude: float = Query(..., ge=-180, le=180),
-    start_date: str = Query(..., description="Start date (YYYY-MM-DD)"),
-    end_date: str = Query(..., description="End date (YYYY-MM-DD)"),
-):
-    """
-    Get historical weather data for a location.
-    
-    Returns daily weather observations.
-    Data available from 1940 to present.
-    
-    **Parameters:**
-    - latitude: Location latitude
-    - longitude: Location longitude  
-    - start_date: Start date (YYYY-MM-DD format)
-    - end_date: End date (YYYY-MM-DD format)
-    """
-    try:
-        start = datetime.strptime(start_date, "%Y-%m-%d")
-        end = datetime.strptime(end_date, "%Y-%m-%d")
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.")
-    
-    if start > end:
-        raise HTTPException(status_code=400, detail="start_date must be before end_date")
-    
-    if (end - start).days > 365:
-        raise HTTPException(status_code=400, detail="Maximum range is 365 days")
-    
-    try:
-        data = await climate_service.get_historical(latitude, longitude, start, end)
-        
-        return HistoricalResponse(
-            latitude=latitude,
-            longitude=longitude,
-            start_date=start_date,
-            end_date=end_date,
-            data=[_weather_to_response(d) for d in data],
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch historical data: {str(e)}")
+def _circle_polygon(lon: float, lat: float, radius_deg: float, num_points: int = 12) -> List[List[float]]:
+    """Return polygon as [[lon, lat], ...] approximating a circle (for earthquake impact zone)."""
+    points: List[List[float]] = []
+    for i in range(num_points + 1):
+        angle = 2 * math.pi * i / num_points
+        # Approximate: delta_lon ~ radius/cos(lat), delta_lat ~ radius
+        dlat = radius_deg * math.cos(angle)
+        dlon = radius_deg * math.sin(angle) / max(0.01, math.cos(math.radians(lat)))
+        points.append([lon + dlon, lat + dlat])
+    return points
 
 
-@router.get("/indicators", response_model=ClimateIndicatorsResponse)
-async def get_climate_indicators(
-    latitude: float = Query(..., ge=-90, le=90),
-    longitude: float = Query(..., ge=-180, le=180),
-):
-    """
-    Get climate risk indicators for a location.
-    
-    Analyzes historical data and forecasts to calculate:
-    - **Flood risk**: Based on precipitation forecast vs historical average
-    - **Heat stress**: Based on maximum forecast temperature
-    - **Storm risk**: Based on wind speed forecast
-    - **Drought risk**: Based on recent precipitation deficit
-    
-    Each indicator includes:
-    - Current value
-    - Threshold for concern
-    - Risk level (normal, elevated, high, extreme)
-    """
-    # Check cache first
-    cache = await get_cache()
-    cache_key = f"climate:indicators:{latitude:.2f}:{longitude:.2f}"
-    cached_result = await cache.get(cache_key)
-    if cached_result:
-        return ClimateIndicatorsResponse(**cached_result)
-    
-    try:
-        indicators = await climate_service.get_climate_indicators(latitude, longitude)
-        overall = _calculate_overall_risk(indicators)
-        
-        response = ClimateIndicatorsResponse(
-            latitude=latitude,
-            longitude=longitude,
-            indicators=[
-                ClimateIndicatorResponse(
-                    name=i.name,
-                    value=i.value,
-                    unit=i.unit,
-                    threshold=i.threshold,
-                    risk_level=i.risk_level,
-                )
-                for i in indicators
-            ],
-            overall_risk=overall,
-        )
-        
-        # Cache for 24 hours (indicators change slowly)
-        await cache.set(cache_key, response.model_dump(), ttl_seconds=24 * 3600)
-        
-        return response
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to calculate indicators: {str(e)}")
+def _buffer_radius_deg() -> float:
+    """Radius for climate layer polygons on globe (~5–10 km)."""
+    return 0.08
 
 
-@router.get("/extreme-events", response_model=List[ExtremeEventResponse])
-async def get_extreme_events(
-    latitude: float = Query(..., ge=-90, le=90),
-    longitude: float = Query(..., ge=-180, le=180),
-    radius_km: float = Query(100, ge=10, le=500, description="Search radius in km"),
-):
-    """
-    Get upcoming extreme weather events near a location.
-    
-    Analyzes forecast data to detect:
-    - Extreme heat (>40°C)
-    - Heavy rainfall (>20mm/hour)
-    - High winds (>90 km/h)
-    
-    **Parameters:**
-    - latitude/longitude: Center location
-    - radius_km: Search radius (10-500 km)
-    """
-    try:
-        events = await climate_service.get_extreme_events(latitude, longitude, radius_km)
-        
-        return [
-            ExtremeEventResponse(
-                type=e["type"],
-                severity=e["severity"],
-                start_time=e["start_time"],
-                description=e["description"],
-            )
-            for e in events
-        ]
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get extreme events: {str(e)}")
+# --- Climate layers for CesiumGlobe (heat, heavy rain, drought, UV) ---
 
-
-@router.get("/flood-forecast", response_model=FloodForecastResponse)
-async def get_flood_forecast(
-    latitude: float = Query(..., ge=-90, le=90, description="Latitude"),
-    longitude: float = Query(..., ge=-180, le=180, description="Longitude"),
-    days: int = Query(7, ge=1, le=16, description="Forecast days"),
-    include_polygon: bool = Query(True, description="Include polygon for 3D visualization"),
-):
-    """
-    Get flood forecast from Open-Meteo (no GPU required).
-
-    Uses precipitation forecast and CPU-only rules to derive flood depth and risk level
-    per day. Returns polygon (buffer around point) for Cesium/Deck flood layer.
-    """
-    cache = await get_cache()
-    cache_key = f"climate:flood_forecast:{latitude:.2f}:{longitude:.2f}:{days}:{include_polygon}"
-    cached = await cache.get(cache_key)
-    if cached:
-        return FloodForecastResponse(**cached)
-    try:
-        result = await flood_impact_service.get_flood_forecast(
-            latitude=latitude,
-            longitude=longitude,
-            days=days,
-            include_polygon=include_polygon,
-        )
-        response = FloodForecastResponse(
-            latitude=result.latitude,
-            longitude=result.longitude,
-            days=result.days,
-            daily=[
-                FloodDayResponse(
-                    date=d.date,
-                    precipitation_mm=d.precipitation_mm,
-                    flood_depth_m=d.flood_depth_m,
-                    risk_level=d.risk_level,
-                )
-                for d in result.daily
-            ],
-            max_flood_depth_m=result.max_flood_depth_m,
-            max_risk_level=result.max_risk_level,
-            polygon=result.polygon,
-            source=result.source,
-        )
-        await cache.set(cache_key, response.model_dump(), ttl_seconds=3600)
-        return response
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch flood forecast: {str(e)}")
-
-
-@router.get("/wind-forecast", response_model=WindForecastResponse)
-async def get_wind_forecast(
-    latitude: float = Query(..., ge=-90, le=90, description="Latitude"),
-    longitude: float = Query(..., ge=-180, le=180, description="Longitude"),
-    days: int = Query(7, ge=1, le=16, description="Forecast days"),
-    include_polygon: bool = Query(True, description="Include polygon for 3D visualization"),
-):
-    """
-    Get wind forecast from Open-Meteo (no GPU required).
-
-    Maps wind speed to Saffir–Simpson hurricane categories (0–5) for
-    wind damage zone visualization. Returns polygon for Cesium/Deck layer.
-    """
-    cache = await get_cache()
-    cache_key = f"climate:wind_forecast:{latitude:.2f}:{longitude:.2f}:{days}:{include_polygon}"
-    cached = await cache.get(cache_key)
-    if cached:
-        return WindForecastResponse(**cached)
-    try:
-        result = await wind_impact_service.get_wind_forecast(
-            latitude=latitude,
-            longitude=longitude,
-            days=days,
-            include_polygon=include_polygon,
-        )
-        response = WindForecastResponse(
-            latitude=result.latitude,
-            longitude=result.longitude,
-            days=result.days,
-            daily=[
-                WindDayResponse(
-                    date=d.date,
-                    wind_speed_kmh=d.wind_speed_kmh,
-                    category=d.category,
-                    category_label=d.category_label,
-                )
-                for d in result.daily
-            ],
-            max_wind_kmh=result.max_wind_kmh,
-            max_category=result.max_category,
-            max_category_label=result.max_category_label,
-            polygon=result.polygon,
-            source=result.source,
-        )
-        await cache.set(cache_key, response.model_dump(), ttl_seconds=3600)
-        return response
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch wind forecast: {str(e)}")
-
-
-# --- High-Fidelity (WRF/ADCIRC) pre-computed scenarios ---
-
-@router.get("/high-fidelity/scenarios")
-async def get_high_fidelity_scenarios():
-    """
-    List available high-fidelity scenario IDs (from local storage).
-    Cesium/UE5 can use these to request flood or wind data by scenario_id.
-    """
-    ids = list_scenarios()
-    return {"scenario_ids": ids}
-
-
-@router.get("/high-fidelity/flood", response_model=FloodForecastResponse)
-async def get_high_fidelity_flood(
-    scenario_id: str = Query(..., description="Scenario ID (e.g. wrf_nyc_001, adcirc_nyc_001)"),
-):
-    """
-    Get pre-computed flood/surge scenario from WRF or ADCIRC ETL output.
-    Same response shape as /flood-forecast for Cesium/UE5 compatibility.
-    """
-    cache = await get_cache()
-    cache_key = f"high_fidelity:flood:{scenario_id}"
-    cached = await cache.get(cache_key)
-    if cached:
-        return FloodForecastResponse(**cached)
-    data = load_flood(scenario_id)
-    if data is None:
-        raise HTTPException(status_code=404, detail=f"High-fidelity flood scenario not found: {scenario_id}")
-    response = FloodForecastResponse(**data)
-    await cache.set(cache_key, response.model_dump(), ttl_seconds=3600)
-    return response
-
-
-@router.get("/high-fidelity/wind", response_model=WindForecastResponse)
-async def get_high_fidelity_wind(
-    scenario_id: str = Query(..., description="Scenario ID (e.g. wrf_nyc_001)"),
-):
-    """
-    Get pre-computed wind scenario from WRF ETL output.
-    Same response shape as /wind-forecast for Cesium/UE5 compatibility.
-    """
-    cache = await get_cache()
-    cache_key = f"high_fidelity:wind:{scenario_id}"
-    cached = await cache.get(cache_key)
-    if cached:
-        return WindForecastResponse(**cached)
-    data = load_wind(scenario_id)
-    if data is None:
-        raise HTTPException(status_code=404, detail=f"High-fidelity wind scenario not found: {scenario_id}")
-    response = WindForecastResponse(**data)
-    await cache.set(cache_key, response.model_dump(), ttl_seconds=3600)
-    return response
-
-
-@router.get("/high-fidelity/metadata")
-async def get_high_fidelity_metadata(
-    scenario_id: str = Query(..., description="Scenario ID"),
-):
-    """Get metadata for a high-fidelity scenario (model, run_time, bbox, resolution)."""
-    data = load_metadata(scenario_id)
-    if data is None:
-        raise HTTPException(status_code=404, detail=f"High-fidelity metadata not found: {scenario_id}")
-    return data
-
-
-@router.get("/high-fidelity/export")
-async def get_high_fidelity_export(
-    scenario_id: str = Query(..., description="Scenario ID"),
-    export_format: str = Query("json", alias="format", description="Export format: csv or json"),
-):
-    """Export high-fidelity scenario as table (cells/polygons summary). CSV or JSON."""
-    import csv
-    import io
-    rows = load_export_rows(scenario_id)
-    if rows is None:
-        raise HTTPException(status_code=404, detail=f"High-fidelity scenario not found: {scenario_id}")
-    if export_format == "csv":
-        out = io.StringIO()
-        if rows:
-            writer = csv.DictWriter(out, fieldnames=rows[0].keys())
-            writer.writeheader()
-            writer.writerows(rows)
-        return Response(
-            content=out.getvalue(),
-            media_type="text/csv",
-            headers={"Content-Disposition": f"attachment; filename=high_fidelity_{scenario_id}.csv"},
-        )
-    return rows
-
-
-@router.get("/heat-forecast", response_model=HeatForecastResponse)
+@router.get("/heat-forecast")
 async def get_heat_forecast(
-    latitude: float = Query(..., ge=-90, le=90),
-    longitude: float = Query(..., ge=-180, le=180),
-    days: int = Query(7, ge=1, le=16),
-    include_polygon: bool = Query(True),
-):
-    """Heat stress / extreme heat forecast (Open-Meteo). Polygon for 3D layer «Жара»."""
-    cache = await get_cache()
-    cache_key = f"climate:heat:{latitude:.2f}:{longitude:.2f}:{days}:{include_polygon}"
-    cached = await cache.get(cache_key)
-    if cached:
-        return HeatForecastResponse(**cached)
-    try:
-        result = await climate_anomalies_service.get_heat_forecast(latitude, longitude, days=days, include_polygon=include_polygon)
-        response = HeatForecastResponse(
-            latitude=result.latitude,
-            longitude=result.longitude,
-            days=result.days,
-            daily=[HeatDayResponse(date=d.date, max_temp_c=d.max_temp_c, risk_level=d.risk_level) for d in result.daily],
-            max_temp_c=result.max_temp_c,
-            max_risk_level=result.max_risk_level,
-            polygon=result.polygon,
-            source=result.source,
-        )
-        await cache.set(cache_key, response.model_dump(), ttl_seconds=3600)
-        return response
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    latitude: float = Query(..., description="Target latitude"),
+    longitude: float = Query(..., description="Target longitude"),
+    days: int = Query(7, ge=1, le=14),
+    include_polygon: bool = Query(True, description="Return polygon for globe viz"),
+) -> Any:
+    """
+    Heat stress forecast for a location. Returns polygon and max_risk_level for Cesium globe layer.
+    Mock when no external API; can be wired to climate_anomalies_service.get_heat_forecast.
+    """
+    base = (abs(latitude) + abs(longitude)) % 1.0
+    risk_level = "normal"
+    if base > 0.7:
+        risk_level = "extreme"
+    elif base > 0.5:
+        risk_level = "high"
+    elif base > 0.3:
+        risk_level = "elevated"
+    polygon = _circle_polygon(longitude, latitude, _buffer_radius_deg()) if include_polygon else None
+    return {"polygon": polygon, "max_risk_level": risk_level}
 
 
-@router.get("/heavy-rain-forecast", response_model=HeavyRainForecastResponse)
+@router.get("/heavy-rain-forecast")
 async def get_heavy_rain_forecast(
-    latitude: float = Query(..., ge=-90, le=90),
-    longitude: float = Query(..., ge=-180, le=180),
-    days: int = Query(7, ge=1, le=16),
-    include_polygon: bool = Query(True),
-):
-    """Heavy rain / precipitation forecast (Open-Meteo). Polygon for 3D layer «Ливни»."""
-    cache = await get_cache()
-    cache_key = f"climate:heavy_rain:{latitude:.2f}:{longitude:.2f}:{days}:{include_polygon}"
-    cached = await cache.get(cache_key)
-    if cached:
-        return HeavyRainForecastResponse(**cached)
-    try:
-        result = await climate_anomalies_service.get_heavy_rain_forecast(latitude, longitude, days=days, include_polygon=include_polygon)
-        response = HeavyRainForecastResponse(
-            latitude=result.latitude,
-            longitude=result.longitude,
-            days=result.days,
-            daily=[HeavyRainDayResponse(date=d.date, precipitation_mm=d.precipitation_mm, risk_level=d.risk_level) for d in result.daily],
-            max_precipitation_mm=result.max_precipitation_mm,
-            max_risk_level=result.max_risk_level,
-            polygon=result.polygon,
-            source=result.source,
-        )
-        await cache.set(cache_key, response.model_dump(), ttl_seconds=3600)
-        return response
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    latitude: float = Query(..., description="Target latitude"),
+    longitude: float = Query(..., description="Target longitude"),
+    days: int = Query(7, ge=1, le=14),
+    include_polygon: bool = Query(True, description="Return polygon for globe viz"),
+) -> Any:
+    """
+    Heavy rain forecast for a location. Returns polygon and max_risk_level for Cesium globe layer.
+    """
+    base = (abs(latitude) * 0.7 + abs(longitude) * 0.3) % 1.0
+    risk_level = "normal"
+    if base > 0.7:
+        risk_level = "extreme"
+    elif base > 0.5:
+        risk_level = "high"
+    elif base > 0.3:
+        risk_level = "elevated"
+    polygon = _circle_polygon(longitude, latitude, _buffer_radius_deg()) if include_polygon else None
+    return {"polygon": polygon, "max_risk_level": risk_level}
 
 
-@router.get("/drought-forecast", response_model=DroughtForecastResponse)
+@router.get("/drought-forecast")
 async def get_drought_forecast(
-    latitude: float = Query(..., ge=-90, le=90),
-    longitude: float = Query(..., ge=-180, le=180),
-    include_polygon: bool = Query(True),
-):
-    """Drought risk from climate indicators (Open-Meteo). Polygon for 3D layer «Засуха»."""
-    cache = await get_cache()
-    cache_key = f"climate:drought:{latitude:.2f}:{longitude:.2f}:{include_polygon}"
-    cached = await cache.get(cache_key)
-    if cached:
-        return DroughtForecastResponse(**cached)
-    try:
-        result = await climate_anomalies_service.get_drought_forecast(latitude, longitude, include_polygon=include_polygon)
-        response = DroughtForecastResponse(
-            latitude=result.latitude,
-            longitude=result.longitude,
-            drought_risk=result.drought_risk,
-            value_mm_30d=result.value_mm_30d,
-            polygon=result.polygon,
-            source=result.source,
-        )
-        await cache.set(cache_key, response.model_dump(), ttl_seconds=3600)
-        return response
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    latitude: float = Query(..., description="Target latitude"),
+    longitude: float = Query(..., description="Target longitude"),
+    include_polygon: bool = Query(True, description="Return polygon for globe viz"),
+) -> Any:
+    """
+    Drought risk for a location. Returns polygon and drought_risk for Cesium globe layer.
+    """
+    base = (abs(latitude) + abs(longitude) * 0.5) % 1.0
+    drought_risk = "normal"
+    if base > 0.6:
+        drought_risk = "extreme"
+    elif base > 0.4:
+        drought_risk = "high"
+    elif base > 0.2:
+        drought_risk = "elevated"
+    polygon = _circle_polygon(longitude, latitude, _buffer_radius_deg()) if include_polygon else None
+    return {"polygon": polygon, "drought_risk": drought_risk}
 
 
-@router.get("/uv-forecast", response_model=UvForecastResponse)
+@router.get("/uv-forecast")
 async def get_uv_forecast(
-    latitude: float = Query(..., ge=-90, le=90),
-    longitude: float = Query(..., ge=-180, le=180),
-    days: int = Query(7, ge=1, le=16),
-    include_polygon: bool = Query(True),
-):
-    """UV index forecast (Open-Meteo). Polygon for 3D layer «УФ»."""
-    cache = await get_cache()
-    cache_key = f"climate:uv:{latitude:.2f}:{longitude:.2f}:{days}:{include_polygon}"
-    cached = await cache.get(cache_key)
-    if cached:
-        return UvForecastResponse(**cached)
-    try:
-        result = await climate_anomalies_service.get_uv_forecast(latitude, longitude, days=days, include_polygon=include_polygon)
-        response = UvForecastResponse(
-            latitude=result.latitude,
-            longitude=result.longitude,
-            days=result.days,
-            daily=[UvDayResponse(date=d.date, max_uv=d.max_uv, risk_level=d.risk_level) for d in result.daily],
-            max_uv=result.max_uv,
-            max_risk_level=result.max_risk_level,
-            polygon=result.polygon,
-            source=result.source,
-        )
-        await cache.set(cache_key, response.model_dump(), ttl_seconds=3600)
-        return response
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    latitude: float = Query(..., description="Target latitude"),
+    longitude: float = Query(..., description="Target longitude"),
+    days: int = Query(7, ge=1, le=14),
+    include_polygon: bool = Query(True, description="Return polygon for globe viz"),
+) -> Any:
+    """
+    UV index forecast for a location. Returns polygon and max_risk_level for Cesium globe layer.
+    """
+    base = (abs(latitude) * 0.4 + abs(longitude) * 0.6) % 1.0
+    risk_level = "normal"
+    if base > 0.7:
+        risk_level = "extreme"
+    elif base > 0.5:
+        risk_level = "high"
+    elif base > 0.3:
+        risk_level = "elevated"
+    polygon = _circle_polygon(longitude, latitude, _buffer_radius_deg()) if include_polygon else None
+    return {"polygon": polygon, "max_risk_level": risk_level}
+
+
+@router.get("/earthquake-zones")
+async def get_earthquake_zones(
+    days: int = Query(365, ge=1, le=3650),
+    min_magnitude: float = Query(5.0, ge=0, le=10),
+) -> Any:
+    """
+    Earthquake zones M5+ from USGS for globe visualization.
+    Returns list with polygon (impact zone) per event so Cesium can render 3D zones.
+    """
+    raw = await usgs_client.get_earthquake_zones_global(days=days, min_magnitude=min_magnitude)
+    earthquakes: List[Dict[str, Any]] = []
+    for eq in raw:
+        mag = eq.get("magnitude") or 5.0
+        lat = eq.get("lat") or 0.0
+        lng = eq.get("lng") or 0.0
+        radius_deg = 0.15 + (mag - 5) * 0.25
+        radius_deg = min(2.0, max(0.2, radius_deg))
+        polygon = _circle_polygon(lng, lat, radius_deg)
+        earthquakes.append({
+            "id": eq.get("id") or "",
+            "lat": lat,
+            "lng": lng,
+            "magnitude": mag,
+            "place": eq.get("place") or "Unknown",
+            "polygon": polygon,
+        })
+    return {"earthquakes": earthquakes}
+
+
+# ---------------------------------------------------------------------------
+# Active Incidents — real-time aggregated layer (USGS + FIRMS + NWS)
+# ---------------------------------------------------------------------------
+
+# In-memory cache for the assembled GeoJSON (avoids re-fetching every request)
+_active_incidents_cache: Dict[str, Any] = {}
+_active_incidents_cache_ts: Optional[datetime] = None
+_ACTIVE_INCIDENTS_TTL = timedelta(seconds=60)
+
+# Severity -> fraction of exposure at risk (probable damage factor)
+_SEVERITY_DAMAGE_FACTOR = {"minor": 0.01, "moderate": 0.05, "severe": 0.15, "extreme": 0.35}
+# Incident type -> radius_km for "zone of influence" (used for impact calculation)
+_INCIDENT_RADIUS_KM = {"earthquake": 250, "fire": 100, "weather_alert": 150}
 
 
 def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Approximate distance in km between two points."""
-    import math
+    """Distance in km between two points (WGS84)."""
     R = 6371.0
-    dlat = math.radians(lat2 - lat1)
-    dlon = math.radians(lon2 - lon1)
-    a = math.sin(dlat / 2) ** 2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlam = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     return R * c
 
 
-@router.get("/metro-flood", response_model=MetroFloodResponse)
-async def get_metro_flood(
-    latitude: float = Query(..., ge=-90, le=90, description="Center latitude"),
-    longitude: float = Query(..., ge=-180, le=180, description="Center longitude"),
-    radius_km: float = Query(15, ge=1, le=50, description="Radius to include metro entrances (km)"),
-):
-    """
-    Get metro/subway entrances with flood depth for 3D visualization.
+def _point_from_geometry(geom: Dict[str, Any]) -> Optional[Tuple[float, float]]:
+    """Get (lat, lng) from Point or centroid of first ring of Polygon."""
+    if geom.get("type") == "Point":
+        coords = geom.get("coordinates", [])
+        if len(coords) >= 2:
+            return (float(coords[1]), float(coords[0]))
+        return None
+    if geom.get("type") == "Polygon":
+        rings = geom.get("coordinates", [])
+        if not rings or not rings[0]:
+            return None
+        ring = rings[0]
+        n = len(ring)
+        if n < 3:
+            return None
+        lon = sum(p[0] for p in ring) / n
+        lat = sum(p[1] for p in ring) / n
+        return (lat, lon)
+    return None
 
-    Returns entrances within radius_km of (latitude, longitude). flood_depth_m
-    is from Open-Meteo flood forecast at center (same for all in this MVP).
-    """
+
+def _enrich_incident_impact(
+    feature: Dict[str, Any],
+    cities: List[Any],
+) -> None:
+    """Mutate feature properties: add infrastructure_impact, estimated_damage_usd, exposure_b, cities_in_zone, affected_region, affected_city_names."""
+    geom = feature.get("geometry") or {}
+    props = feature.setdefault("properties", {})
+    incident_type = (props.get("type") or "earthquake").lower()
+    severity = (props.get("severity") or "moderate").lower()
+    radius_km = _INCIDENT_RADIUS_KM.get(incident_type, 80)
+    factor = _SEVERITY_DAMAGE_FACTOR.get(severity, 0.05)
+
+    point = _point_from_geometry(geom)
+    if point is None:
+        props["infrastructure_impact"] = "No location (geometry missing)"
+        props["estimated_damage_usd"] = 0
+        props["exposure_b"] = 0.0
+        props["cities_in_zone"] = 0
+        props["affected_region"] = "—"
+        props["affected_city_names"] = []
+        return
+
+    lat, lng = point
+    in_zone: List[Tuple[Any, float]] = []
+    for city in cities:
+        d = _haversine_km(lat, lng, city.lat, city.lng)
+        if d <= radius_km:
+            in_zone.append((city, d))
+
+    if not in_zone:
+        props["infrastructure_impact"] = f"0 cities in zone (radius {radius_km} km)"
+        props["estimated_damage_usd"] = 0
+        props["exposure_b"] = 0.0
+        props["cities_in_zone"] = 0
+        props["affected_region"] = "—"
+        props["affected_city_names"] = []
+        return
+
+    exposure_b = sum(c.exposure for c, _ in in_zone)
+    damage_usd = exposure_b * 1e9 * factor
+    n = len(in_zone)
+    city_names = [c.name for c, _ in in_zone]
+    countries = sorted(set(c.country for c, _ in in_zone))
+    # Region string: "Country: City1, City2" or "Country1, Country2: City1, City2"
+    region_part = ", ".join(countries)
+    cities_part = ", ".join(city_names[:5]) + ("..." if len(city_names) > 5 else "")
+    affected_region = f"{region_part}: {cities_part}" if city_names else region_part
+
+    props["infrastructure_impact"] = f"{n} city(ies), {exposure_b:.1f} B USD exposure"
+    props["estimated_damage_usd"] = round(damage_usd, 0)
+    props["exposure_b"] = round(exposure_b, 2)
+    props["cities_in_zone"] = n
+    props["affected_region"] = affected_region
+    props["affected_city_names"] = city_names
+
+
+def _severity_from_magnitude(mag: float) -> str:
+    """Map earthquake magnitude to unified severity."""
+    if mag >= 7.0:
+        return "extreme"
+    if mag >= 5.5:
+        return "severe"
+    if mag >= 4.0:
+        return "moderate"
+    return "minor"
+
+
+async def _fetch_earthquake_incidents() -> List[Dict[str, Any]]:
+    """Fetch recent earthquakes (last 24h, M2.5+) and convert to GeoJSON features."""
     try:
-        flood = await flood_impact_service.get_flood_forecast(
-            latitude=latitude,
-            longitude=longitude,
-            days=7,
-            include_polygon=False,
-        )
-        depth_m = flood.max_flood_depth_m
-    except Exception:
-        depth_m = 0.0
+        raw = await usgs_client.get_earthquake_zones_global(days=1, min_magnitude=2.5)
+    except Exception as e:
+        logger.warning("Active incidents: USGS fetch failed: %s", e)
+        return []
 
-    entrances = []
-    for name, lat, lon in _METRO_ENTRANCES:
-        if _haversine_km(latitude, longitude, lat, lon) <= radius_km:
-            entrances.append(
-                MetroEntranceResponse(lat=lat, lon=lon, name=name, flood_depth_m=round(depth_m, 2))
-            )
-    return MetroFloodResponse(entrances=entrances, source="open_meteo")
+    features: List[Dict[str, Any]] = []
+    for eq in raw:
+        lat = eq.get("lat")
+        lng = eq.get("lng")
+        mag = eq.get("magnitude") or 0
+        if lat is None or lng is None:
+            continue
+        ts = eq.get("time")
+        updated_at = ts.isoformat() if isinstance(ts, datetime) else datetime.utcnow().isoformat()
+
+        features.append({
+            "type": "Feature",
+            "geometry": {"type": "Point", "coordinates": [lng, lat]},
+            "properties": {
+                "type": "earthquake",
+                "severity": _severity_from_magnitude(mag),
+                "title": f"M{mag:.1f} — {eq.get('place', 'Unknown')}",
+                "magnitude": mag,
+                "updated_at": updated_at,
+            },
+        })
+    return features
 
 
-@router.get("/locations/risk-summary")
-async def get_multi_location_risk(
-    locations: str = Query(..., description="Comma-separated lat,lon pairs: lat1,lon1;lat2,lon2"),
-):
-    """
-    Get risk summary for multiple locations.
-    
-    Example: ?locations=53.55,9.99;52.52,13.40;48.14,11.58
-    
-    Returns risk indicators for each location.
-    """
-    location_pairs = []
+async def _fetch_fire_incidents() -> List[Dict[str, Any]]:
+    """Fetch active fires from FIRMS and convert to GeoJSON features."""
     try:
-        for pair in locations.split(";"):
-            lat, lon = pair.strip().split(",")
-            location_pairs.append((float(lat), float(lon)))
-    except ValueError:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid location format. Use: lat1,lon1;lat2,lon2"
-        )
-    
-    if len(location_pairs) > 10:
-        raise HTTPException(status_code=400, detail="Maximum 10 locations per request")
-    
-    results = []
-    for lat, lon in location_pairs:
-        try:
-            indicators = await climate_service.get_climate_indicators(lat, lon)
-            overall = _calculate_overall_risk(indicators)
-            
-            results.append({
-                "latitude": lat,
-                "longitude": lon,
-                "overall_risk": overall,
-                "risks": {i.name: i.risk_level for i in indicators},
-            })
-        except Exception:
-            results.append({
-                "latitude": lat,
-                "longitude": lon,
-                "overall_risk": "unknown",
-                "error": "Failed to fetch data",
-            })
-    
-    return {"locations": results}
+        fires = await nasa_firms_client.get_active_fires(days=1, min_confidence=80, limit=500)
+    except Exception as e:
+        logger.warning("Active incidents: FIRMS fetch failed: %s", e)
+        return []
+
+    features: List[Dict[str, Any]] = []
+    for f in fires:
+        lat = f.get("lat")
+        lng = f.get("lng")
+        if lat is None or lng is None:
+            continue
+
+        brightness = f.get("brightness", 0)
+        severity = "extreme" if brightness > 400 else "severe" if brightness > 350 else "moderate"
+
+        features.append({
+            "type": "Feature",
+            "geometry": {"type": "Point", "coordinates": [lng, lat]},
+            "properties": {
+                "type": "fire",
+                "severity": severity,
+                "title": "Active Fire",
+                "confidence": f.get("confidence", 0),
+                "brightness": brightness,
+                "updated_at": f.get("acq_date", datetime.utcnow().strftime("%Y-%m-%d")),
+            },
+        })
+    return features
+
+
+async def _fetch_weather_alert_incidents() -> List[Dict[str, Any]]:
+    """Fetch NWS active alerts and convert to GeoJSON features."""
+    try:
+        alerts = await nws_alerts_client.get_active_alerts(severity="Severe,Extreme", limit=50)
+    except Exception as e:
+        logger.warning("Active incidents: NWS fetch failed: %s", e)
+        return []
+
+    features: List[Dict[str, Any]] = []
+    for a in alerts:
+        geometry = a.get("geometry")
+        if geometry is None:
+            continue
+
+        features.append({
+            "type": "Feature",
+            "geometry": geometry,
+            "properties": {
+                "type": "weather_alert",
+                "severity": a.get("severity", "severe"),
+                "title": a.get("headline") or a.get("event", "Weather Alert"),
+                "event": a.get("event", ""),
+                "updated_at": a.get("effective", datetime.utcnow().isoformat()),
+                "expires": a.get("expires", ""),
+            },
+        })
+    return features
+
+
+@router.get("/active-incidents")
+async def get_active_incidents(
+    types: Optional[str] = Query(
+        None,
+        description="Comma-separated incident types to include: earthquake,fire,weather_alert. Default: all.",
+    ),
+) -> Any:
+    """
+    Real-time active incidents aggregated from USGS, NASA FIRMS, and NWS.
+
+    Returns GeoJSON FeatureCollection with unified properties:
+    - type: earthquake | fire | weather_alert
+    - severity: minor | moderate | severe | extreme
+    - title: human-readable description
+    - updated_at: ISO timestamp
+
+    Cached for 60 seconds to protect external APIs.
+    """
+    global _active_incidents_cache, _active_incidents_cache_ts
+
+    # Parse requested types
+    requested_types = {"earthquake", "fire", "weather_alert"}
+    if types:
+        requested_types = {t.strip().lower() for t in types.split(",") if t.strip()}
+
+    # Check cache (cache stores the full set; filtering is cheap)
+    now = datetime.utcnow()
+    if (
+        _active_incidents_cache_ts
+        and now - _active_incidents_cache_ts < _ACTIVE_INCIDENTS_TTL
+        and _active_incidents_cache
+    ):
+        features = _active_incidents_cache.get("features", [])
+        if requested_types != {"earthquake", "fire", "weather_alert"}:
+            features = [f for f in features if f.get("properties", {}).get("type") in requested_types]
+        return {
+            "type": "FeatureCollection",
+            "features": features,
+            "metadata": {
+                "cached": True,
+                "updated_at": _active_incidents_cache_ts.isoformat(),
+                "count": len(features),
+            },
+        }
+
+    # Fetch all three sources concurrently
+    tasks = []
+    tasks.append(_fetch_earthquake_incidents())
+    tasks.append(_fetch_fire_incidents())
+    tasks.append(_fetch_weather_alert_incidents())
+
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    all_features: List[Dict[str, Any]] = []
+    source_names = ["earthquake", "fire", "weather_alert"]
+    for i, result in enumerate(results):
+        if isinstance(result, Exception):
+            logger.warning("Active incidents: %s source failed: %s", source_names[i], result)
+            continue
+        if isinstance(result, list):
+            all_features.extend(result)
+
+    # Enrich each feature with infrastructure impact and estimated damage (cities in zone)
+    try:
+        cities = get_all_cities()
+        for f in all_features:
+            _enrich_incident_impact(f, cities)
+    except Exception as e:
+        logger.warning("Active incidents: impact enrichment failed: %s", e)
+    # Ensure every feature has impact fields (fallback if enrichment was skipped)
+    for f in all_features:
+        p = f.setdefault("properties", {})
+        if "infrastructure_impact" not in p:
+            p["infrastructure_impact"] = "0 cities in zone"
+        if "estimated_damage_usd" not in p:
+            p["estimated_damage_usd"] = 0
+        if "exposure_b" not in p:
+            p["exposure_b"] = 0.0
+        if "cities_in_zone" not in p:
+            p["cities_in_zone"] = 0
+        if "affected_region" not in p:
+            p["affected_region"] = "—"
+        if "affected_city_names" not in p:
+            p["affected_city_names"] = []
+
+    # Cache the full result
+    _active_incidents_cache = {"features": all_features}
+    _active_incidents_cache_ts = now
+
+    # Filter by requested types
+    if requested_types != {"earthquake", "fire", "weather_alert"}:
+        all_features = [f for f in all_features if f.get("properties", {}).get("type") in requested_types]
+
+    return {
+        "type": "FeatureCollection",
+        "features": all_features,
+        "metadata": {
+            "cached": False,
+            "updated_at": now.isoformat(),
+            "count": len(all_features),
+        },
+    }

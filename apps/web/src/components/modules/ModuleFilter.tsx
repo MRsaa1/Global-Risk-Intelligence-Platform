@@ -1,5 +1,6 @@
 /**
- * ModuleFilter - Filter component for strategic modules
+ * ModuleFilter — Filter component for Strategic Modules.
+ * Unified Corporate Style: section labels font-mono text-[10px] uppercase tracking-widest text-zinc-500.
  */
 import { useState } from 'react'
 import { ModulePhase, ModuleAccessLevel, ModuleStatus } from '../../lib/modules'
@@ -48,22 +49,22 @@ export default function ModuleFilter({ onFilterChange }: ModuleFilterProps) {
           placeholder="Search modules..."
           value={search}
           onChange={(e) => handleSearchChange(e.target.value)}
-          className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-white/30 focus:outline-none focus:border-amber-500/30"
+          className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-md text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-zinc-600 font-sans"
         />
       </div>
 
       {/* Phase Filter */}
       <div className="flex items-center gap-2">
-        <span className="text-white/50 text-sm">Phase:</span>
+        <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Phase:</span>
         <div className="flex gap-1">
-          {[null, 1, 2, 3, 4].map((p) => (
+          {([null, 1, 2, 3, 4] as (ModulePhase | null)[]).map((p) => (
             <button
               key={p ?? 'all'}
               onClick={() => handlePhaseChange(p)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all border ${
                 phase === p
-                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                  : 'bg-white/5 text-white/60 border border-white/10 hover:bg-white/10'
+                  ? 'bg-zinc-700 text-zinc-100 border-zinc-600'
+                  : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:bg-zinc-700'
               }`}
             >
               {p ? `Phase ${p}` : 'All'}
@@ -74,16 +75,16 @@ export default function ModuleFilter({ onFilterChange }: ModuleFilterProps) {
 
       {/* Access Filter */}
       <div className="flex items-center gap-2">
-        <span className="text-white/50 text-sm">Access:</span>
+        <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Access:</span>
         <div className="flex gap-1">
           {[null, 'public', 'commercial', 'classified', 'meta'].map((a) => (
             <button
               key={a ?? 'all'}
               onClick={() => handleAccessChange(a as ModuleAccessLevel | null)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all border ${
                 access === a
-                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                  : 'bg-white/5 text-white/60 border border-white/10 hover:bg-white/10'
+                  ? 'bg-zinc-700 text-zinc-100 border-zinc-600'
+                  : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:bg-zinc-700'
               }`}
             >
               {a ? a.charAt(0).toUpperCase() + a.slice(1) : 'All'}
@@ -94,16 +95,16 @@ export default function ModuleFilter({ onFilterChange }: ModuleFilterProps) {
 
       {/* Status Filter */}
       <div className="flex items-center gap-2">
-        <span className="text-white/50 text-sm">Status:</span>
+        <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Status:</span>
         <div className="flex gap-1">
           {[null, 'active', 'planned', 'locked', 'coming-soon'].map((s) => (
             <button
               key={s ?? 'all'}
               onClick={() => handleStatusChange(s as ModuleStatus | null)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all border ${
                 status === s
-                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                  : 'bg-white/5 text-white/60 border border-white/10 hover:bg-white/10'
+                  ? 'bg-zinc-700 text-zinc-100 border-zinc-600'
+                  : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:bg-zinc-700'
               }`}
             >
               {s ? s.replace('-', ' ') : 'All'}

@@ -191,6 +191,26 @@ class SupplyRoute(Base):
         return f"<SupplyRoute {self.source_id} -> {self.target_id}>"
 
 
+class SupplyChain(Base):
+    """Named supply chain: raw material -> component -> product (FR-SCSS-002)."""
+    __tablename__ = "scss_supply_chains"
+
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    root_supplier_id: Mapped[Optional[str]] = mapped_column(
+        String(36),
+        ForeignKey("scss_suppliers.id", ondelete="SET NULL"),
+        index=True,
+    )
+    description: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=datetime.utcnow)
+    created_by: Mapped[Optional[str]] = mapped_column(String(36))
+
+
 class SupplyChainRisk(Base):
     """
     Identified supply chain risk event or vulnerability.
@@ -250,3 +270,82 @@ class SupplyChainRisk(Base):
     
     def __repr__(self) -> str:
         return f"<SupplyChainRisk {self.risk_level}: {self.title}>"
+
+
+# ==================== Phase 5: Sync ====================
+
+
+class SyncConfig(Base):
+    """Configuration for ERP/PLM data sync (cron or webhook)."""
+    __tablename__ = "scss_sync_config"
+    
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    adapter_type: Mapped[str] = mapped_column(String(50), nullable=False)  # sap, oracle, edi, manual
+    cron_expression: Mapped[Optional[str]] = mapped_column(String(100))
+    webhook_url: Mapped[Optional[str]] = mapped_column(String(500))
+    config_json: Mapped[Optional[str]] = mapped_column(Text)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, onupdate=datetime.utcnow)
+
+
+class SyncRun(Base):
+    """Single sync run (start/finish, counts, status)."""
+    __tablename__ = "scss_sync_runs"
+    
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    config_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("scss_sync_config.id", ondelete="SET NULL"))
+    started_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)  # running, success, partial, failed
+    records_created: Mapped[int] = mapped_column(Integer, default=0)
+    records_updated: Mapped[int] = mapped_column(Integer, default=0)
+    records_failed: Mapped[int] = mapped_column(Integer, default=0)
+    message: Mapped[Optional[str]] = mapped_column(Text)
+    details_json: Mapped[Optional[str]] = mapped_column(Text)
+
+
+class ImportAudit(Base):
+    """Per-entity audit for each sync run (created/updated/failed)."""
+    __tablename__ = "scss_import_audit"
+    
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    sync_run_id: Mapped[str] = mapped_column(String(36), ForeignKey("scss_sync_runs.id", ondelete="CASCADE"))
+    entity_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    entity_id: Mapped[Optional[str]] = mapped_column(String(36))
+    action: Mapped[str] = mapped_column(String(20), nullable=False)  # created, updated, failed
+    details_json: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+# ==================== Phase 6: Compliance & Audit ====================
+
+
+class AuditLog(Base):
+    """Audit trail: who changed what (supplier, scenario, export)."""
+    __tablename__ = "scss_audit_log"
+    
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    entity_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    entity_id: Mapped[Optional[str]] = mapped_column(String(36))
+    action: Mapped[str] = mapped_column(String(50), nullable=False)
+    changed_by: Mapped[Optional[str]] = mapped_column(String(255))
+    changed_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    details_json: Mapped[Optional[str]] = mapped_column(Text)
+
+
+class SanctionsMatch(Base):
+    """Sanctions screening match (OFAC/EU list)."""
+    __tablename__ = "scss_sanctions_matches"
+    
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    supplier_id: Mapped[str] = mapped_column(String(36), ForeignKey("scss_suppliers.id", ondelete="CASCADE"), nullable=False)
+    list_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    list_source: Mapped[str] = mapped_column(String(50), nullable=False)  # OFAC, EU
+    matched_name: Mapped[Optional[str]] = mapped_column(String(255))
+    match_score: Mapped[Optional[float]] = mapped_column(Float)
+    status: Mapped[str] = mapped_column(String(20), default="pending")  # pending, reviewed, cleared
+    reviewed_by: Mapped[Optional[str]] = mapped_column(String(255))
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    notes: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=datetime.utcnow)

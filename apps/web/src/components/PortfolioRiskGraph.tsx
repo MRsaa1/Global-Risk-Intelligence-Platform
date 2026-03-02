@@ -166,7 +166,7 @@ export default function PortfolioRiskGraph({ isOpen, onClose, scenario = 'defaul
     ctx.fillStyle = 'rgba(0,0,0,0.7)'
     ctx.fillRect(0, 0, 256, 64)
     ctx.fillStyle = 'white'
-    ctx.font = 'bold 20px "Space Grotesk", system-ui, sans-serif'
+    ctx.font = 'bold 20px "JetBrains Mono", monospace'
     ctx.textAlign = 'center'
     ctx.fillText(node.name, 128, 38)
     
@@ -206,20 +206,20 @@ export default function PortfolioRiskGraph({ isOpen, onClose, scenario = 'defaul
         exit={{ opacity: 0, scale: 0.95 }}
         transition={{ duration: 0.3 }}
       >
-        <div className="h-full bg-black/95 backdrop-blur-xl rounded-2xl border border-white/10 overflow-hidden flex">
+        <div className="h-full bg-black/95 rounded-md border border-zinc-700 overflow-hidden flex">
           {/* Graph Container */}
           <div className="flex-1 relative">
             {/* Header */}
             <div className="absolute top-0 left-0 right-0 z-10 p-4 flex items-center justify-between bg-gradient-to-b from-black/80 to-transparent">
-              <h2 className="text-white text-xl font-light">Portfolio Risk Graph</h2>
+              <h2 className="text-zinc-100 text-xl font-light">Portfolio Risk Graph</h2>
               <div className="flex items-center gap-2">
-                <button className="p-2 bg-white/10 rounded-lg hover:bg-white/20 transition-colors">
+                <button className="p-2 bg-zinc-700 rounded-md hover:bg-zinc-600 transition-colors">
                   <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                   </svg>
                 </button>
-                <button className="p-2 bg-white/10 rounded-lg hover:bg-white/20 transition-colors">
+                <button className="p-2 bg-zinc-700 rounded-md hover:bg-zinc-600 transition-colors">
                   <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
                   </svg>
@@ -247,40 +247,40 @@ export default function PortfolioRiskGraph({ isOpen, onClose, scenario = 'defaul
             />
             
             {/* Legend */}
-            <div className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-sm rounded-lg p-3 border border-white/10">
-              <div className="text-white/50 text-[10px] uppercase tracking-wider mb-2">Link Types</div>
+            <div className="absolute bottom-4 left-4 bg-black/60 rounded-md p-3 border border-zinc-700">
+              <div className="text-zinc-400 text-[10px] uppercase tracking-wider mb-2">Link Types</div>
               <div className="space-y-1 text-xs">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-0.5 bg-blue-500 rounded" />
-                  <span className="text-white/60">Supply Chain</span>
+                  <span className="text-zinc-400">Supply Chain</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-0.5 bg-purple-500 rounded" />
-                  <span className="text-white/60">Financial</span>
+                  <span className="text-zinc-400">Financial</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-0.5 bg-orange-500 rounded" />
-                  <span className="text-white/60">Operational</span>
+                  <span className="text-zinc-400">Operational</span>
                 </div>
               </div>
             </div>
           </div>
           
           {/* Sidebar - Stats & Details */}
-          <div className="w-72 border-l border-white/10 p-4 bg-white/[0.02] flex flex-col">
+          <div className="w-72 border-l border-zinc-700 p-4 bg-zinc-900/50 flex flex-col">
             {/* Portfolio Stats */}
             <div className="space-y-3 mb-6">
-              <div className="bg-white/5 rounded-xl p-3 border border-white/10">
-                <div className="text-white/50 text-xs uppercase tracking-wider mb-1">At Risk</div>
-                <div className="text-red-400 text-2xl font-light">${stats.atRisk.toFixed(1)}B</div>
+              <div className="bg-zinc-800 rounded-md p-3 border border-zinc-700">
+                <div className="text-zinc-400 text-xs uppercase tracking-wider mb-1">At Risk</div>
+                <div className="text-red-400/80 text-2xl font-light">${stats.atRisk.toFixed(1)}B</div>
               </div>
-              <div className="bg-white/5 rounded-xl p-3 border border-white/10">
-                <div className="text-white/50 text-xs uppercase tracking-wider mb-1">Critical Links</div>
-                <div className="text-orange-400 text-2xl font-light">{stats.criticalLinks}</div>
+              <div className="bg-zinc-800 rounded-md p-3 border border-zinc-700">
+                <div className="text-zinc-400 text-xs uppercase tracking-wider mb-1">Critical Links</div>
+                <div className="text-orange-400/80 text-2xl font-light">{stats.criticalLinks}</div>
               </div>
               {stats.hasCascade && (
-                <div className="bg-red-500/10 rounded-xl p-3 border border-red-500/30">
-                  <div className="text-red-400 text-sm font-medium flex items-center gap-2">
+                <div className="bg-red-500/10 rounded-md p-3 border border-red-500/30">
+                  <div className="text-red-400/80 text-sm font-medium flex items-center gap-2">
                     <svg className="w-4 h-4 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                     </svg>
@@ -291,37 +291,37 @@ export default function PortfolioRiskGraph({ isOpen, onClose, scenario = 'defaul
             </div>
             
             {/* Results Chart Placeholder */}
-            <div className="flex-1 bg-white/5 rounded-xl p-3 border border-white/10 mb-4">
-              <div className="text-white/50 text-xs uppercase tracking-wider mb-3">Results</div>
+            <div className="flex-1 bg-zinc-800 rounded-md p-3 border border-zinc-700 mb-4">
+              <div className="text-zinc-400 text-xs uppercase tracking-wider mb-3">Results</div>
               <div className="flex items-end gap-2 h-24">
                 <div className="flex-1 flex flex-col items-center gap-1">
                   <div className="w-full bg-blue-500 rounded-t" style={{ height: '60%' }} />
-                  <span className="text-white/40 text-[10px]">T0</span>
+                  <span className="text-zinc-500 text-[10px]">T0</span>
                 </div>
                 <div className="flex-1 flex flex-col items-center gap-1">
                   <div className="w-full bg-orange-500 rounded-t" style={{ height: '75%' }} />
-                  <span className="text-white/40 text-[10px]">+1 Year</span>
+                  <span className="text-zinc-500 text-[10px]">+1 Year</span>
                 </div>
                 <div className="flex-1 flex flex-col items-center gap-1">
                   <div className="w-full bg-red-500 rounded-t" style={{ height: '90%' }} />
-                  <span className="text-white/40 text-[10px]">+3 Years</span>
+                  <span className="text-zinc-500 text-[10px]">+3 Years</span>
                 </div>
               </div>
             </div>
             
             {/* Selected Node Details */}
             {selectedNode && (
-              <div className="bg-white/5 rounded-xl p-3 border border-white/10 mb-4">
-                <div className="text-white/50 text-xs uppercase tracking-wider mb-2">Selected Asset</div>
-                <div className="text-white font-medium mb-1">{selectedNode.name}</div>
+              <div className="bg-zinc-800 rounded-md p-3 border border-zinc-700 mb-4">
+                <div className="text-zinc-400 text-xs uppercase tracking-wider mb-2">Selected Asset</div>
+                <div className="text-zinc-100 font-medium mb-1">{selectedNode.name}</div>
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div>
-                    <span className="text-white/40">Exposure:</span>
-                    <span className="text-white ml-1">${selectedNode.value}B</span>
+                    <span className="text-zinc-500">Exposure:</span>
+                    <span className="text-zinc-100 ml-1">${selectedNode.value}B</span>
                   </div>
                   <div>
-                    <span className="text-white/40">Risk:</span>
-                    <span className={`ml-1 ${selectedNode.risk > 0.7 ? 'text-red-400' : selectedNode.risk > 0.5 ? 'text-orange-400' : 'text-green-400'}`}>
+                    <span className="text-zinc-500">Risk:</span>
+                    <span className={`ml-1 ${selectedNode.risk > 0.7 ? 'text-red-400/80' : selectedNode.risk > 0.5 ? 'text-orange-400/80' : 'text-green-400/80'}`}>
                       {(selectedNode.risk * 100).toFixed(0)}%
                     </span>
                   </div>
@@ -331,13 +331,13 @@ export default function PortfolioRiskGraph({ isOpen, onClose, scenario = 'defaul
             
             {/* Actions */}
             <div className="space-y-2">
-              <button className="w-full px-4 py-2 bg-amber-500/20 text-amber-400 rounded-lg border border-amber-500/30 hover:bg-amber-500/30 transition-colors text-sm flex items-center justify-center gap-2">
+              <button className="w-full px-4 py-2 bg-zinc-700 text-zinc-300 rounded-md border border-zinc-600 hover:bg-zinc-600 transition-colors text-sm flex items-center justify-center gap-2">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
                 Run Cascade Simulation
               </button>
-              <button className="w-full px-4 py-2 bg-white/5 text-white/60 rounded-lg border border-white/10 hover:bg-white/10 transition-colors text-sm">
+              <button className="w-full px-4 py-2 bg-zinc-800 text-zinc-400 rounded-md border border-zinc-700 hover:bg-zinc-700 transition-colors text-sm">
                 Export Network Analysis
               </button>
             </div>
@@ -346,7 +346,7 @@ export default function PortfolioRiskGraph({ isOpen, onClose, scenario = 'defaul
           {/* Close button */}
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 p-2 bg-white/10 rounded-lg hover:bg-white/20 transition-colors z-20"
+            className="absolute top-4 right-4 p-2 bg-zinc-700 rounded-md hover:bg-zinc-600 transition-colors z-20"
           >
             <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

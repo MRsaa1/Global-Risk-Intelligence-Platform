@@ -178,7 +178,7 @@ export default function FinancialChart({
     },
     paper_bgcolor: 'rgba(10, 15, 26, 0)',
     plot_bgcolor: 'rgba(10, 15, 26, 0)',
-    font: { color: chartColors.text.secondary, family: '"Space Grotesk", system-ui, sans-serif' },
+    font: { color: chartColors.text.secondary, family: '"JetBrains Mono", monospace' },
     scene: type === 'scatter3d' || type === 'surface' || type === 'mesh3d' ? {
       xaxis: { 
         title: { text: 'Climate Risk', font: { size: 11 } }, 
@@ -256,7 +256,7 @@ export default function FinancialChart({
           <motion.div
             initial={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 flex items-center justify-center bg-[#0a0f18]/80 rounded-xl z-10"
+            className="absolute inset-0 flex items-center justify-center bg-zinc-950/80 rounded-md z-10"
           >
             <div className="flex flex-col items-center gap-2">
               <motion.div
@@ -271,7 +271,7 @@ export default function FinancialChart({
       </AnimatePresence>
       
       {/* Chart container */}
-      <div className="w-full h-full glass rounded-xl p-4">
+      <div className="w-full h-full glass rounded-md p-4">
         {/* Custom controls */}
         {showControls && (
           <div className="absolute top-2 right-2 z-20 flex gap-1">

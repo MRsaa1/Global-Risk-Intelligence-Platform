@@ -54,15 +54,15 @@
 #### ✅ Layer 5: Protocol (PARS)
 - [x] Базовая схема PARS
 - [x] API стандартизация
-- [ ] ISO стандартизация (в процессе)
+- [ ] **PARS: ISO стандартизация** (направление развития — в процессе)
 
 #### ✅ Strategic Modules Phase 1
 - [x] **CIP** (Critical Infrastructure Protection) - Operational
 - [x] **SCSS** (Supply Chain Sovereignty System) - Operational
 - [x] **SRO** (Systemic Risk Observatory) - Operational
-- [ ] **SRS** (Sovereign Risk Shield) - Pilot
-- [ ] **CityOS** (City Operating System) - Pilot
-- [ ] **FST** (Financial System Stress Test Engine) - Pilot
+- [ ] **SRS** (Sovereign Risk Shield) — **пилот** (не production)
+- [ ] **CityOS** (City Operating System) — **пилот** (не production)
+- [ ] **FST** (Financial System Stress Test Engine) — **пилот** (не production)
 
 #### ✅ Resilience & Infrastructure
 - [x] Circuit Breakers (автоматическое восстановление)
@@ -175,7 +175,7 @@
 
 **Функции:**
 - Physical Asset Risk Schema
-- Industry standard (future ISO)
+- **PARS: направление — ISO стандартизация** (industry standard, interoperability)
 - Interoperability across systems
 
 **Документация:** [docs/architecture/FIVE_LAYERS.md](docs/architecture/FIVE_LAYERS.md)
@@ -192,9 +192,9 @@
 | **CIP** | ✅ Operational | Critical Infrastructure Protection |
 | **SCSS** | ✅ Operational | Supply Chain Sovereignty System |
 | **SRO** | ✅ Operational | Systemic Risk Observatory |
-| **SRS** | 🚧 Pilot | Sovereign Risk Shield |
-| **CityOS** | 🚧 Pilot | City Operating System |
-| **FST** | 🚧 Pilot | Financial System Stress Test Engine |
+| **SRS** | 🚧 **Пилот** (не production) | Sovereign Risk Shield |
+| **CityOS** | 🚧 **Пилот** (не production) | City Operating System |
+| **FST** | 🚧 **Пилот** (не production) | Financial System Stress Test Engine |
 
 **Документация:** [docs/architecture/STRATEGIC_MODULES_V2_VISION.md](docs/architecture/STRATEGIC_MODULES_V2_VISION.md)
 
@@ -263,8 +263,8 @@
   - [x] NeMo Curator (data cleaning & preparation) - **✅ Реализовано**
   - [x] NeMo Data Designer (synthetic data generation) - **✅ Реализовано**
   - [x] NeMo Evaluator (testing & benchmarking) - **✅ Реализовано**
-  - [ ] NeMo Customizer (fine-tuning) - Phase 3
-  - [ ] NeMo RL & Gym (reinforcement learning) - Phase 3
+  - [x] NeMo Customizer (fine-tuning) - **Реализовано (конфиг, скрипты, API); для полной интеграции задать NEMO_CUSTOMIZER_API_URL / NEMO_RL_API_URL и включить в пайплайн агентов**
+  - [x] NeMo RL & Gym (reinforcement learning) - **Реализовано (конфиг, скрипты, API); интеграция в пайплайн — опционально (ADVISOR/workflow)**
   
   **Benefits:** 60-80% cost reduction, 20-50% quality improvement, enterprise-ready
   **Документация:** 
@@ -272,11 +272,35 @@
   - [docs/NVIDIA_NEMO_PHASE1_COMPLETE.md](docs/NVIDIA_NEMO_PHASE1_COMPLETE.md)
   - [docs/NVIDIA_NEMO_PHASE2_COMPLETE.md](docs/NVIDIA_NEMO_PHASE2_COMPLETE.md)
 
+#### 🌍 Google Cloud Platform — Risk Data Stack
+> Геоданные, климат, AI-модели рисков и визуализация через сервисы Google Cloud.
+
+| Сервис | Назначение в платформе | Статус |
+|--------|------------------------|--------|
+| **Google Earth Engine** | Fintech/Risk Path: климат, рельеф, наводнения, ураганы. Полностью по Risk. | 📋 Planned |
+| **ERA5 (Climate Reanalysis)** | Исторические климатические ряды для моделей рисков. Данные для Layer 3 Simulation Engine. | 📋 Planned |
+| **Dynamic World / Sentinel-2** | Мониторинг физических активов и территорий. Данные для 3D Digital Twin (Layer 1). | 📋 Planned |
+| **High-Res Terrain (DEM)** | Модели рельефа для наводнений и структурных рисков. Вход для Physics Engine. | 📋 Planned |
+| **Global Flood Map** | Карты затоплений для риск-моделей. Прямой вход в flood simulation. | 📋 Planned |
+| **BigQuery** | Стресс-тесты и агрегаты по рискам, долгосрочная отчётность. Синхрон из PostgreSQL. | 📋 Planned |
+| **Vertex AI** | Модели рисков, эксперименты, автоматические отчёты по рискам. ML pipeline. | 📋 Planned |
+| **Google Maps Platform** | Визуализация зон риска, карты наводнений/территорий, маршруты эвакуации. | 📋 Planned |
+
+**Лимиты Earth Engine:** Для R&D лимитов достаточно; при больших рендерах Digital Twin — запрос более высокого плана.
+
+**Интеграция с архитектурой:**
+- **Layer 1 (Digital Twins):** Dynamic World + Sentinel-2 + DEM → 3D-территории и мониторинг активов
+- **Layer 3 (Simulation):** ERA5 + Flood Map + Earth Engine → климат и физические модели рисков
+- **Layer 4 (Agents):** Vertex AI → ML-модели рисков, автоматические отчёты
+- **Visualization:** Google Maps Platform → зоны риска на карте, наложение на CesiumJS Globe
+
 ### 📋 Planned (2026-2027)
 - [ ] First Paying Customers (Month 7-12)
 - [ ] €20-50K MRR (Month 12)
 - [ ] Regulatory credibility (Year 2-3)
 - [ ] Developer Ecosystem (API, SDK)
+- [ ] **Fine-tuning / адаптация под данные клиента:** дообучение Risk Agent на данных клиента (портфели, инциденты, прецеденты) для углубления специализации по enterprise. См. [docs/SPECIALIZED_RISK_AGENT.md](docs/SPECIALIZED_RISK_AGENT.md).
+- [ ] **Multi-Agent / Agent OS (Виток 2):** формализация workflow-шаблонов (report, assessment, remediation), shared context для цепочек агентов, расширенный agent audit. По мере готовности. См. [docs/SPECIALIZED_RISK_AGENT.md](docs/SPECIALIZED_RISK_AGENT.md), [docs/AGENT_OPS_AND_GOVERNANCE.md](docs/AGENT_OPS_AND_GOVERNANCE.md).
 
 ### 🔮 Future (2027+)
 - [ ] €100K+ MRR (Year 2)
@@ -376,11 +400,15 @@ AI решает задачи, которые превышают человече
 1. ✅ Завершить System Overseer автоматическое исправление
 2. 📋 Завершить Strategic Modules Phase 1 (SRS, CityOS, FST)
 3. 📋 Подготовить демо для первых клиентов
+4. 📋 Настроить Google Earth Engine (R&D аккаунт) и подключить ERA5 климатические данные
 
 ### Краткосрочно (Месяц 1-3)
 1. 📋 Первые платящие клиенты (€5-10K MRR)
 2. 📋 Enterprise features (SSO, permissions)
 3. 📋 PARS Protocol v1.0
+4. 📋 BigQuery — синхронизация PostgreSQL для стресс-тестов и долгосрочной отчётности
+5. 📋 Vertex AI — первые ML-модели рисков (PD/LGD prediction, anomaly detection)
+6. 📋 Google Maps Platform — визуализация зон риска поверх CesiumJS Globe
 
 ### Среднесрочно (Год 1-2)
 1. 📋 €20-50K MRR
@@ -425,6 +453,6 @@ AI решает задачи, которые превышают человече
 
 ---
 
-**Последнее обновление:** January 2026  
-**Версия:** 1.0  
+**Последнее обновление:** February 2026  
+**Версия:** 1.1  
 **Статус:** Living Document

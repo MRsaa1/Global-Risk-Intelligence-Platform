@@ -3,7 +3,6 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   ArrowLeftIcon,
-  CubeTransparentIcon,
   ClockIcon,
   ShieldCheckIcon,
   CurrencyDollarIcon,
@@ -16,16 +15,49 @@ import {
 } from '@heroicons/react/24/outline'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { assetsApi, bimApi, insuranceApi, creditApi, seedApi, stressTestsApi, twinAssetsApi, twinsApi } from '../lib/api'
-import type { QuickStressTestResult, StressScenarioItem } from '../lib/api'
+import { assetsApi, insuranceApi, creditApi, seedApi, stressTestsApi, twinAssetsApi, twinsApi, agentsApi } from '../lib/api'
+import type { QuickStressTestResult, StressScenarioItem, DecisionObject } from '../lib/api'
+import DecisionObjectCard from '../components/DecisionObjectCard'
 import Viewer3D from '../components/Viewer3D'
-import BIMViewer from '../components/BIMViewer'
-import XeokitBIMViewer from '../components/XeokitBIMViewer'
+
+type StressImpact = 'low' | 'medium' | 'high' | 'critical'
+function getStressResultForViewer(
+  result: QuickStressTestResult | null,
+  asset: { current_valuation?: number } | null | undefined
+): { eventName: string; impactLevel: StressImpact; totalLoss?: number; currency?: string } | undefined {
+  if (!result || !asset) return undefined
+  const fromZone = (r: string): StressImpact => {
+    const s = (r || '').toUpperCase()
+    if (s.includes('CRITICAL')) return 'critical'
+    if (s.includes('HIGH')) return 'high'
+    if (s.includes('MEDIUM')) return 'medium'
+    return 'low'
+  }
+  let impactLevel: StressImpact = 'low'
+  if (result.zones?.length) {
+    const levels = result.zones.map((z) => fromZone(z.risk_level))
+    if (levels.some((l) => l === 'critical')) impactLevel = 'critical'
+    else if (levels.some((l) => l === 'high')) impactLevel = 'high'
+    else if (levels.some((l) => l === 'medium')) impactLevel = 'medium'
+  } else {
+    const valuation = (asset as any)?.current_valuation || 1
+    const ratio = result.total_loss / valuation
+    if (ratio >= 0.3) impactLevel = 'critical'
+    else if (ratio >= 0.15) impactLevel = 'high'
+    else if (ratio >= 0.05) impactLevel = 'medium'
+  }
+  return {
+    eventName: result.event_name || result.event_type || 'Stress test',
+    impactLevel,
+    totalLoss: result.total_loss,
+    currency: result.currency,
+  }
+}
 
 export default function AssetDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const [viewMode, setViewMode] = useState<'3d' | 'bim' | 'xkt'>('3d')
+  // Single 3D view (BIM IFC/XKT tabs removed — using GLB Digital Twin models only)
   const [isModelPickerOpen, setIsModelPickerOpen] = useState(false)
   const [isStressTestPanelOpen, setIsStressTestPanelOpen] = useState(false)
   const [modelSearch, setModelSearch] = useState('')
@@ -38,13 +70,6 @@ export default function AssetDetail() {
     queryKey: ['asset', id],
     queryFn: () => assetsApi.get(id!),
     enabled: !!id,
-  })
-
-  // Fetch BIM metadata when in BIM view (optional; API returns fallback if no BIM)
-  const { data: bimMeta } = useQuery({
-    queryKey: ['bim-metadata', id],
-    queryFn: () => bimApi.getMetadata(id!),
-    enabled: !!id && viewMode === 'bim',
   })
 
   // Fetch Insurance Quote
@@ -104,6 +129,34 @@ export default function AssetDetail() {
 
   const modelUrl = geometry?.url || undefined
 
+  // Fetch regime context for the twin (if available)
+  const { data: twinData } = useQuery({
+    queryKey: ['twin', id],
+    queryFn: () => twinsApi.get(id!),
+    enabled: !!id,
+    retry: false,
+    staleTime: 30_000,
+  })
+  const { data: regimeCtxData } = useQuery({
+    queryKey: ['twin-regime-context', twinData?.id],
+    queryFn: () => twinsApi.getRegimeContext(twinData?.id),
+    enabled: !!twinData?.id,
+    retry: false,
+    staleTime: 30_000,
+  })
+  const regimeCtx = regimeCtxData?.regime_context as
+    | { regime: string; regime_label: string; pd_override: number; lgd_override: number; used_asset_pd_lgd?: boolean; pd_lgd_source?: string }
+    | null
+    | undefined
+
+  const syncRegimeMutation = useMutation({
+    mutationFn: (regime: string) => twinsApi.syncRegime(regime),
+    onSuccess: (_, regime) => {
+      queryClient.invalidateQueries({ queryKey: ['twin-regime-context'] })
+      queryClient.invalidateQueries({ queryKey: ['twin', id] })
+    },
+  })
+
   const { data: libraryItems, isLoading: isLibraryLoading } = useQuery({
     queryKey: ['twin-asset-library', modelSearch, libraryCategory],
     queryFn: () => twinAssetsApi.list({ q: modelSearch || undefined, category: libraryCategory || undefined, limit: 50 }),
@@ -159,12 +212,17 @@ export default function AssetDetail() {
   const [stressTestRunning, setStressTestRunning] = useState(false)
   const [stressTestResult, setStressTestResult] = useState<QuickStressTestResult | null>(null)
   const [stressTestError, setStressTestError] = useState<string | null>(null)
+  // ARIN Decision Object (Risk & Intelligence OS)
+  const [decisionObject, setDecisionObject] = useState<DecisionObject | null>(null)
+  const [decisionObjectLoading, setDecisionObjectLoading] = useState(false)
+  const [decisionObjectError, setDecisionObjectError] = useState<string | null>(null)
+  const [showDecisionObjectPanel, setShowDecisionObjectPanel] = useState(false)
 
   if (isLoading) {
     return (
       <div className="h-full flex items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-primary-500 to-accent-500 animate-pulse" />
+          <div className="w-16 h-16 mx-auto mb-4 rounded-md bg-gradient-to-br from-zinc-500 to-zinc-400 animate-pulse" />
           <p className="text-dark-muted">Loading asset...</p>
         </div>
       </div>
@@ -174,7 +232,7 @@ export default function AssetDetail() {
   if (!asset) {
     return (
       <div className="h-full flex items-center justify-center">
-        <p className="text-red-400">Asset not found</p>
+        <p className="text-red-400/80">Asset not found</p>
       </div>
     )
   }
@@ -221,29 +279,87 @@ export default function AssetDetail() {
   const closeStressTestPanel = () => {
     setIsStressTestPanelOpen(false)
     setSelectedScenarioId('')
-    setStressTestResult(null)
     setStressTestError(null)
+    // Keep stressTestResult so 3D building stays highlighted after closing the modal
+  }
+
+  const fetchDecisionObject = async () => {
+    if (!asset) return
+    setDecisionObjectError(null)
+    setDecisionObject(null)
+    setDecisionObjectLoading(true)
+    setShowDecisionObjectPanel(true)
+    try {
+      const do_ = await agentsApi.getDecisionObject(asset.id)
+      setDecisionObject(do_)
+    } catch (e: any) {
+      setDecisionObjectError(e?.response?.data?.detail || e?.message || 'Failed to load ARIN assessment')
+    } finally {
+      setDecisionObjectLoading(false)
+    }
+  }
+
+  const closeDecisionObjectPanel = () => {
+    setShowDecisionObjectPanel(false)
+    setDecisionObject(null)
+    setDecisionObjectError(null)
   }
 
   return (
-    <div className="h-full overflow-auto">
-      {/* Stress Test Panel Modal */}
-      {isStressTestPanelOpen && asset && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+    <div className="min-h-full bg-zinc-950">
+      {/* ARIN Decision Object Panel Modal */}
+      {showDecisionObjectPanel && asset && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-dark-card border border-dark-border rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+            className="bg-dark-card border border-dark-border rounded-md shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col"
           >
             <div className="flex items-center justify-between p-4 border-b border-dark-border">
-              <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                <BeakerIcon className="w-5 h-5 text-amber-400" />
+              <h2 className="text-lg font-display font-semibold text-zinc-100 flex items-center gap-2">
+                <ShieldExclamationIcon className="w-5 h-5 text-zinc-400" />
+                ARIN Assessment (Risk & Intelligence OS)
+              </h2>
+              <button
+                type="button"
+                onClick={closeDecisionObjectPanel}
+                className="p-2 rounded-md text-dark-muted hover:text-zinc-100 hover:bg-zinc-700 transition-colors"
+                aria-label="Close"
+              >
+                <XMarkIcon className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 overflow-y-auto flex-1">
+              {decisionObjectError && (
+                <div className="p-3 rounded-md bg-red-500/10 border border-red-500/20 text-red-300 text-sm">
+                  {decisionObjectError}
+                </div>
+              )}
+              {decisionObject && (
+                <DecisionObjectCard decision={decisionObject} compact={false} />
+              )}
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Stress Test Panel Modal */}
+      {isStressTestPanelOpen && asset && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-dark-card border border-dark-border rounded-md shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+          >
+            <div className="flex items-center justify-between p-4 border-b border-dark-border">
+              <h2 className="text-lg font-display font-semibold text-zinc-100 flex items-center gap-2">
+                <BeakerIcon className="w-5 h-5 text-zinc-400" />
                 Run Stress Test
               </h2>
               <button
                 type="button"
                 onClick={closeStressTestPanel}
-                className="p-2 rounded-lg text-dark-muted hover:text-white hover:bg-white/10 transition-colors"
+                className="p-2 rounded-md text-dark-muted hover:text-zinc-100 hover:bg-zinc-700 transition-colors"
                 aria-label="Close"
               >
                 <XMarkIcon className="w-5 h-5" />
@@ -258,7 +374,7 @@ export default function AssetDetail() {
                 <select
                   value={selectedScenarioId}
                   onChange={(e) => setSelectedScenarioId(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl bg-dark-bg border border-dark-border text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  className="w-full px-4 py-2.5 rounded-md bg-dark-bg border border-dark-border text-zinc-100 focus:ring-2 focus:ring-zinc-500 focus:border-transparent"
                   disabled={stressTestRunning}
                 >
                   <option value="">— Select scenario —</option>
@@ -270,40 +386,50 @@ export default function AssetDetail() {
                 </select>
               </div>
               {stressTestError && (
-                <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-sm">
+                <div className="p-3 rounded-md bg-red-500/10 border border-red-500/20 text-red-300 text-sm">
                   {stressTestError}
                 </div>
               )}
               {stressTestResult && (
-                <div className="space-y-3 rounded-xl bg-white/5 border border-white/10 p-4 text-sm">
-                  <div className="flex flex-wrap gap-4">
-                    <span className="text-dark-muted">Event:</span>
-                    <span className="text-white font-medium">{stressTestResult.event_name}</span>
-                    <span className="text-dark-muted">Loss:</span>
-                    <span className="text-amber-400 font-mono">
-                      {stressTestResult.currency || 'EUR'} {(stressTestResult.total_loss / 1e6).toFixed(2)}M
-                    </span>
-                    <span className="text-dark-muted">Buildings:</span>
-                    <span className="text-white">{stressTestResult.total_buildings_affected}</span>
+                <div className="space-y-3">
+                  <div className="rounded-md bg-zinc-800 border border-zinc-700 p-4 text-sm">
+                    <div className="flex flex-wrap gap-4 items-center">
+                      <span className="text-dark-muted">Event:</span>
+                      <span className="text-zinc-100 font-medium">{stressTestResult.event_name}</span>
+                      {stressTestResult.compliance_verification?.verified && (
+                        <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 border border-emerald-500/40 text-emerald-400/80 text-xs font-medium" title="Regulatory verification passed">
+                          Compliance verified
+                        </span>
+                      )}
+                      <span className="text-dark-muted">Loss:</span>
+                      <span className="text-amber-400/80 font-mono">
+                        {stressTestResult.currency || 'EUR'} {(stressTestResult.total_loss / 1e6).toFixed(2)}M
+                      </span>
+                      <span className="text-dark-muted">Buildings:</span>
+                      <span className="text-zinc-100">{stressTestResult.total_buildings_affected}</span>
+                    </div>
+                    {stressTestResult.executive_summary && (
+                      <div className="mt-3">
+                        <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-1">Summary</p>
+                        <p className="text-zinc-100 leading-relaxed">{stressTestResult.executive_summary}</p>
+                      </div>
+                    )}
+                    {stressTestResult.zones?.length > 0 && (
+                      <div className="mt-3">
+                        <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-2">Zones</p>
+                        <ul className="space-y-1">
+                          {stressTestResult.zones.slice(0, 5).map((z, i) => (
+                            <li key={i} className="flex justify-between gap-2 text-zinc-200">
+                              <span>{z.label}</span>
+                              <span className="text-amber-400/90">{z.risk_level}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
-                  {stressTestResult.executive_summary && (
-                    <div>
-                      <p className="text-dark-muted text-xs uppercase tracking-wider mb-1">Summary</p>
-                      <p className="text-white/90 leading-relaxed">{stressTestResult.executive_summary}</p>
-                    </div>
-                  )}
-                  {stressTestResult.zones?.length > 0 && (
-                    <div>
-                      <p className="text-dark-muted text-xs uppercase tracking-wider mb-2">Zones</p>
-                      <ul className="space-y-1">
-                        {stressTestResult.zones.slice(0, 5).map((z, i) => (
-                          <li key={i} className="flex justify-between gap-2 text-white/80">
-                            <span>{z.label}</span>
-                            <span className="text-amber-400/90">{z.risk_level}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
+                  {stressTestResult.decision_object && (
+                    <DecisionObjectCard decision={stressTestResult.decision_object} compact />
                   )}
                 </div>
               )}
@@ -312,7 +438,7 @@ export default function AssetDetail() {
               <button
                 type="button"
                 onClick={closeStressTestPanel}
-                className="px-4 py-2 rounded-xl border border-dark-border text-dark-muted hover:text-white hover:bg-white/5 transition-colors"
+                className="px-4 py-2 rounded-md border border-dark-border text-dark-muted hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
               >
                 Close
               </button>
@@ -320,11 +446,11 @@ export default function AssetDetail() {
                 type="button"
                 onClick={runStressTestForAsset}
                 disabled={!selectedScenarioId || stressTestRunning}
-                className="px-4 py-2 rounded-xl bg-primary-500 text-white font-medium hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                className="px-4 py-2 rounded-md bg-zinc-500 text-zinc-100 font-medium hover:bg-zinc-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
               >
                 {stressTestRunning ? (
                   <>
-                    <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span className="inline-block w-4 h-4 border-2 border-zinc-500 border-t-zinc-300 rounded-full animate-spin" />
                     Running…
                   </>
                 ) : (
@@ -343,7 +469,7 @@ export default function AssetDetail() {
       <div className="p-8 border-b border-dark-border">
         <Link
           to="/assets"
-          className="inline-flex items-center gap-2 text-dark-muted hover:text-white transition-colors mb-4"
+          className="inline-flex items-center gap-2 text-dark-muted hover:text-zinc-100 transition-colors mb-4"
         >
           <ArrowLeftIcon className="w-4 h-4" />
           Back to Assets
@@ -358,7 +484,7 @@ export default function AssetDetail() {
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               onClick={() => setIsModelPickerOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white/80 hover:text-white hover:border-white/20 hover:bg-white/10 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-md text-zinc-200 hover:text-zinc-100 hover:border-zinc-600 hover:bg-zinc-700 transition-colors"
               title="Select a Digital Twin model from the library"
             >
               <Square3Stack3DIcon className="w-5 h-5" />
@@ -367,8 +493,28 @@ export default function AssetDetail() {
             <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
+              onClick={fetchDecisionObject}
+              disabled={decisionObjectLoading}
+              className="flex items-center gap-2 px-4 py-2 bg-zinc-500/20 text-zinc-400 border border-zinc-500/40 rounded-md font-medium hover:bg-zinc-500/30 transition-colors disabled:opacity-50"
+              title="Get ARIN multi-agent risk assessment (Risk & Intelligence OS)"
+            >
+              {decisionObjectLoading ? (
+                <>
+                  <span className="inline-block w-4 h-4 border-2 border-zinc-400/30 border-t-zinc-400 rounded-full animate-spin" />
+                  Loading…
+                </>
+              ) : (
+                <>
+                  <ShieldExclamationIcon className="w-5 h-5" />
+                  ARIN Assessment
+                </>
+              )}
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
               onClick={() => setIsStressTestPanelOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-xl font-medium hover:bg-primary-600 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-zinc-500 text-zinc-100 rounded-md font-medium hover:bg-zinc-600 transition-colors"
               title="Select a stress test scenario and run it for this asset"
             >
               <BeakerIcon className="w-5 h-5" />
@@ -380,87 +526,82 @@ export default function AssetDetail() {
 
       {/* 3D / BIM Viewer — full width, primary visual */}
       <div className="px-8 pb-6">
-        <div className="glass rounded-2xl overflow-hidden h-[840px] min-h-[640px] relative flex flex-col">
-          {/* View mode toggle */}
-          <div className="absolute top-4 right-4 z-10 flex gap-2">
-            <button
-              onClick={() => setViewMode('3d')}
-              className={`px-3 py-1 rounded-lg text-sm ${
-                viewMode === '3d'
-                  ? 'bg-primary-500 text-white'
-                  : 'bg-dark-card text-dark-muted hover:text-white'
-              }`}
-            >
-              3D View
-            </button>
-            <button
-              onClick={() => setViewMode('bim')}
-              className={`px-3 py-1 rounded-lg text-sm ${
-                viewMode === 'bim'
-                  ? 'bg-primary-500 text-white'
-                  : 'bg-dark-card text-dark-muted hover:text-white'
-              }`}
-            >
-              BIM (IFC)
-            </button>
-            <button
-              onClick={() => setViewMode('xkt')}
-              className={`px-3 py-1 rounded-lg text-sm ${
-                viewMode === 'xkt'
-                  ? 'bg-primary-500 text-white'
-                  : 'bg-dark-card text-dark-muted hover:text-white'
-              }`}
-            >
-              BIM (XKT)
-            </button>
-          </div>
+        <div className="glass rounded-md overflow-hidden h-[840px] min-h-[640px] relative flex flex-col">
           {/* Caption: real model vs placeholder */}
-          {viewMode === '3d' && !modelUrl && (
-            <div className="absolute top-4 left-4 z-10 px-3 py-2 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-200 text-sm max-w-xs">
+          {!modelUrl && (
+            <div className="absolute top-4 left-4 z-10 px-3 py-2 rounded-md bg-zinc-500/20 border border-zinc-500/40 text-zinc-200 text-sm max-w-xs">
               Placeholder view. Use <strong>Select Model</strong> above to attach a Digital Twin for a realistic 3D model.
             </div>
           )}
-          {viewMode === '3d' && modelUrl && (
-            <div className="absolute top-4 left-4 z-10 px-3 py-2 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-200 text-sm">
-              Digital Twin model
-            </div>
-          )}
-          {viewMode === 'xkt' && !(asset as any).xkt_project_id && (
-            <div className="absolute top-4 left-4 z-10 px-3 py-2 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-200 text-sm max-w-xs">
-              Demo model (Duplex). Set XKT project for this asset to view the real building.
+          {modelUrl && (
+            <div className="absolute top-4 left-4 z-10 flex flex-wrap items-center gap-2">
+              <span className="px-3 py-2 rounded-md bg-zinc-500/20 border border-zinc-500/40 text-zinc-200 text-sm">
+                Digital Twin model
+              </span>
+              {regimeCtx && (
+                <span
+                  className={`px-3 py-2 rounded-md text-xs font-medium border ${
+                    regimeCtx.regime === 'crisis'
+                      ? 'bg-red-500/20 text-red-400/80 border-red-500/40'
+                      : regimeCtx.regime === 'stagflation'
+                        ? 'bg-orange-500/20 text-orange-400/80 border-orange-500/40'
+                        : regimeCtx.regime === 'late_cycle'
+                          ? 'bg-amber-500/20 text-amber-400/80 border-amber-500/40'
+                          : 'bg-emerald-500/20 text-emerald-400/80 border-emerald-500/40'
+                  }`}
+                  title={
+                    regimeCtx.used_asset_pd_lgd
+                      ? undefined
+                      : regimeCtx.pd_lgd_source === 'risk'
+                        ? 'From asset risk scores (climate, physical, network).'
+                        : regimeCtx.pd_lgd_source === 'type'
+                          ? 'From asset type typicals.'
+                          : 'Default base. Set PD/LGD or risk scores on asset for live values.'
+                  }
+                >
+                  {regimeCtx.regime_label}: PD {(regimeCtx.pd_override * 100).toFixed(1)}%, LGD {(regimeCtx.lgd_override * 100).toFixed(0)}%
+                </span>
+              )}
+              {!regimeCtx && (
+                <span className="px-2 py-1 rounded-md bg-zinc-700/50 text-zinc-500 text-xs">
+                  No regime
+                </span>
+              )}
+              <select
+                className="rounded-md bg-zinc-700 border border-zinc-600 text-zinc-200 text-xs px-2 py-1.5 focus:ring-1 focus:ring-zinc-500 min-w-[140px]"
+                value={regimeCtx?.regime ?? ''}
+                onChange={(e) => {
+                  const v = e.target.value
+                  if (v) syncRegimeMutation.mutate(v)
+                }}
+                disabled={syncRegimeMutation.isPending}
+                title="Change market regime for this twin"
+              >
+                <option value="">{regimeCtx ? 'Change regime…' : 'Sync to regime…'}</option>
+                <option value="bull">Bull</option>
+                <option value="late_cycle">Late Cycle</option>
+                <option value="crisis">Crisis</option>
+                <option value="stagflation">Stagflation</option>
+              </select>
+              {syncRegimeMutation.isPending && (
+                <span className="text-xs text-zinc-400">Syncing…</span>
+              )}
             </div>
           )}
           <div className="flex-1 min-h-0 relative">
-            {viewMode === '3d' ? (
-              <Viewer3D
-                key={`viewer3d-${asset.id}`}
-                modelUrl={modelUrl}
-                riskScores={{
-                  climate: asset.climate_risk_score || 0,
-                  physical: asset.physical_risk_score || 0,
-                  network: asset.network_risk_score || 0,
-                }}
-                showRiskOverlay={!!modelUrl}
-                floorsAboveGround={asset.floors_above_ground ?? undefined}
-                grossFloorAreaM2={asset.gross_floor_area_m2 ?? undefined}
-              />
-            ) : viewMode === 'xkt' ? (
-              <XeokitBIMViewer
-                key={`xeokit-${asset.id}-${(asset as any).xkt_project_id || 'Duplex'}`}
-                projectId={(asset as any).xkt_project_id || 'Duplex'}
-                onLoad={() => {}}
-                onError={(msg) => console.error('Xeokit BIM error:', msg)}
-              />
-            ) : (
-              <BIMViewer
-                key={`bim-${asset.id}`}
-                assetId={asset.id}
-                ifcUrl={asset.bim_file_path ? `/api/v1/assets/${asset.id}/bim` : undefined}
-                onBimUploaded={() => queryClient.invalidateQueries({ queryKey: ['asset', id] })}
-                onLoad={() => {}}
-                onError={(error) => console.error('BIM error:', error)}
-              />
-            )}
+            <Viewer3D
+              key={`viewer3d-${asset.id}`}
+              modelUrl={modelUrl}
+              riskScores={{
+                climate: asset.climate_risk_score || 0,
+                physical: asset.physical_risk_score || 0,
+                network: asset.network_risk_score || 0,
+              }}
+              showRiskOverlay={!!modelUrl}
+              floorsAboveGround={(asset as any).floors_above_ground ?? undefined}
+              grossFloorAreaM2={asset.gross_floor_area_m2 ?? undefined}
+              stressResult={getStressResultForViewer(stressTestResult, asset)}
+            />
           </div>
         </div>
       </div>
@@ -468,9 +609,9 @@ export default function AssetDetail() {
       {/* Info panels — grid across full useful area */}
       <div className="px-8 pb-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {/* Risk Assessment */}
-        <div className="glass rounded-2xl p-6">
+        <div className="glass rounded-md p-6">
           <h3 className="font-semibold mb-4 flex items-center gap-2">
-            <ShieldCheckIcon className="w-5 h-5 text-primary-400" />
+            <ShieldCheckIcon className="w-5 h-5 text-zinc-400" />
             Risk Assessment
           </h3>
           <div className="space-y-4">
@@ -503,44 +644,8 @@ export default function AssetDetail() {
           </div>
         </div>
 
-        {/* BIM Model Info (when in BIM view) */}
-        {viewMode === 'bim' && bimMeta && (
-          <div className="glass rounded-2xl p-6">
-            <h3 className="font-semibold mb-4 flex items-center gap-2">
-              <CubeTransparentIcon className="w-5 h-5 text-cyan-400" />
-              BIM Model Info
-            </h3>
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between">
-                <span className="text-dark-muted">Project</span>
-                <span>{(bimMeta as any).project_name || '—'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-dark-muted">Schema</span>
-                <span>{(bimMeta as any).ifc_schema || '—'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-dark-muted">Elements</span>
-                <span>{(bimMeta as any).element_count?.toLocaleString() ?? '—'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-dark-muted">Floors</span>
-                <span>{(bimMeta as any).floor_count ?? '—'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-dark-muted">Building</span>
-                <span className="truncate max-w-[140px]" title={(bimMeta as any).building_name}>{(bimMeta as any).building_name || '—'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-dark-muted">Site</span>
-                <span className="truncate max-w-[140px]" title={(bimMeta as any).site_name}>{(bimMeta as any).site_name || '—'}</span>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Asset Details */}
-        <div className="glass rounded-2xl p-6">
+        <div className="glass rounded-md p-6">
           <h3 className="font-semibold mb-4">Asset Details</h3>
           <div className="space-y-3 text-sm">
             <div className="flex justify-between">
@@ -572,15 +677,15 @@ export default function AssetDetail() {
 
         {/* Insurance Quote */}
         {insuranceQuote && (
-          <div className="glass rounded-2xl p-6">
+          <div className="glass rounded-md p-6">
             <h3 className="font-semibold mb-4 flex items-center gap-2">
-              <ShieldExclamationIcon className="w-5 h-5 text-blue-400" />
+              <ShieldExclamationIcon className="w-5 h-5 text-zinc-400" />
               Insurance Quote
             </h3>
             <div className="space-y-3 text-sm">
               <div className="flex justify-between items-center">
                 <span className="text-dark-muted">Annual Premium</span>
-                <span className="font-bold text-lg text-green-400">
+                <span className="font-bold text-lg text-green-400/80">
                   €{(insuranceQuote.annual_premium || 0).toLocaleString()}
                 </span>
               </div>
@@ -603,11 +708,11 @@ export default function AssetDetail() {
                 </div>
                 <div className="flex justify-between text-xs">
                   <span className="text-dark-muted">Risk Loading</span>
-                  <span className="text-amber-400">+€{(insuranceQuote.risk_loading || 0).toLocaleString()}</span>
+                  <span className="text-amber-400/80">+€{(insuranceQuote.risk_loading || 0).toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between text-xs">
                   <span className="text-dark-muted">Deductible Discount</span>
-                  <span className="text-green-400">-€{(insuranceQuote.deductible_discount || 0).toLocaleString()}</span>
+                  <span className="text-green-400/80">-€{(insuranceQuote.deductible_discount || 0).toLocaleString()}</span>
                 </div>
               </div>
               {insuranceQuote.recommendations?.length > 0 && (
@@ -624,23 +729,23 @@ export default function AssetDetail() {
 
         {/* Credit Risk Profile */}
         {creditProfile && (
-          <div className="glass rounded-2xl p-6">
+          <div className="glass rounded-md p-6">
             <h3 className="font-semibold mb-4 flex items-center gap-2">
-              <CurrencyDollarIcon className="w-5 h-5 text-emerald-400" />
+              <CurrencyDollarIcon className="w-5 h-5 text-zinc-400" />
               Credit Risk Profile
             </h3>
             <div className="space-y-3 text-sm">
               <div className="flex justify-between items-center">
                 <span className="text-dark-muted">Credit Limit</span>
-                <span className="font-bold text-lg text-emerald-400">
+                <span className="font-bold text-lg text-zinc-400">
                   €{((creditProfile.credit_limit || 0) / 1000000).toFixed(1)}M</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-dark-muted">Rating</span>
                 <span className={`font-bold px-2 py-0.5 rounded text-xs ${
-                  ['AAA', 'AA', 'A'].includes(creditProfile.rating) ? 'bg-green-500/20 text-green-400' :
-                  ['BBB', 'BB'].includes(creditProfile.rating) ? 'bg-amber-500/20 text-amber-400' :
-                  'bg-red-500/20 text-red-400'
+                  ['AAA', 'AA', 'A'].includes(creditProfile.rating) ? 'bg-green-500/20 text-green-400/80' :
+                  ['BBB', 'BB'].includes(creditProfile.rating) ? 'bg-amber-500/20 text-amber-400/80' :
+                  'bg-red-500/20 text-red-400/80'
                 }`}>
                   {creditProfile.rating}
                 </span>
@@ -667,7 +772,7 @@ export default function AssetDetail() {
               </div>
               <div className="flex justify-between">
                 <span className="text-dark-muted">Collateral Adequacy</span>
-                <span className={creditProfile.collateral_adequacy >= 1.2 ? 'text-green-400' : 'text-amber-400'}>
+                <span className={creditProfile.collateral_adequacy >= 1.2 ? 'text-green-400/80' : 'text-amber-400/80'}>
                   {(creditProfile.collateral_adequacy || 0).toFixed(2)}x
                 </span>
               </div>
@@ -685,19 +790,19 @@ export default function AssetDetail() {
 
         {/* Degradation Forecast */}
         {degradation && (
-          <div className="glass rounded-2xl p-6">
+          <div className="glass rounded-md p-6">
             <h3 className="font-semibold mb-4 flex items-center gap-2">
-              <ClockIcon className="w-5 h-5 text-amber-400" />
+              <ClockIcon className="w-5 h-5 text-zinc-400" />
               Degradation Forecast
             </h3>
             <div className="space-y-3 text-sm">
               <div className="flex justify-between items-center">
                 <span className="text-dark-muted">Remaining Useful Life</span>
-                <span className="font-bold text-white">{degradation.remaining_useful_life_years.toFixed(1)} yrs</span>
+                <span className="font-bold text-zinc-100">{degradation.remaining_useful_life_years.toFixed(1)} yrs</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-dark-muted">Failure Probability (10y)</span>
-                <span className={`font-semibold ${degradation.failure_probability > 0.5 ? 'text-red-400' : degradation.failure_probability > 0.25 ? 'text-amber-400' : 'text-green-400'}`}>
+                <span className={`font-semibold ${degradation.failure_probability > 0.5 ? 'text-red-400/80' : degradation.failure_probability > 0.25 ? 'text-amber-400/80' : 'text-green-400/80'}`}>
                   {(degradation.failure_probability * 100).toFixed(0)}%
                 </span>
               </div>
@@ -712,8 +817,8 @@ export default function AssetDetail() {
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                   degradation.recommended_capex_priority === 'critical' ? 'bg-red-500/20 text-red-300' :
                   degradation.recommended_capex_priority === 'high' ? 'bg-amber-500/20 text-amber-300' :
-                  degradation.recommended_capex_priority === 'medium' ? 'bg-primary-500/20 text-primary-300' :
-                  'bg-white/10 text-white/70'
+                  degradation.recommended_capex_priority === 'medium' ? 'bg-zinc-500/20 text-zinc-300' :
+                  'bg-zinc-700 text-zinc-300'
                 }`}>
                   {degradation.recommended_capex_priority.toUpperCase()}
                 </span>
@@ -724,9 +829,9 @@ export default function AssetDetail() {
 
         {/* Operational Risk */}
         {operationalRisk && (
-          <div className="glass rounded-2xl p-6">
+          <div className="glass rounded-md p-6">
             <h3 className="font-semibold mb-4 flex items-center gap-2">
-              <ShieldCheckIcon className="w-5 h-5 text-purple-400" />
+              <ShieldCheckIcon className="w-5 h-5 text-zinc-400" />
               Operational Risk
             </h3>
             <div className="space-y-3 text-sm">
@@ -738,8 +843,8 @@ export default function AssetDetail() {
                 <div className="flex justify-between items-center">
                   <span className="text-dark-muted">Overall Score</span>
                   <span className={`font-bold ${
-                    Number(operationalRisk.result.overall_score) >= 85 ? 'text-green-400' :
-                    Number(operationalRisk.result.overall_score) >= 70 ? 'text-amber-400' : 'text-red-400'
+                    Number(operationalRisk.result.overall_score) >= 85 ? 'text-green-400/80' :
+                    Number(operationalRisk.result.overall_score) >= 70 ? 'text-amber-400/80' : 'text-red-400/80'
                   }`}>
                     {Number(operationalRisk.result.overall_score).toFixed(0)}/100
                   </span>
@@ -759,15 +864,15 @@ export default function AssetDetail() {
 
         {/* Downtime Forecast */}
         {downtimeForecast && (
-          <div className="glass rounded-2xl p-6">
+          <div className="glass rounded-md p-6">
             <h3 className="font-semibold mb-4 flex items-center gap-2">
-              <ExclamationTriangleIcon className="w-5 h-5 text-red-400" />
+              <ExclamationTriangleIcon className="w-5 h-5 text-red-400/80" />
               Downtime Forecast
             </h3>
             <div className="space-y-3 text-sm">
               <div className="flex justify-between items-center">
                 <span className="text-dark-muted">Expected Downtime</span>
-                <span className="font-semibold text-white">{downtimeForecast.expected_downtime_hours.toFixed(1)} h/year</span>
+                <span className="font-semibold text-zinc-100">{downtimeForecast.expected_downtime_hours.toFixed(1)} h/year</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-dark-muted">Worst Case</span>
@@ -775,7 +880,7 @@ export default function AssetDetail() {
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-dark-muted">Uptime Probability</span>
-                <span className="text-green-400">{(downtimeForecast.uptime_probability * 100).toFixed(0)}%</span>
+                <span className="text-green-400/80">{(downtimeForecast.uptime_probability * 100).toFixed(0)}%</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-dark-muted">Expected Annual Loss</span>
@@ -795,9 +900,9 @@ export default function AssetDetail() {
 
         {/* Digital Twin Timeline — spans 2 cols on large screens */}
         <div className="sm:col-span-2 lg:col-span-3 xl:col-span-4">
-          <div className="glass rounded-2xl p-6">
+          <div className="glass rounded-md p-6">
             <h3 className="font-semibold mb-4 flex items-center gap-2">
-              <ClockIcon className="w-5 h-5 text-accent-400" />
+              <ClockIcon className="w-5 h-5 text-zinc-400" />
               Digital Twin Timeline
             </h3>
             <div className="relative">
@@ -812,9 +917,9 @@ export default function AssetDetail() {
                     className="flex gap-4"
                   >
                     <div className={`w-3 h-3 rounded-full mt-1.5 shrink-0 ${
-                      event.type === 'genesis' ? 'bg-primary-500' :
-                      event.type === 'renovation' ? 'bg-accent-500' :
-                      event.type === 'inspection' ? 'bg-amber-500' : 'bg-blue-500'
+                      event.type === 'genesis' ? 'bg-zinc-500' :
+                      event.type === 'renovation' ? 'bg-zinc-500' :
+                      event.type === 'inspection' ? 'bg-zinc-500' : 'bg-zinc-500'
                     }`} />
                     <div className="min-w-0">
                       <p className="text-sm text-dark-muted">{event.date}</p>
@@ -834,33 +939,33 @@ export default function AssetDetail() {
       {/* Model picker modal */}
         {isModelPickerOpen && (
           <div
-            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-6"
+            className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-6"
             onClick={() => setIsModelPickerOpen(false)}
           >
             <div
-              className="w-full max-w-3xl bg-[#0a0f18] border border-white/10 rounded-2xl overflow-hidden"
+              className="w-full max-w-3xl bg-zinc-950 border border-zinc-800 rounded-md overflow-hidden"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="p-4 border-b border-white/10 flex items-center justify-between">
+              <div className="p-4 border-b border-zinc-700 flex items-center justify-between">
                 <div>
-                  <div className="text-white/80 font-medium">Digital Twin Library</div>
-                  <div className="text-white/40 text-xs">Pick a model and attach it to this asset for 3D View</div>
-                  <div className="text-white/30 text-xs mt-1">No models? Click Seed below to add catalog (incl. demo GLB). Then Attach.</div>
+                  <div className="text-zinc-200 font-medium">Digital Twin Library</div>
+                  <div className="text-zinc-500 text-xs">Pick a model and attach it to this asset for 3D View</div>
+                  <div className="text-zinc-600 text-xs mt-1">No models? Click Seed below to add catalog (incl. demo GLB). Then Attach.</div>
                 </div>
                 <button
                   onClick={() => setIsModelPickerOpen(false)}
-                  className="text-white/40 hover:text-white/70 text-sm"
+                  className="text-zinc-500 hover:text-zinc-300 text-sm"
                 >
                   Close
                 </button>
               </div>
 
-              <div className="p-4 border-b border-white/10 flex items-center gap-3">
+              <div className="p-4 border-b border-zinc-700 flex items-center gap-3">
                 <input
                   value={modelSearch}
                   onChange={(e) => setModelSearch(e.target.value)}
                   placeholder="Search (factory, city, bank, datacenter...)"
-                  className="flex-1 px-3 py-2 rounded-xl bg-black/30 border border-white/10 text-white text-sm outline-none focus:border-primary-500/40"
+                  className="flex-1 px-3 py-2 rounded-md bg-black/30 border border-zinc-700 text-zinc-100 text-sm outline-none focus:border-zinc-500/40"
                 />
                 <button
                   onClick={async () => {
@@ -871,7 +976,7 @@ export default function AssetDetail() {
                       // ignore
                     }
                   }}
-                  className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 text-sm"
+                  className="px-3 py-2 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700 text-sm"
                   title="Add catalog if empty (includes demo GLB)"
                 >
                   Seed
@@ -885,7 +990,7 @@ export default function AssetDetail() {
                       // ignore
                     }
                   }}
-                  className="px-3 py-2 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-200 text-sm hover:bg-amber-500/30"
+                  className="px-3 py-2 rounded-md bg-zinc-500/20 border border-zinc-500/40 text-zinc-200 text-sm hover:bg-zinc-500/30"
                   title="Replace catalog with fresh seed (adds Demo Duck GLB + USD placeholders)"
                 >
                   Seed (replace all)
@@ -893,7 +998,7 @@ export default function AssetDetail() {
               </div>
 
               <div className="px-4 pb-2 flex flex-wrap gap-2">
-                <span className="text-xs text-white/50 self-center">Category:</span>
+                <span className="text-xs text-zinc-500 self-center">Category:</span>
                 {[
                   { value: '', label: 'All' },
                   { value: 'residential', label: 'Residential' },
@@ -905,10 +1010,10 @@ export default function AssetDetail() {
                     key={value || 'all'}
                     type="button"
                     onClick={() => setLibraryCategory(value)}
-                    className={`px-3 py-1.5 rounded-lg text-sm ${
+                    className={`px-3 py-1.5 rounded-md text-sm ${
                       libraryCategory === value
-                        ? 'bg-primary-500 text-white'
-                        : 'bg-white/5 border border-white/10 text-white/70 hover:bg-white/10'
+                        ? 'bg-zinc-500 text-zinc-100'
+                        : 'bg-zinc-800 border border-zinc-700 text-zinc-300 hover:bg-zinc-700'
                     }`}
                   >
                     {label}
@@ -918,16 +1023,16 @@ export default function AssetDetail() {
 
               <div className="p-4 max-h-[420px] overflow-auto">
                 {isLibraryLoading ? (
-                  <div className="text-white/40 text-sm">Loading library...</div>
+                  <div className="text-zinc-500 text-sm">Loading library...</div>
                 ) : libraryList.length === 0 ? (
-                  <div className="text-white/60 text-sm space-y-2">
+                  <div className="text-zinc-400 text-sm space-y-2">
                     <p>No models in the library yet.</p>
-                    <p className="text-white/50 text-xs">Click <strong>Seed</strong> or <strong>Seed (replace all)</strong> to add catalog (incl. Demo Duck GLB). Then pick a Ready model and <strong>Attach</strong>.</p>
+                    <p className="text-zinc-500 text-xs">Click <strong>Seed</strong> or <strong>Seed (replace all)</strong> to add catalog (incl. Demo Duck GLB). Then pick a Ready model and <strong>Attach</strong>.</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
                     {!libraryList.some((it: any) => !!it.glb_object) && (
-                      <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-sm">
+                      <div className="p-3 rounded-md bg-zinc-500/10 border border-zinc-500/30 text-zinc-200 text-sm">
                         No model is Ready (GLB). Click <strong>Seed (replace all)</strong> above to add Demo Duck (GLB), then <strong>Attach</strong> it for 3D View.
                       </div>
                     )}
@@ -941,27 +1046,27 @@ export default function AssetDetail() {
                       return (
                         <div
                           key={it.id}
-                          className="p-4 rounded-2xl bg-white/5 border border-white/10 hover:border-white/20 transition-colors"
+                          className="p-4 rounded-md bg-zinc-800 border border-zinc-700 hover:border-zinc-600 transition-colors"
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
-                              <div className="text-white/80 font-medium truncate">{it.name}</div>
+                              <div className="text-zinc-200 font-medium truncate">{it.name}</div>
                               <div className="mt-1 flex items-center gap-2">
-                                <div className="text-[10px] px-2 py-1 rounded bg-white/5 border border-white/10 text-white/50">
+                                <div className="text-[10px] px-2 py-1 rounded bg-zinc-800 border border-zinc-700 text-zinc-500">
                                   {it.domain}/{it.kind}
                                 </div>
                                 {ready ? (
-                                  <div className="text-[10px] px-2 py-1 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-200/80">
+                                  <div className="text-[10px] px-2 py-1 rounded bg-zinc-500/10 border border-zinc-500/20 text-zinc-200/80">
                                     Ready (GLB)
                                   </div>
                                 ) : isInFlight ? (
-                                  <div className="text-[10px] px-2 py-1 rounded bg-cyan-500/10 border border-cyan-500/20 text-cyan-200/80">
+                                  <div className="text-[10px] px-2 py-1 rounded bg-zinc-500/10 border border-zinc-500/20 text-zinc-200/80">
                                     {convertingItemId === String(it.id)
                                       ? 'Queueing...'
                                       : `Converting${convState ? ` (${convState})` : ''}`}
                                   </div>
                                 ) : (
-                                  <div className="text-[10px] px-2 py-1 rounded bg-amber-500/10 border border-amber-500/20 text-amber-200/80">
+                                  <div className="text-[10px] px-2 py-1 rounded bg-zinc-500/10 border border-zinc-500/20 text-zinc-200/80">
                                     Needs convert
                                   </div>
                                 )}
@@ -972,7 +1077,7 @@ export default function AssetDetail() {
                                 <button
                                   onClick={() => convertMutation.mutate(String(it.id))}
                                   disabled={convertMutation.isPending || isInFlight}
-                                  className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 text-xs"
+                                  className="px-3 py-2 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700 text-xs"
                                   title="Queue conversion (Celery worker)"
                                 >
                                   Convert
@@ -981,10 +1086,10 @@ export default function AssetDetail() {
                               <button
                                 onClick={() => attachMutation.mutate(String(it.id))}
                                 disabled={attachMutation.isPending || !ready}
-                                className={`px-3 py-2 rounded-xl border text-xs ${
+                                className={`px-3 py-2 rounded-md border text-xs ${
                                   ready
-                                    ? 'bg-primary-500/20 border-primary-500/30 text-primary-200/90 hover:bg-primary-500/25'
-                                    : 'bg-white/5 border-white/10 text-white/30 cursor-not-allowed'
+                                    ? 'bg-zinc-500/20 border-zinc-500/30 text-zinc-200/90 hover:bg-zinc-500/25'
+                                    : 'bg-zinc-800 border-zinc-700 text-zinc-600 cursor-not-allowed'
                                 }`}
                                 title={ready ? 'Attach model to this asset' : 'Convert first to get GLB for web'}
                               >
@@ -993,10 +1098,10 @@ export default function AssetDetail() {
                             </div>
                           </div>
                           {it.description && (
-                            <div className="text-white/40 text-xs mt-2 line-clamp-2">{it.description}</div>
+                            <div className="text-zinc-500 text-xs mt-2 line-clamp-2">{it.description}</div>
                           )}
                           {(it.extra_metadata?.file_size_bytes != null || it.extra_metadata?.poly_count != null) && (
-                            <div className="text-white/40 text-xs mt-1.5 flex flex-wrap gap-x-3 gap-y-0">
+                            <div className="text-zinc-500 text-xs mt-1.5 flex flex-wrap gap-x-3 gap-y-0">
                               {it.extra_metadata?.file_size_bytes != null && (
                                 <span title="File size">
                                   {it.extra_metadata.file_size_bytes < 1024
@@ -1016,7 +1121,7 @@ export default function AssetDetail() {
                               {it.tags.slice(0, 5).map((t: string) => (
                                 <span
                                   key={t}
-                                  className="text-[10px] px-2 py-0.5 rounded bg-black/30 border border-white/10 text-white/50"
+                                  className="text-[10px] px-2 py-0.5 rounded bg-black/30 border border-zinc-700 text-zinc-500"
                                 >
                                   {t}
                                 </span>
@@ -1035,7 +1140,7 @@ export default function AssetDetail() {
                   </div>
                 )}
                 {convertMutation.isSuccess && (
-                  <div className="text-white/50 text-xs mt-3">
+                  <div className="text-zinc-500 text-xs mt-3">
                     Conversion queued. Start the celery worker to process jobs.
                   </div>
                 )}

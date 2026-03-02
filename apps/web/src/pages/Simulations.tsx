@@ -30,7 +30,7 @@ const scenarios = [
 
 export default function Simulations() {
   return (
-    <div className="h-full overflow-auto p-8">
+    <div className="min-h-full bg-zinc-950 p-8 pb-16">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
@@ -42,7 +42,7 @@ export default function Simulations() {
         <motion.button
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
-          className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-xl font-medium"
+          className="flex items-center gap-2 px-4 py-2 bg-zinc-500 text-zinc-100 rounded-md font-medium"
         >
           <PlayIcon className="w-5 h-5" />
           New Simulation
@@ -57,7 +57,7 @@ export default function Simulations() {
           { name: 'Economics Engine', status: 'active', load: '12%' },
           { name: 'Cascade Engine', status: 'active', load: '67%' },
         ].map((engine) => (
-          <div key={engine.name} className="glass rounded-xl p-4">
+          <div key={engine.name} className="glass rounded-md p-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-dark-muted">{engine.name}</span>
               <span className="w-2 h-2 rounded-full bg-risk-low" />
@@ -69,9 +69,9 @@ export default function Simulations() {
       </div>
 
       {/* Scenarios */}
-      <div className="glass rounded-2xl p-6">
-        <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
-          <BeakerIcon className="w-6 h-6 text-accent-400" />
+      <div className="glass rounded-md p-6">
+        <h2 className="text-xl font-display font-semibold mb-6 flex items-center gap-2">
+          <BeakerIcon className="w-6 h-6 text-zinc-400" />
           Scenarios
         </h2>
         
@@ -82,11 +82,11 @@ export default function Simulations() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.1 }}
-              className="flex items-center gap-6 p-4 bg-dark-bg rounded-xl"
+              className="flex items-center gap-6 p-4 bg-dark-bg rounded-md"
             >
-              <div className={`p-3 rounded-xl ${
+              <div className={`p-3 rounded-md ${
                 scenario.status === 'completed' ? 'bg-risk-low/20' :
-                scenario.status === 'running' ? 'bg-primary-500/20' :
+                scenario.status === 'running' ? 'bg-zinc-700' :
                 'bg-dark-card'
               }`}>
                 {scenario.status === 'completed' ? (
@@ -96,7 +96,7 @@ export default function Simulations() {
                     animate={{ rotate: 360 }}
                     transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
                   >
-                    <BeakerIcon className="w-6 h-6 text-primary-400" />
+                    <BeakerIcon className="w-6 h-6 text-zinc-400" />
                   </motion.div>
                 ) : (
                   <BeakerIcon className="w-6 h-6 text-dark-muted" />
@@ -115,13 +115,13 @@ export default function Simulations() {
               
               <span className={`px-3 py-1 rounded-full text-xs ${
                 scenario.status === 'completed' ? 'bg-risk-low/20 text-risk-low' :
-                scenario.status === 'running' ? 'bg-primary-500/20 text-primary-400' :
+                scenario.status === 'running' ? 'bg-zinc-700 text-zinc-400' :
                 'bg-dark-card text-dark-muted'
               }`}>
                 {scenario.status}
               </span>
               
-              <button className="p-2 rounded-lg hover:bg-dark-card transition-colors">
+              <button className="p-2 rounded-md hover:bg-dark-card transition-colors">
                 <PlayIcon className="w-5 h-5" />
               </button>
             </motion.div>
@@ -130,12 +130,12 @@ export default function Simulations() {
       </div>
 
       {/* Monte Carlo Info */}
-      <div className="mt-8 glass rounded-2xl p-6">
-        <h2 className="text-xl font-semibold mb-4">Cascade Engine</h2>
+      <div className="mt-8 glass rounded-md p-6">
+        <h2 className="text-xl font-display font-semibold mb-4">Cascade Engine</h2>
         <p className="text-dark-muted mb-4">
           The Cascade Engine propagates impacts through the Knowledge Graph using Monte Carlo simulation:
         </p>
-        <pre className="bg-dark-bg p-4 rounded-xl text-sm font-mono text-accent-400 overflow-x-auto">
+        <pre className="bg-dark-bg p-4 rounded-md text-sm font-mono text-zinc-400 overflow-x-auto">
 {`def simulate_cascade(trigger_event, graph, time_horizon):
     for monte_carlo_run in range(10_000):
         state = SystemState(graph)

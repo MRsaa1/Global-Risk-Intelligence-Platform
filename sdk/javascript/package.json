@@ -1,0 +1,16 @@
+{
+  "name": "@pfrp/sdk",
+  "version": "0.1.0",
+  "description": "JavaScript/TypeScript SDK for the Physical-Financial Risk Platform",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "echo \"No tests yet\""
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "license": "MIT"
+}

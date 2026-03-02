@@ -9,7 +9,7 @@
  */
 import { useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { chartColors, getRiskColor } from '../../lib/chartColors'
+import { chartColors } from '../../lib/chartColors'
 
 export interface ComparisonMetric {
   id: string
@@ -87,23 +87,29 @@ export default function ComparisonChart({
       className="space-y-4"
     >
       {title && (
-        <h3 className="text-white/80 text-sm font-medium">{title}</h3>
+        <h3 className="gradient-text-shimmer text-sm font-medium">{title}</h3>
       )}
       
       {/* Scenario Selector */}
       {scenarios.length > 1 && (
-        <div className="flex gap-2 overflow-x-auto pb-2">
+        <div className="flex gap-2 overflow-x-auto pb-2 border-b border-zinc-800">
           {scenarios.map(scenario => (
             <button
               key={scenario.id}
               onClick={() => handleSelect(scenario.id)}
-              className={`px-3 py-1.5 rounded-lg text-xs whitespace-nowrap transition-all ${
+              className={`relative px-3 py-1.5 rounded-lg text-xs whitespace-nowrap transition-all ${
                 activeScenarioId === scenario.id
-                  ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                  : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'
+                  ? 'bg-zinc-700 text-zinc-300 border border-zinc-600'
+                  : 'bg-zinc-800 text-zinc-400 border border-transparent hover:bg-zinc-700'
               }`}
             >
               {scenario.name}
+              {activeScenarioId === scenario.id && (
+                <span
+                  className="absolute bottom-0 left-0 right-0 h-0.5 rounded-b-lg"
+                  style={{ background: 'linear-gradient(90deg, #71717a, #a1a1aa)' }}
+                />
+              )}
             </button>
           ))}
         </div>
@@ -111,7 +117,7 @@ export default function ComparisonChart({
       
       {/* Scenario Description */}
       {activeScenario.description && (
-        <p className="text-white/40 text-xs">{activeScenario.description}</p>
+        <p className="text-zinc-500 text-xs">{activeScenario.description}</p>
       )}
       
       {/* Comparison Grid */}
@@ -126,7 +132,7 @@ export default function ComparisonChart({
             className="space-y-2"
           >
             {/* Header */}
-            <div className="grid grid-cols-4 gap-2 px-3 py-2 text-xs text-white/40">
+            <div className="grid grid-cols-4 gap-2 px-3 py-2 text-xs text-zinc-500">
               <div>Metric</div>
               <div className="text-center">Before</div>
               <div className="text-center">After</div>
@@ -157,21 +163,22 @@ export default function ComparisonChart({
                     duration: animationDuration / 1000,
                     delay: i * 0.05 
                   }}
-                  className="grid grid-cols-4 gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/8 transition-colors"
+                  className="grid grid-cols-4 gap-2 px-3 py-2 rounded-lg bg-zinc-800 hover:bg-white/8 transition-colors"
                 >
                   {/* Label */}
-                  <div className="text-xs text-white/70 self-center">
+                  <div className="text-xs text-zinc-300 self-center">
                     {metric.label}
                   </div>
                   
                   {/* Before Value with Bar */}
                   <div className="space-y-1">
-                    <div className="text-xs text-white/60 text-center font-mono">
+                    <div className="text-xs text-zinc-400 text-center font-mono">
                       {formatValue(metric.before, metric.format)}
                     </div>
-                    <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+                    <div className="h-1.5 bg-zinc-700 rounded-full overflow-hidden">
                       <motion.div
-                        className="h-full bg-white/30 rounded-full"
+                        className="h-full rounded-full"
+                        style={{ background: 'linear-gradient(90deg, #52525b, #3f3f46)' }}
                         initial={{ width: 0 }}
                         animate={{ width: `${beforeWidth}%` }}
                         transition={{ duration: 0.5, delay: 0.2 }}
@@ -181,18 +188,18 @@ export default function ComparisonChart({
                   
                   {/* After Value with Bar */}
                   <div className="space-y-1">
-                    <div className="text-xs text-white text-center font-mono font-medium">
+                    <div className="text-xs text-zinc-100 text-center font-mono font-medium">
                       {formatValue(metric.after, metric.format)}
                     </div>
-                    <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+                    <div className="h-1.5 bg-zinc-700 rounded-full overflow-hidden">
                       <motion.div
                         className="h-full rounded-full"
                         style={{
-                          backgroundColor: isPositive 
-                            ? chartColors.risk.low 
-                            : isNegative 
-                            ? chartColors.risk.critical 
-                            : chartColors.series.climate
+                          background: isPositive
+                            ? chartColors.gradients.riskLow
+                            : isNegative
+                            ? chartColors.gradients.riskHigh
+                            : chartColors.gradients.primary
                         }}
                         initial={{ width: 0 }}
                         animate={{ width: `${afterWidth}%` }}
@@ -208,13 +215,24 @@ export default function ComparisonChart({
                         initial={{ opacity: 0, scale: 0.8 }}
                         animate={{ opacity: 1, scale: 1 }}
                         transition={{ delay: 0.4 }}
-                        className={`text-xs font-mono font-medium ${
-                          isPositive 
-                            ? 'text-emerald-400' 
-                            : isNegative 
-                            ? 'text-red-400' 
-                            : 'text-white/40'
+                        className={`px-1.5 py-0.5 rounded text-xs font-mono font-medium ${
+                          isPositive
+                            ? 'bg-gradient-to-r from-emerald-600 to-emerald-500 text-white'
+                            : isNegative
+                            ? 'bg-gradient-to-r from-red-600 to-red-500 text-white'
+                            : 'text-zinc-500'
                         }`}
+                        style={
+                          Math.abs(delta) > 20
+                            ? {
+                                boxShadow: isPositive
+                                  ? '0 0 8px rgba(34,197,94,0.3)'
+                                  : isNegative
+                                  ? '0 0 8px rgba(239,68,68,0.3)'
+                                  : undefined,
+                              }
+                            : undefined
+                        }
                       >
                         {delta > 0 ? '+' : ''}{delta.toFixed(1)}%
                       </motion.span>
@@ -228,7 +246,7 @@ export default function ComparisonChart({
                               ? 'text-emerald-400' 
                               : isNegative 
                               ? 'text-red-400' 
-                              : 'text-white/40'
+                              : 'text-zinc-500'
                           }`}
                           fill="none"
                           stroke="currentColor"
@@ -251,18 +269,18 @@ export default function ComparisonChart({
       </div>
       
       {/* Summary */}
-      <div className="flex justify-between items-center pt-2 border-t border-white/10">
-        <span className="text-xs text-white/40">
+      <div className="flex justify-between items-center pt-2 border-t border-zinc-700">
+        <span className="text-xs text-zinc-500">
           {activeScenario.metrics.length} metrics compared
         </span>
         <div className="flex gap-4">
           <div className="flex items-center gap-1.5">
             <div className="w-2 h-2 rounded-full bg-emerald-400" />
-            <span className="text-xs text-white/40">Improvement</span>
+            <span className="text-xs text-zinc-500">Improvement</span>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="w-2 h-2 rounded-full bg-red-400" />
-            <span className="text-xs text-white/40">Deterioration</span>
+            <span className="text-xs text-zinc-500">Deterioration</span>
           </div>
         </div>
       </div>

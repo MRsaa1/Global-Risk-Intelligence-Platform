@@ -5,18 +5,25 @@
  * Implements dual state model: Intent (optimistic) vs Confirmed (backend verified)
  */
 import { create } from 'zustand'
-import { PlatformEvent, EventTypes } from '../types/events'
+import { PlatformEvent, EventTypes, type ThreatSignal } from '../types/events'
 import { RiskZone } from '../components/CesiumGlobe'
 
 // Portfolio State
 export interface PortfolioState {
-  totalExposure: number  // in billions
-  atRisk: number         // in billions
+  totalExposure: number  // €M
+  atRisk: number         // €M Capital at Risk
+  totalExpectedLoss?: number  // €M from geo risk formula (real)
   criticalCount: number  // number of critical hotspots
+  highCount?: number     // high risk zones
+  mediumCount?: number   // medium risk zones
+  lowCount?: number      // low risk zones
   weightedRisk: number   // 0-1
   totalAssets?: number
   digitalTwins?: number
   portfolioValue?: number  // in billions
+  riskVelocityMomPct?: number | null  // MoM % from risk_posture_snapshots
+  riskModelVersion?: number  // 1 = legacy, 2 = GDELT/World Bank/OFAC + hysteresis
+  dataSourcesFreshness?: string  // e.g. "GDELT 15m, World Bank 24h"
 }
 
 // Stress Test State
@@ -57,6 +64,15 @@ interface PlatformState {
   // Event history (last 100 events)
   recentEvents: PlatformEvent[]
   lastEventId: string | null
+  
+  // Real-time: threat feed, market data, data refresh trigger
+  threatFeed: ThreatSignal[]
+  marketData: Record<string, number>
+  dataRefreshVersion: number
+  /** Per-source last refresh ISO timestamp (e.g. threat_intelligence, natural_hazards, market_data) for Live Data Bar */
+  lastRefreshBySource: Record<string, string>
+  /** Per-source last snapshot (summary + last_events) for DataSourcesPanel */
+  lastSnapshotBySource: Record<string, { summary: Record<string, unknown>; last_events: unknown[]; updated_at: string }>
   
   // WebSocket status
   wsStatus: 'connecting' | 'connected' | 'disconnected'
@@ -103,6 +119,13 @@ interface PlatformState {
   addEvent: (event: PlatformEvent) => void
   setLastEventId: (eventId: string) => void
   
+  addThreatSignal: (signal: ThreatSignal) => void
+  setThreatFeed: (signals: ThreatSignal[]) => void
+  setMarketData: (data: Record<string, number>) => void
+  incrementDataRefreshVersion: () => void
+  setLastRefresh: (sourceId: string, timestamp: string) => void
+  setLastSnapshotForSource: (sourceId: string, payload: { summary?: Record<string, unknown>; last_events?: unknown[]; updated_at?: string }) => void
+  
   // Actions - WebSocket
   setWsStatus: (status: 'connecting' | 'connected' | 'disconnected') => void
   
@@ -110,19 +133,76 @@ interface PlatformState {
   reset: () => void
 }
 
-// Default portfolio state
+// Default portfolio state (replaced by geodata/summary on load)
 const defaultPortfolio: PortfolioState = {
-  totalExposure: 247.3,
-  atRisk: 52.1,
-  criticalCount: 4,
-  weightedRisk: 0.68,
-  totalAssets: 1284,
-  digitalTwins: 1156,
-  portfolioValue: 4.2,
+  totalExposure: 0,
+  atRisk: 0,
+  criticalCount: 0,
+  weightedRisk: 0,
+  totalAssets: 0,
+  digitalTwins: 0,
+  portfolioValue: 0,
+  riskVelocityMomPct: null,
+}
+
+const RECENT_EVENTS_STORAGE_KEY = 'pfrp_recent_events'
+const RECENT_EVENTS_MAX_PERSISTED = 50
+const RECENT_EVENTS_MAX_AGE_DAYS = 7
+
+const MAX_THREAT_FEED_ITEMS = 200
+
+function threatSignalKey(signal: ThreatSignal): string {
+  const source = (signal.source ?? '').toLowerCase().trim()
+  const text = (signal.text ?? '').toLowerCase().trim()
+  const url = (signal.url ?? '').toLowerCase().trim()
+  // Prefer semantic signature so repeated same content with new event_id
+  // does not flood the feed after each refresh cycle.
+  if (source || text || url) {
+    return `sig:${source}|${url}|${text}`
+  }
+  if (signal.id && String(signal.id).trim()) {
+    return `id:${String(signal.id).trim()}`
+  }
+  return `ts:${signal.timestamp}`
+}
+
+function dedupeThreatSignals(signals: ThreatSignal[]): ThreatSignal[] {
+  const out: ThreatSignal[] = []
+  const seen = new Set<string>()
+  for (const signal of signals) {
+    const key = threatSignalKey(signal)
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(signal)
+    if (out.length >= MAX_THREAT_FEED_ITEMS) break
+  }
+  return out
 }
 
 function getInitialRecentEvents(): PlatformEvent[] {
-  return []
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = localStorage.getItem(RECENT_EVENTS_STORAGE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as PlatformEvent[]
+    if (!Array.isArray(parsed)) return []
+    const cutoff = Date.now() - RECENT_EVENTS_MAX_AGE_DAYS * 24 * 60 * 60 * 1000
+    return parsed
+      .filter((e) => e && e.timestamp && new Date(e.timestamp).getTime() > cutoff)
+      .slice(0, RECENT_EVENTS_MAX_PERSISTED)
+  } catch {
+    return []
+  }
+}
+
+function persistRecentEvents(events: PlatformEvent[]) {
+  if (typeof window === 'undefined') return
+  try {
+    const toSave = events.slice(0, RECENT_EVENTS_MAX_PERSISTED)
+    localStorage.setItem(RECENT_EVENTS_STORAGE_KEY, JSON.stringify(toSave))
+  } catch {
+    // ignore quota or parse errors
+  }
 }
 
 export const usePlatformStore = create<PlatformState>((set, get) => ({
@@ -138,6 +218,11 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
   showDigitalTwinPanel: false,
   recentEvents: getInitialRecentEvents(),
   lastEventId: null,
+  threatFeed: [],
+  marketData: {},
+  dataRefreshVersion: 0,
+  lastRefreshBySource: {},
+  lastSnapshotBySource: {},
   wsStatus: 'disconnected',
   commandMode: false,
   
@@ -263,16 +348,52 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
     set({ showDigitalTwinPanel: show })
   },
   
-  // Event actions
+  // Event actions (keep last 100 in memory; persist last 50 to localStorage so Recent Activity survives refresh)
   addEvent: (event) => {
     const current = get().recentEvents
-    set({ 
-      recentEvents: [event, ...current].slice(0, 100)  // Keep last 100
-    })
+    const next = [event, ...current].slice(0, 100)
+    set({ recentEvents: next })
+    persistRecentEvents(next)
   },
   
   setLastEventId: (eventId) => {
     set({ lastEventId: eventId })
+  },
+  
+  addThreatSignal: (signal) => {
+    const withId = { ...signal, id: signal.id ?? `threat-${Date.now()}-${Math.random().toString(36).slice(2, 9)}` }
+    set((s) => ({ threatFeed: dedupeThreatSignals([withId, ...s.threatFeed]) }))
+  },
+  setThreatFeed: (signals) => {
+    set({ threatFeed: dedupeThreatSignals(signals ?? []) })
+  },
+  setMarketData: (data) => {
+    set({ marketData: data ?? {} })
+  },
+  incrementDataRefreshVersion: () => {
+    set((s) => ({ dataRefreshVersion: s.dataRefreshVersion + 1 }))
+  },
+  setLastRefresh: (sourceId, timestamp) => {
+    if (!sourceId || !timestamp) return
+    set((s) => ({
+      lastRefreshBySource: {
+        ...s.lastRefreshBySource,
+        [sourceId]: timestamp,
+      },
+    }))
+  },
+  setLastSnapshotForSource: (sourceId, payload) => {
+    if (!sourceId || !payload) return
+    set((s) => ({
+      lastSnapshotBySource: {
+        ...s.lastSnapshotBySource,
+        [sourceId]: {
+          summary: payload.summary ?? {},
+          last_events: Array.isArray(payload.last_events) ? payload.last_events : [],
+          updated_at: payload.updated_at ?? new Date().toISOString(),
+        },
+      },
+    }))
   },
   
   // WebSocket actions
@@ -294,6 +415,11 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
       showDigitalTwinPanel: false,
       recentEvents: getInitialRecentEvents(),
       lastEventId: null,
+      threatFeed: [],
+      marketData: {},
+      dataRefreshVersion: 0,
+      lastRefreshBySource: {},
+      lastSnapshotBySource: {},
       wsStatus: 'disconnected',
       commandMode: false,
     })

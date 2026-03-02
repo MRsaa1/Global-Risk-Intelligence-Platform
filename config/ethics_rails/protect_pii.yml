@@ -1,0 +1,34 @@
+# Protect PII — Ethics rail
+# Colang equivalent: define flow protect_pii; redact/flag PII in inputs and outputs
+name: protect_pii
+description: PII detection and redaction in inputs/outputs
+version: "1.0"
+
+rules:
+  - id: detect_pii_input
+    condition: pii_detected_in_input
+    action: redact_or_reject
+    message: "PII detected in input; redact before processing or reject."
+  - id: detect_pii_output
+    condition: pii_detected_in_output
+    action: redact_before_return
+    message: "PII in model output; redact before returning to caller."
+  - id: audit_pii_access
+    condition: always
+    action: log_pii_access
+    message: "Log PII access for audit trail."
+
+pii_categories:
+  - email
+  - phone
+  - ssn
+  - credit_card
+  - name
+  - address
+  - national_id
+  - health_data
+
+triggers:
+  - input_snapshot
+  - reasoning
+  - recommendations

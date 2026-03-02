@@ -1,3 +1,4 @@
+import './lib/apiBaseFetch'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -58,11 +59,19 @@ const queryClient = new QueryClient({
   },
 })
 
-// Optional: Log cache operations in development
+// Optional: Log cache operations in development (skip AbortError / cancelled query only)
 if (import.meta.env.DEV) {
+  function isCancellationError(err: unknown): boolean {
+    if (!err || typeof err !== 'object') return false
+    const e = err as { name?: string; message?: string }
+    if (e.name === 'AbortError') return true
+    if (e.message && (String(e.message).includes('abort') || String(e.message).includes('aborted'))) return true
+    return false
+  }
   queryClient.getQueryCache().subscribe((event) => {
     if (event.type === 'updated' && event.action.type === 'error') {
-      console.warn('[QueryCache] Query error:', event.query.queryKey, event.action.error)
+      const err = event.action.error
+      if (!isCancellationError(err)) console.warn('[QueryCache] Query error:', event.query.queryKey, err)
     }
   })
 }

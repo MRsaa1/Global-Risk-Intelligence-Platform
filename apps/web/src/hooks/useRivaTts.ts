@@ -4,8 +4,7 @@
  * Текст интерфейса на русском.
  */
 import { useState, useCallback } from 'react';
-
-const API_BASE = import.meta.env.VITE_API_URL || '';
+import { getApiV1Base } from '../config/env';
 
 const ERROR_MESSAGES_RU: Record<string, string> = {
   'Not authenticated': 'Войдите в систему для озвучки',
@@ -57,7 +56,7 @@ export function useRivaTts() {
     const lang = language || 'en-US';
 
     try {
-      const url = `${API_BASE}/api/v1/nvidia/riva/tts`;
+      const url = `${getApiV1Base()}/nvidia/riva/tts`;
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

@@ -379,7 +379,7 @@ function RiskHotspots({ onSelectAsset }: { onSelectAsset: (id: string | null) =>
             {/* Tooltip */}
             {isHovered && (
               <Html position={[0, 0.15, 0]} center>
-                <div className="bg-black/80 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-white/10 text-white text-xs whitespace-nowrap">
+                <div className="bg-black/80 px-3 py-1.5 rounded-md border border-white/10 text-white text-xs whitespace-nowrap">
                   <div className="font-medium">{spot.name}</div>
                   <div className="text-gray-400">Risk: {(spot.risk * 100).toFixed(0)}%</div>
                 </div>

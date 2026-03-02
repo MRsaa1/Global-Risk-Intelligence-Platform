@@ -7,6 +7,7 @@
 #   export SSH_KEY=~/.ssh/id_ed25519_contabo   # ключ для Contabo
 #   export DEPLOY_HOST=contabo DEPLOY_PORT=32769 DEPLOY_USER=arin   # или IP: 173.212.208.123
 #   export DEPLOY_DOMAIN=risk.saa-alliance.com
+#   VITE_CESIUM_ION_TOKEN — берётся из apps/api/.env или export; иначе подставляется дефолт (глобус Cesium)
 # =============================================================================
 set -e
 
@@ -41,7 +42,7 @@ echo "  Домен: $DOMAIN"
 echo ""
 
 # --- 1. Архив ---
-echo -e "${YELLOW}[1/5] Создание архива...${NC}"
+echo -e "${YELLOW}[1/6] Создание архива...${NC}"
 TARBALL="/tmp/grp-deploy-$$.tar.gz"
 # COPYFILE_DISABLE=1 (macOS) prevents AppleDouble ._* files in tarball (they cause "null bytes" in Alembic on Linux)
 export COPYFILE_DISABLE=1 2>/dev/null || true
@@ -65,7 +66,7 @@ tar --exclude='node_modules' \
 echo "  Размер: $(du -h "$TARBALL" | cut -f1)"
 
 # --- 2. Копирование на сервер ---
-echo -e "${YELLOW}[2/5] Копирование на сервер...${NC}"
+echo -e "${YELLOW}[2/6] Копирование на сервер...${NC}"
 scp "${SCP_OPTS[@]}" -P "$SERVER_PORT" "$TARBALL" "$SERVER_USER@$SERVER_HOST:/tmp/grp-deploy.tar.gz"
 rm -f "$TARBALL"
 
@@ -79,6 +80,15 @@ else
 fi
 
 # --- 3. Удалённый скрипт установки и запуска ---
+# Cesium Ion token: из локального .env, или из VITE_CESIUM_ION_TOKEN, или дефолт (как в deploy-safe.sh)
+CESIUM_TOKEN_ESC=""
+if [ -f "$REPO_ROOT/apps/api/.env" ]; then
+  val=$(grep -E '^VITE_CESIUM_ION_TOKEN=' "$REPO_ROOT/apps/api/.env" 2>/dev/null | sed 's/^VITE_CESIUM_ION_TOKEN=//' | tr -d '"' | sed "s/^'//;s/'$//")
+  [ -n "$val" ] && CESIUM_TOKEN_ESC=$(printf '%s' "$val" | sed "s/'/'\\\\''/g")
+fi
+[ -z "$CESIUM_TOKEN_ESC" ] && [ -n "${VITE_CESIUM_ION_TOKEN:-}" ] && CESIUM_TOKEN_ESC=$(printf '%s' "$VITE_CESIUM_ION_TOKEN" | sed "s/'/'\\\\''/g")
+[ -z "$CESIUM_TOKEN_ESC" ] && CESIUM_TOKEN_ESC="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIwYTExZmMxNS1jY2RhLTQ2YjctOTg0Mi02NWQxNGQxYjFhZGYiLCJpZCI6Mzc4MTk5LCJpYXQiOjE3NjgzMjc3NjJ9.neQZ3X5JRYBalv7cjUuVrq_kVw0nVyKQlwtOyxls5OM"
+
 REMOTE_SCRIPT="/tmp/grp-install-$$.sh"
 ESCAPED_PROJECT_DIR="$(printf '%s' "$PROJECT_DIR" | sed "s/'/'\\\\''/g")"
 ESCAPED_DOMAIN="$(printf '%s' "$DOMAIN" | sed "s/'/'\\\\''/g")"
@@ -132,6 +142,8 @@ cd "\$PROJECT_DIR"
 echo "[remote] Frontend: npm install и build (может занять несколько минут)..."
 cd apps/web
 npm install --silent
+export VITE_API_URL="https://\$DOMAIN"
+export VITE_CESIUM_ION_TOKEN='$CESIUM_TOKEN_ESC'
 npm run build
 cd "\$PROJECT_DIR"
 
@@ -158,19 +170,19 @@ echo "[remote] Готово."
 REMOTE_END
 
 # --- 4. Копирование и выполнение скрипта на сервере ---
-echo -e "${YELLOW}[3/5] Копирование скрипта установки...${NC}"
+echo -e "${YELLOW}[3/6] Копирование скрипта установки...${NC}"
 scp "${SCP_OPTS[@]}" -P "$SERVER_PORT" "$REMOTE_SCRIPT" "$SERVER_USER@$SERVER_HOST:/tmp/grp-install.sh"
 rm -f "$REMOTE_SCRIPT"
 
-echo -e "${YELLOW}[4/5] Выполнение установки на сервере (таймаут 15 мин)...${NC}"
+echo -e "${YELLOW}[4/6] Выполнение установки на сервере (таймаут 15 мин)...${NC}"
 ssh "${SSH_OPTS[@]}" -p "$SERVER_PORT" "$SERVER_USER@$SERVER_HOST" "bash /tmp/grp-install.sh" || {
   echo -e "${RED}Установка завершилась с ошибкой. Логи на сервере:${NC}"
   echo "  ssh -p $SERVER_PORT $SERVER_USER@$SERVER_HOST 'tail -100 /tmp/grp-api.log'"
   exit 1
 }
 
-# --- 5. Проверка ---
-echo -e "${YELLOW}[5/5] Проверка API (ожидание 15 с)...${NC}"
+# --- 5. Проверка API ---
+echo -e "${YELLOW}[5/6] Проверка API (ожидание 15 с)...${NC}"
 sleep 15
 if ssh "${SSH_OPTS[@]}" -p "$SERVER_PORT" "$SERVER_USER@$SERVER_HOST" "curl -sf http://127.0.0.1:9002/api/v1/health >/dev/null 2>&1"; then
   echo -e "${GREEN}  API отвечает на :9002${NC}"
@@ -178,6 +190,25 @@ else
   echo -e "${RED}  API пока не отвечает. Лог:${NC}"
   ssh "${SSH_OPTS[@]}" -p "$SERVER_PORT" "$SERVER_USER@$SERVER_HOST" "tail -50 /tmp/grp-api.log 2>/dev/null" || true
 fi
+
+# --- 6. Seed (как в deploy-safe.sh Step 11) ---
+echo -e "${YELLOW}[6/6] Seed демо-данных и стресс-тестов (если ALLOW_SEED_IN_PRODUCTION=true)...${NC}"
+PROJECT_DIR_ESC=$(printf '%s' "$PROJECT_DIR" | sed "s/'/'\\\\''/g")
+ssh "${SSH_OPTS[@]}" -p "$SERVER_PORT" "$SERVER_USER@$SERVER_HOST" "export PROJ='$PROJECT_DIR_ESC'; bash -s" << 'ENDSSH'
+cd "$PROJ/apps/api" 2>/dev/null || cd "$PROJ" 2>/dev/null || true
+if grep -q "ALLOW_SEED_IN_PRODUCTION=true" .env 2>/dev/null; then
+  r=$(curl -sf -X POST http://localhost:9002/api/v1/seed/seed 2>/dev/null) || true
+  if echo "$r" | grep -q "success"; then echo "  ✅ Demo data seeded"; else echo "  ⚠️ Full seed skipped or API not ready"; fi
+  r=$(curl -sf -X POST http://localhost:9002/api/v1/seed/seed-modules 2>/dev/null) || true
+  if echo "$r" | grep -q "success\|ok\|seeded"; then echo "  ✅ Strategic modules seeded"; else echo "  ⚠️ Seed modules skipped"; fi
+  r=$(curl -sf -X POST http://localhost:9002/api/v1/stress-tests/admin/seed 2>/dev/null) || true
+  if echo "$r" | grep -q "inserted\|success"; then echo "  ✅ Stress tests seeded (Risk Flow dropdown)"; else echo "  ⚠️ Stress tests seed skipped"; fi
+  r=$(curl -sf -X POST "http://localhost:9002/api/v1/twins/sync-regime?regime=auto" 2>/dev/null) || true
+  if echo "$r" | grep -q "ok\|twins_updated"; then echo "  ✅ Regime sync done"; else echo "  ⚠️ Regime sync skipped"; fi
+else
+  echo "  ⏭️ Seed skipped (ALLOW_SEED_IN_PRODUCTION is not true)"
+fi
+ENDSSH
 
 echo ""
 echo -e "${GREEN}=== Деплой завершён ===${NC}"

@@ -59,23 +59,48 @@ export const EventTypes = {
   // System
   SYSTEM_HEALTH_CHANGED: 'system.health_changed',
   ALERT_GENERATED: 'alert.generated',
+
+  // Real-time ingestion
+  DATA_REFRESH_COMPLETED: 'data.refresh_completed',
+  THREAT_DETECTED: 'threat.detected',
+  MARKET_UPDATE: 'market.update',
+  SOCIAL_THREAT_DETECTED: 'threat.social_detected',
 } as const
+
+export interface ThreatSignal {
+  id?: string
+  source: string
+  text: string
+  sentiment_score?: number
+  threat_level?: number
+  risk_type?: string
+  timestamp: string
+  url?: string
+  entities?: Record<string, unknown>
+  /** Optional signal quality score (0-1); higher = more signal, less noise. Used for "Signal first" sort. */
+  signal_score?: number
+}
 
 export type EventType = typeof EventTypes[keyof typeof EventTypes]
 
 /**
- * Get WebSocket channel for event type
+ * Get WebSocket channel for event type (mirrors backend get_channel_for_event)
  */
 export function getChannelForEvent(eventType: string): string {
-  if (eventType.startsWith('stress_test')) {
+  if (eventType === EventTypes.STRESS_TEST_DELETED) return 'stress_tests'
+  if (eventType === EventTypes.RISK_ZONE_CREATED) return 'command_center'
+  if (eventType.startsWith('stress_test') || eventType.startsWith('geopolitical')) {
     return 'stress_tests'
-  } else if (eventType.startsWith('zone') || eventType.startsWith('twin') || eventType.startsWith('historical')) {
+  }
+  if (eventType.startsWith('zone') || eventType.startsWith('twin') || eventType.startsWith('historical')) {
     return 'command_center'
-  } else if (eventType.startsWith('portfolio') || eventType.startsWith('exposure') || eventType.startsWith('asset')) {
-    return 'dashboard'
-  } else if (eventType.startsWith('alert')) {
-    return 'alerts'
-  } else {
+  }
+  if (eventType.startsWith('portfolio') || eventType.startsWith('exposure') || eventType.startsWith('asset')) {
     return 'dashboard'
   }
+  if (eventType.startsWith('alert')) return 'alerts'
+  if (eventType.startsWith('data.')) return 'dashboard'
+  if (eventType.startsWith('threat')) return 'threat_intelligence'
+  if (eventType.startsWith('market')) return 'market_data'
+  return 'dashboard'
 }

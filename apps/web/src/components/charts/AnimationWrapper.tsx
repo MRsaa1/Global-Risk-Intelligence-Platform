@@ -74,7 +74,7 @@ export default function AnimationWrapper({
 export function ChartSkeleton({ height = 300 }: { height?: number }) {
   return (
     <div 
-      className="relative overflow-hidden rounded-lg bg-white/5"
+      className="relative overflow-hidden rounded-md bg-white/5"
       style={{ height }}
     >
       {/* Animated shimmer effect */}

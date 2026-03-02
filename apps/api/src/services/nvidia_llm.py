@@ -1,14 +1,15 @@
 """
 NVIDIA LLM Service - Language Models for Agents.
-
-Uses NVIDIA Cloud API (no GPU required):
 - Llama 3.1 70B: Complex reasoning (ANALYST, ADVISOR)
 - Llama 3.1 8B: Fast responses (SENTINEL quick alerts)
 - Mixtral 8x22B: Multi-task (ADVISOR options)
 
 When GPU available, switches to local NIM inference.
+Config: nvidia_llm_model_fast, nvidia_llm_model_deep, nvidia_llm_model_report override model names (e.g. for local NIM).
 """
+import asyncio
 import logging
+import time
 from typing import Optional, Literal, AsyncGenerator
 from dataclasses import dataclass
 from enum import Enum
@@ -19,12 +20,18 @@ from src.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+# In-memory usage aggregation for tokens/cost visibility
+_usage_aggregate: dict = {"total_tokens": 0, "total_calls": 0, "last_reset": time.time()}
+
 
 class LLMModel(str, Enum):
     """Available LLM models on NVIDIA API (NIM + Triton / integrate.api.nvidia.com)."""
     # Llama models
     LLAMA_70B = "meta/llama-3.1-70b-instruct"
     LLAMA_8B = "meta/llama-3.1-8b-instruct"
+    # Nemotron — reasoning and multi-step planning
+    NEMOTRON_NANO_9B = "nvidia/nvidia-nemotron-nano-9b-v2"
+    NEMOTRON_340B = "nvidia/nemotron-4-340b-instruct"
     # Mistral / NeMo (fast scenario analysis)
     MISTRAL_NEMO_12B = "nv-mistralai/mistral-nemo-12b-instruct"
     # Mistral / Mixtral
@@ -54,6 +61,7 @@ class NVIDIALLMService:
     """
     
     def __init__(self):
+        # Single key for all models: Llama, Mixtral, Nemotron (Nano 9B, 340B), etc.
         self.api_key = settings.nvidia_api_key or ""
         self.use_cloud = getattr(settings, "nvidia_mode", "cloud") == "cloud"
         self.nim_url = getattr(settings, "llama_nim_url", "http://localhost:8003")
@@ -82,6 +90,11 @@ class NVIDIALLMService:
         self._local_client = httpx.AsyncClient(timeout=120.0, headers={"Content-Type": "application/json"})
         self._dynamo_client = httpx.AsyncClient(timeout=120.0, headers={"Content-Type": "application/json"})
         self._triton_client = httpx.AsyncClient(timeout=120.0, headers={"Content-Type": "application/json"})
+
+        # Configurable model map (for local NIM or custom models)
+        self._model_fast = (getattr(settings, "nvidia_llm_model_fast", "") or "").strip() or LLMModel.LLAMA_8B.value
+        self._model_deep = (getattr(settings, "nvidia_llm_model_deep", "") or "").strip() or LLMModel.LLAMA_70B.value
+        self._model_report = (getattr(settings, "nvidia_llm_model_report", "") or "").strip() or LLMModel.LLAMA_70B.value
 
     def _resolve_base_url(self) -> str:
         """First enabled backend in order: Dynamo -> Triton -> Cloud -> Local NIM."""
@@ -113,12 +126,21 @@ class NVIDIALLMService:
         return "cloud" if self.use_cloud else "local"
 
     def get_model_info(self) -> dict:
-        """Модели, используемые для агентов и отчётов (для логов и /health/nvidia)."""
+        """Models used for agents and reports (for logs and /health/nvidia). Config overrides when set."""
         return {
-            "default": LLMModel.LLAMA_70B.value,
-            "report_executive_summary": LLMModel.LLAMA_70B.value,
-            "analyst_advisor": LLMModel.LLAMA_70B.value,
-            "sentinel_alerts": LLMModel.LLAMA_8B.value,
+            "default": self._model_deep,
+            "report_executive_summary": self._model_report,
+            "analyst_advisor": self._model_deep,
+            "sentinel_alerts": self._model_fast,
+        }
+
+    def get_usage(self) -> dict:
+        """Aggregated token usage and call count for metrics/cost visibility."""
+        global _usage_aggregate
+        return {
+            "total_tokens": _usage_aggregate["total_tokens"],
+            "total_calls": _usage_aggregate["total_calls"],
+            "last_reset_ts": _usage_aggregate["last_reset"],
         }
 
     @property
@@ -145,17 +167,19 @@ class NVIDIALLMService:
         max_tokens: int = 2048,
         temperature: float = 0.7,
         system_prompt: Optional[str] = None,
+        model_id_override: Optional[str] = None,
     ) -> LLMResponse:
         """
         Generate text using LLM.
-        
+
         Args:
             prompt: User prompt
             model: Model to use
             max_tokens: Maximum tokens to generate
             temperature: Sampling temperature (0-1)
             system_prompt: Optional system prompt
-            
+            model_id_override: Optional explicit model id (e.g. from config) overrides model.value
+
         Returns:
             LLM response with generated text
         """
@@ -163,70 +187,93 @@ class NVIDIALLMService:
         if use_cloud_only and not self.api_key:
             logger.warning("NVIDIA API key not set (cloud mode), using mock response")
             return self._mock_response(prompt, model.value)
-        
+
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
-        
+
         base_url, client, model_override = self._get_llm_backend()
-        effective_model = model_override or model.value
-        
-        try:
-            response = await client.post(
-                f"{base_url}/chat/completions",
-                json={
-                    "model": effective_model,
-                    "messages": messages,
-                    "max_tokens": max_tokens,
-                    "temperature": temperature,
-                    "top_p": 0.9,
-                },
-            )
-            
-            if response.status_code != 200:
-                logger.error("LLM API error (%s): %s", response.status_code, response.text[:500])
-                # If dynamo/triton/local failed but cloud is configured, fallback to cloud.
-                if (self.enable_dynamo or self.enable_triton or not self.use_cloud) and self.api_key:
-                    try:
-                        fallback = await self._cloud_client.post(
-                            f"{self._cloud_base_url}/chat/completions",
-                            json={
-                                "model": model.value,
-                                "messages": messages,
-                                "max_tokens": max_tokens,
-                                "temperature": temperature,
-                                "top_p": 0.9,
-                            },
-                        )
-                        if fallback.status_code == 200:
-                            data = fallback.json()
-                            choice = data.get("choices", [{}])[0]
-                            usage = data.get("usage", {})
-                            return LLMResponse(
-                                content=choice.get("message", {}).get("content", ""),
-                                model=model.value,
-                                tokens_used=usage.get("total_tokens", 0),
-                                finish_reason=choice.get("finish_reason", "stop"),
+        effective_model = model_override or (model_id_override or model.value)
+
+        last_exc = None
+        for attempt in range(3):
+            try:
+                response = await client.post(
+                    f"{base_url}/chat/completions",
+                    json={
+                        "model": effective_model,
+                        "messages": messages,
+                        "max_tokens": max_tokens,
+                        "temperature": temperature,
+                        "top_p": 0.9,
+                    },
+                )
+
+                if response.status_code != 200:
+                    if response.status_code >= 500 and attempt < 2:
+                        await asyncio.sleep(1.0 * (attempt + 1))
+                        last_exc = RuntimeError(f"LLM API {response.status_code}: {response.text[:200]}")
+                        continue
+                    logger.error("LLM API error (%s): %s", response.status_code, response.text[:500])
+                    # If dynamo/triton/local failed but cloud is configured, fallback to cloud.
+                    if (self.enable_dynamo or self.enable_triton or not self.use_cloud) and self.api_key:
+                        try:
+                            fallback = await self._cloud_client.post(
+                                f"{self._cloud_base_url}/chat/completions",
+                                json={
+                                    "model": model.value,
+                                    "messages": messages,
+                                    "max_tokens": max_tokens,
+                                    "temperature": temperature,
+                                    "top_p": 0.9,
+                                },
                             )
-                    except Exception as e:
-                        logger.debug("LLM cloud fallback failed: %s", e)
+                            if fallback.status_code == 200:
+                                data = fallback.json()
+                                choice = data.get("choices", [{}])[0]
+                                usage = data.get("usage", {})
+                                tok = usage.get("total_tokens", 0)
+                                _usage_aggregate["total_tokens"] += tok
+                                _usage_aggregate["total_calls"] += 1
+                                return LLMResponse(
+                                    content=choice.get("message", {}).get("content", ""),
+                                    model=model.value,
+                                    tokens_used=tok,
+                                    finish_reason=choice.get("finish_reason", "stop"),
+                                )
+                        except Exception as e:
+                            logger.debug("LLM cloud fallback failed: %s", e)
+                    return self._mock_response(prompt, model.value)
+
+                data = response.json()
+                choice = data.get("choices", [{}])[0]
+                usage = data.get("usage", {})
+                tok = usage.get("total_tokens", 0)
+                _usage_aggregate["total_tokens"] += tok
+                _usage_aggregate["total_calls"] += 1
+                return LLMResponse(
+                    content=choice.get("message", {}).get("content", ""),
+                    model=effective_model,
+                    tokens_used=tok,
+                    finish_reason=choice.get("finish_reason", "stop"),
+                )
+            except (httpx.TimeoutException, httpx.ConnectError) as e:
+                last_exc = e
+                if attempt < 2:
+                    await asyncio.sleep(1.0 * (attempt + 1))
+                    continue
+                logger.error("LLM API error after retries: %s", e)
                 return self._mock_response(prompt, model.value)
-            
-            data = response.json()
-            choice = data.get("choices", [{}])[0]
-            usage = data.get("usage", {})
-            
-            return LLMResponse(
-                content=choice.get("message", {}).get("content", ""),
-                model=effective_model,
-                tokens_used=usage.get("total_tokens", 0),
-                finish_reason=choice.get("finish_reason", "stop"),
-            )
-            
-        except Exception as e:
-            logger.error(f"LLM API error: {e}")
-            return self._mock_response(prompt, model.value)
+            except Exception as e:
+                last_exc = e
+                if attempt < 2:
+                    await asyncio.sleep(1.0 * (attempt + 1))
+                    continue
+                logger.error("LLM API error: %s", e)
+                return self._mock_response(prompt, model.value)
+
+        return self._mock_response(prompt, model.value)
     
     async def generate_stream(
         self,
@@ -285,7 +332,7 @@ class NVIDIALLMService:
     def _mock_response(self, prompt: str, model: str) -> LLMResponse:
         """Generate mock response for testing without API key."""
         return LLMResponse(
-            content=f"[Mock {model}] Analysis of: {prompt[:200]}...\n\nThis is a simulated response. Configure NVIDIA_API_KEY for real inference.",
+            content=f"[Demo] Analysis of: {prompt[:200]}…\n\nDemo response. Optional: set NVIDIA_API_KEY in apps/api/.env on the server for live AI.",
             model=model,
             tokens_used=0,
             finish_reason="mock",
@@ -314,9 +361,10 @@ Then 2-3 bullet points with key facts."""
 
         response = await self.generate(
             prompt=prompt,
-            model=LLMModel.LLAMA_8B,  # Fast model for real-time
+            model=LLMModel.LLAMA_8B,
             max_tokens=256,
-            temperature=0.3,  # Low temp for consistency
+            temperature=0.3,
+            model_id_override=self._model_fast,
         )
         return response.content
     
@@ -353,6 +401,7 @@ Provide:
             max_tokens=2000,
             temperature=0.5,
             system_prompt="You are an expert risk analyst specializing in physical-financial risk assessment for real estate and infrastructure.",
+            model_id_override=self._model_deep,
         )
         return response.content
     
@@ -394,6 +443,7 @@ Provide:
             max_tokens=2500,
             temperature=0.6,
             system_prompt="You are a strategic investment advisor for physical assets. Prioritize risk mitigation ROI and regulatory compliance.",
+            model_id_override=self._model_deep,
         )
         return response.content
     
@@ -438,6 +488,7 @@ Requirements:
             max_tokens=3000,
             temperature=0.4,
             system_prompt="You are a professional report writer specializing in ESG, climate risk, and financial reporting for institutional investors. When an entity type is provided, tailor the summary to that entity (healthcare, financial, city/region, etc.).",
+            model_id_override=self._model_report,
         )
         return response.content
     

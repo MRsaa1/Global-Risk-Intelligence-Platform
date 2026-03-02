@@ -305,7 +305,7 @@ export default function BarChart3D({
         <h3 className="text-white/80 text-sm font-medium mb-3">{title}</h3>
       )}
       
-      <div className="w-full h-full bg-[#0a0f18] rounded-lg overflow-hidden">
+      <div className="w-full h-full bg-zinc-950 rounded-md overflow-hidden">
         <Canvas shadows camera={{ position: [10, 5, 10], fov: 45 }}>
           <PerspectiveCamera makeDefault position={[10, 5, 10]} fov={45} />
           

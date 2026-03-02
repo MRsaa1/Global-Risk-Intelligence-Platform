@@ -136,13 +136,13 @@ export default function StressTestSelector({
   }, [])
 
   const colorClasses: Record<string, { text: string; bg: string; border: string; glow: string }> = {
-    cyan: { text: 'text-amber-400', bg: 'bg-amber-500', border: 'border-amber-500/30', glow: 'shadow-amber-500/20' },
+    cyan: { text: 'text-zinc-400', bg: 'bg-zinc-500', border: 'border-zinc-600', glow: 'shadow-zinc-500/20' },
     red: { text: 'text-red-400', bg: 'bg-red-500', border: 'border-red-500/30', glow: 'shadow-red-500/20' },
     orange: { text: 'text-orange-400', bg: 'bg-orange-500', border: 'border-orange-500/30', glow: 'shadow-orange-500/20' },
-    purple: { text: 'text-purple-400', bg: 'bg-purple-500', border: 'border-purple-500/30', glow: 'shadow-purple-500/20' },
+    purple: { text: 'text-zinc-400', bg: 'bg-zinc-500', border: 'border-zinc-600', glow: 'shadow-zinc-500/20' },
     yellow: { text: 'text-yellow-400', bg: 'bg-yellow-500', border: 'border-yellow-500/30', glow: 'shadow-yellow-500/20' },
-    blue: { text: 'text-blue-400', bg: 'bg-blue-500', border: 'border-blue-500/30', glow: 'shadow-blue-500/20' },
-    amber: { text: 'text-amber-400', bg: 'bg-amber-500', border: 'border-amber-500/30', glow: 'shadow-amber-500/20' },
+    blue: { text: 'text-zinc-400', bg: 'bg-zinc-500', border: 'border-zinc-600', glow: 'shadow-zinc-500/20' },
+    amber: { text: 'text-zinc-400', bg: 'bg-zinc-500', border: 'border-zinc-600', glow: 'shadow-zinc-500/20' },
   }
 
   const getSeverityNum = (s: { severity_numeric?: number; severity?: number | string }) =>
@@ -209,7 +209,7 @@ export default function StressTestSelector({
             <button
               key={type.id}
               onClick={() => setExpandedType(expandedType === type.id ? null : type.id)}
-              className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-300 ${hasActive ? `${colors.border} border-2 ${colors.glow} shadow-lg ${colors.text}` : 'border border-white/10 hover:border-white/30 text-white/50'}`}
+              className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-300 ${hasActive ? `${colors.border} border-2 ${colors.glow} shadow-lg ${colors.text}` : 'border border-zinc-800 hover:border-zinc-700 text-zinc-500'}`}
               title={type.label}
             >
               {type.icon}
@@ -224,16 +224,16 @@ export default function StressTestSelector({
     <div className="space-y-1">
       {/* Tabs */}
       {showTabs && (
-        <div className="flex gap-1 p-0.5 rounded-lg bg-white/5 border border-white/10 mb-3">
+        <div className="flex gap-1 p-0.5 rounded-lg bg-zinc-800 border border-zinc-800 mb-3">
           <button
             onClick={() => setActiveTab('regulatory')}
-            className={`flex-1 text-[10px] uppercase tracking-wider py-1.5 px-2 rounded ${activeTab === 'regulatory' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' : 'text-white/50 hover:text-white/70'}`}
+            className={`flex-1 text-[10px] uppercase tracking-wider py-1.5 px-2 rounded ${activeTab === 'regulatory' ? 'bg-zinc-700 text-zinc-300 border border-zinc-600' : 'text-zinc-500 hover:text-zinc-300'}`}
           >
             Regulatory Library
           </button>
           <button
             onClick={() => setActiveTab('extended')}
-            className={`flex-1 text-[10px] uppercase tracking-wider py-1.5 px-2 rounded ${activeTab === 'extended' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' : 'text-white/50 hover:text-white/70'}`}
+            className={`flex-1 text-[10px] uppercase tracking-wider py-1.5 px-2 rounded ${activeTab === 'extended' ? 'bg-zinc-700 text-zinc-300 border border-zinc-600' : 'text-zinc-500 hover:text-zinc-300'}`}
           >
             Extended
           </button>
@@ -245,12 +245,12 @@ export default function StressTestSelector({
         {activeTab === 'regulatory' && (
           <motion.div key="regulatory" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-1">
             <div className="flex items-center gap-2 mb-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-              <span className="text-white/30 text-[10px] uppercase tracking-[0.2em]">EBA, Fed, NGFS, BIS</span>
+              <div className="w-1.5 h-1.5 rounded-full bg-zinc-500 animate-pulse" />
+              <span className="text-zinc-600 text-[10px] uppercase tracking-[0.2em]">EBA, Fed, NGFS, BIS</span>
             </div>
             {regulatoryLoading ? (
               <div className="flex justify-center py-6">
-                <div className="w-5 h-5 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
+                <div className="w-5 h-5 border-2 border-zinc-600 border-t-zinc-400 rounded-full animate-spin" />
               </div>
             ) : (
               <div className="max-h-[280px] overflow-y-auto custom-scrollbar space-y-1 pr-1">
@@ -261,20 +261,20 @@ export default function StressTestSelector({
                       key={s.id}
                       onClick={() => handleRegulatoryClick(s)}
                       disabled={isLoading}
-                      className={`w-full text-left rounded-lg p-2 border transition-all ${isActive ? 'bg-white/10 border-amber-500/40' : 'border-white/10 hover:border-white/20 hover:bg-white/5'}`}
+                      className={`w-full text-left rounded-lg p-2 border transition-all ${isActive ? 'bg-zinc-700 border-zinc-600' : 'border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800'}`}
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className={`text-xs font-medium truncate ${isActive ? 'text-amber-400' : 'text-white/90'}`}>{s.name}</span>
+                        <span className={`text-xs font-medium truncate ${isActive ? 'text-zinc-300' : 'text-zinc-100'}`}>{s.name}</span>
                         <span className={`text-[10px] font-mono shrink-0 ${getSeverityNum(s as RegulatoryItem) > 0.8 ? 'text-red-400' : getSeverityNum(s as RegulatoryItem) > 0.6 ? 'text-orange-400' : 'text-yellow-400'}`}>
                           {(getSeverityNum(s as RegulatoryItem) * 100).toFixed(0)}%
                         </span>
                       </div>
-                      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-white/50">
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-zinc-500">
                         <span
                           className={`shrink-0 px-1.5 py-0.5 rounded text-[9px] ${
                             hasZoneEntities(s.type)
-                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                              : 'bg-white/10 text-white/50 border border-white/10'
+                              ? 'bg-zinc-700 text-zinc-400 border border-zinc-600'
+                              : 'bg-zinc-700 text-zinc-500 border border-zinc-700'
                           }`}
                           title={hasZoneEntities(s.type) ? 'Shows zones and institutions on map' : 'Metrics only'}
                         >
@@ -284,7 +284,7 @@ export default function StressTestSelector({
                       </div>
                       <div className="mt-1 flex flex-wrap gap-1">
                         {(s as { applicable_regulations?: string[] }).applicable_regulations?.map((r) => (
-                          <span key={r} className="px-1.5 py-0.5 rounded bg-white/10 text-[9px] text-white/60">
+                          <span key={r} className="px-1.5 py-0.5 rounded bg-zinc-700 text-[9px] text-zinc-400">
                             {r}
                           </span>
                         ))}
@@ -300,8 +300,8 @@ export default function StressTestSelector({
         {activeTab === 'extended' && (
           <motion.div key="extended" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-1">
             <div className="flex items-center gap-2 mb-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-              <span className="text-white/30 text-[10px] uppercase tracking-[0.2em]">Scenarios</span>
+              <div className="w-1.5 h-1.5 rounded-full bg-zinc-500 animate-pulse" />
+              <span className="text-zinc-600 text-[10px] uppercase tracking-[0.2em]">Scenarios</span>
             </div>
             {extendedList.map((type) => {
               const colors = colorClasses[type.color]
@@ -311,12 +311,12 @@ export default function StressTestSelector({
                 <div key={type.id} className="relative">
                   <button
                     onClick={() => setExpandedType(isExpanded ? null : type.id)}
-                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-all border ${isExpanded || hasActive ? `bg-white/5 ${colors.border}` : 'hover:bg-white/5 border-transparent'}`}
+                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-all border ${isExpanded || hasActive ? `bg-zinc-800 ${colors.border}` : 'hover:bg-zinc-800 border-transparent'}`}
                   >
-                    <span className={hasActive ? colors.text : 'text-white/50'}>{type.icon}</span>
-                    <span className={`text-xs flex-1 text-left ${hasActive ? colors.text : 'text-white/60'}`}>{type.label}</span>
-                    <span className="text-white/20 text-[10px]">{type.scenarios.length}</span>
-                    <svg className={`w-3 h-3 text-white/30 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <span className={hasActive ? colors.text : 'text-zinc-500'}>{type.icon}</span>
+                    <span className={`text-xs flex-1 text-left ${hasActive ? colors.text : 'text-zinc-400'}`}>{type.label}</span>
+                    <span className="text-zinc-700 text-[10px]">{type.scenarios.length}</span>
+                    <svg className={`w-3 h-3 text-zinc-600 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                     </svg>
                   </button>
@@ -331,15 +331,15 @@ export default function StressTestSelector({
                                 key={sc.id}
                                 onClick={() => handleScenarioClick(type, sc)}
                                 disabled={isLoading}
-                                className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-left group border transition-all ${isActive ? `bg-white/10 ${colors.border}` : 'border-transparent hover:bg-white/5'}`}
+                                className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-left group border transition-all ${isActive ? `bg-zinc-700 ${colors.border}` : 'border-transparent hover:bg-zinc-800'}`}
                               >
-                                <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isActive ? `${colors.bg} animate-pulse` : 'bg-white/20'}`} />
-                                <span className={`text-xs flex-1 truncate ${isActive ? 'text-white' : 'text-white/50 group-hover:text-white/70'}`}>{sc.name}</span>
+                                <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isActive ? `${colors.bg} animate-pulse` : 'bg-zinc-600'}`} />
+                                <span className={`text-xs flex-1 truncate ${isActive ? 'text-zinc-100' : 'text-zinc-500 group-hover:text-zinc-300'}`}>{sc.name}</span>
                                 <span
                                   className={`shrink-0 px-1.5 py-0.5 rounded text-[9px] ${
                                     hasZoneEntities(type.id)
-                                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                                      : 'bg-white/10 text-white/50 border border-white/10'
+                                      ? 'bg-zinc-700 text-zinc-400 border border-zinc-600'
+                                      : 'bg-zinc-700 text-zinc-500 border border-zinc-700'
                                   }`}
                                   title={hasZoneEntities(type.id) ? 'Shows zones and institutions on map' : 'Metrics only'}
                                 >
@@ -366,16 +366,16 @@ export default function StressTestSelector({
       <AnimatePresence>
         {isLoading && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex justify-center py-2">
-            <div className="w-4 h-4 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
+            <div className="w-4 h-4 border-2 border-zinc-600 border-t-zinc-400 rounded-full animate-spin" />
           </motion.div>
         )}
       </AnimatePresence>
 
       {/* Collapsible: About the stress testing database */}
-      <div className="mt-3 border-t border-white/10 pt-2">
+      <div className="mt-3 border-t border-zinc-800 pt-2">
         <button
           onClick={() => setCollapseInfoOpen((v) => !v)}
-          className="w-full flex items-center justify-between text-white/40 hover:text-white/60 text-[10px] uppercase tracking-wider"
+          className="w-full flex items-center justify-between text-zinc-500 hover:text-zinc-400 text-[10px] uppercase tracking-wider"
         >
           <span>About the stress testing database</span>
           <svg className={`w-3 h-3 transition-transform ${collapseInfoOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -385,7 +385,7 @@ export default function StressTestSelector({
         <AnimatePresence>
           {collapseInfoOpen && (
             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
-              <div className="pt-2 space-y-2 text-[11px] text-white/50 leading-relaxed">
+              <div className="pt-2 space-y-2 text-[11px] text-zinc-500 leading-relaxed">
                 <p>
                   The stress testing database is not a single dataset but four layers: (1) regulatory scenarios (EBA, Fed, NGFS, BIS), (2) macroeconomic time series, (3) climate scenarios, (4) financial proxies (PD, LGD, capital impact).
                 </p>
@@ -393,7 +393,7 @@ export default function StressTestSelector({
                   Sources: EBA/ECB — Adverse/Baseline; Federal Reserve — CCAR/DFAST, Severely Adverse; NGFS — SSP1-2.6, SSP2-4.5, SSP5-8.5; BIS/IMF — system-wide and contagion scenarios.
                 </p>
                 <p>
-                  <span className="text-white/70">For this demo:</span> regulator-recognized scenarios from EBA, Federal Reserve, NGFS, and BIS, adapted to portfolios and jurisdictions.
+                  <span className="text-zinc-300">For this demo:</span> regulator-recognized scenarios from EBA, Federal Reserve, NGFS, and BIS, adapted to portfolios and jurisdictions.
                 </p>
               </div>
             </motion.div>

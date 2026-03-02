@@ -132,7 +132,7 @@ export default function RadarChart({
     plot_bgcolor: 'transparent',
     font: {
       color: chartColors.text.secondary,
-      family: '"Space Grotesk", system-ui, sans-serif',
+      family: '"JetBrains Mono", monospace',
     },
     showlegend: showLegend,
     legend: {
@@ -188,7 +188,7 @@ export default function RadarChart({
           <motion.div
             initial={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 flex items-center justify-center bg-[#0a0f18]/80 rounded-xl z-10"
+            className="absolute inset-0 flex items-center justify-center bg-zinc-950/80 rounded-md z-10"
           >
             <div className="flex flex-col items-center gap-2">
               <motion.div

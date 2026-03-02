@@ -1,425 +1,142 @@
-<!-- Paste into Elementor HTML widget (it supports <style>). -->
-<!-- Crypto Analytics Portal / Digital Assets Analytics — same corporate style as Platform (dark + gold). All content in English. -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<!-- Paste into Elementor HTML widget. Elementor setup: Section → Layout: Full Width, Content Width: Full Width. Section → Style → Background: #000000. Section → Layout → Height: Default (не Min Height 100vh — иначе будет прокрутка под футером). Column padding: 0. -->
 
 <style>
-  .saa-wp-bleed{
-    position:relative;
-    left:50%;
-    margin-left:-50vw;
-    width:100vw;
-    max-width:100vw;
-    background:#000;
-    overflow:hidden;
-  }
-
-  .saa-wp{
-    --bg-void:#000000;
-    --bg-deep:#0a0908;
-    --bg-surface:#0f0e0a;
-    --bg-elevated:#141310;
-    --bg-card:#1a1815;
-
-    --text-primary:#e4e4e7;
-    --text-secondary:#9a9a9a;
-    --text-muted:#6b6b6b;
-
-    --accent-primary:#C9A962;
-    --accent-primary-hover:#D4AF37;
-    --accent-primary-glow:rgba(201,169,98,0.3);
-
-    --border-subtle:rgba(255,255,255,0.06);
-    --border-light:rgba(255,255,255,0.1);
-
-    --font-sans:'Space Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-    --font-display:'Space Grotesk',-apple-system,BlinkMacSystemFont,sans-serif;
-    --font-mono:'JetBrains Mono','SF Mono','Consolas',monospace;
-
-    --text-xs:11px;
-    --text-sm:12px;
-    --text-base:14px;
-    --text-lg:16px;
-    --text-xl:18px;
-    --text-2xl:24px;
-    --text-3xl:32px;
-
-    color:var(--text-primary);
-    font-family:var(--font-sans) !important;
-    line-height:1.6;
-    -webkit-font-smoothing:antialiased;
-    -moz-osx-font-smoothing:grayscale;
-    text-rendering:optimizeLegibility;
-    font-weight:400;
-    letter-spacing:-0.01em !important;
-    font-feature-settings:'cv02','cv03','cv04','cv11';
-    font-optical-sizing:auto;
-  }
-
+  .saa-wp-bleed{background:#000;overflow:hidden !important;min-height:0;display:block;contain:layout style}
+  .saa-wp{overflow:hidden;position:relative;--bg-void:#000000;--bg-deep:#0a0908;--bg-surface:#0f0e0a;--bg-elevated:#141310;--bg-card:#1a1815;--text-primary:#e4e4e7;--text-secondary:#9a9a9a;--text-muted:#6b6b6b;--accent-primary:#C9A962;--accent-primary-hover:#D4AF37;--accent-primary-glow:rgba(201,169,98,0.3);--border-subtle:rgba(255,255,255,0.06);--border-light:rgba(255,255,255,0.1);--font-sans:'JetBrains Mono',monospace;--font-display:'JetBrains Mono',monospace;--font-mono:'JetBrains Mono',monospace;--text-xs:11px;--text-sm:12px;--text-base:14px;--text-lg:16px;--text-xl:18px;--text-2xl:24px;--text-3xl:32px;color:var(--text-primary);font-family:var(--font-sans);line-height:1.6;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;font-weight:400;letter-spacing:0.02em;font-optical-sizing:auto}
   .saa-wp *{box-sizing:border-box}
+  .saa-wp-bleed,.saa-wp-bleed .saa-wp{font-family:'JetBrains Mono',monospace !important}
+  .saa-wp .saa-body,.saa-wp .saa-body *{font-family:var(--font-sans) !important;font-feature-settings:inherit !important;font-optical-sizing:inherit !important;letter-spacing:inherit}
+  .saa-wp .mono,.saa-wp .mono *{font-family:var(--font-mono) !important;letter-spacing:0.02em}
   .saa-wp a{color:var(--accent-primary);text-decoration:none}
   .saa-wp a:hover{color:var(--accent-primary-hover);text-decoration:underline}
   .saa-wp .mono{font-family:var(--font-mono)}
-
-  .saa-wp .content,
-  .saa-wp .content *{
-    font-family:var(--font-sans) !important;
-    font-feature-settings:inherit !important;
-    font-optical-sizing:inherit !important;
-    letter-spacing:inherit !important;
-  }
-  .saa-wp .mono,
-  .saa-wp .mono *{
-    font-family:var(--font-mono) !important;
-    letter-spacing:0.02em;
-  }
-
-  /* Unified font and size for body text (same as Risk Analyzer / Team) */
-  .saa-wp .content{
-    font-family:var(--font-sans) !important;
-    font-size:14px !important;
-    font-weight:400 !important;
-    letter-spacing:-0.01em !important;
-    line-height:1.6 !important;
-    -webkit-font-smoothing:antialiased;
-    -moz-osx-font-smoothing:grayscale;
-    text-rendering:optimizeLegibility;
-    font-feature-settings:'cv02','cv03','cv04','cv11';
-    font-optical-sizing:auto;
-  }
-  .saa-wp .content p,
-  .saa-wp .content p *,
-  .saa-wp .content li,
-  .saa-wp .content ul,
-  .saa-wp .content .card,
-  .saa-wp .content .card *,
-  .saa-wp .content .tagline,
-  .saa-wp .content .kpi div:not(.dot){
-    font-family:var(--font-sans) !important;
-    font-size:14px !important;
-    font-weight:400 !important;
-    letter-spacing:-0.01em !important;
-    line-height:1.6 !important;
-  }
-  .saa-wp .content .lead{font-size:var(--text-lg) !important}
-  .saa-wp .content strong{font-weight:600 !important;font-size:14px !important}
-  .saa-wp .content code.mono{font-family:var(--font-mono) !important;font-size:13px !important}
-
-  .saa-wp .bg{
-    position:absolute;
-    inset:-50%;
-    background:
-      radial-gradient(ellipse at 30% 20%, rgba(201, 169, 98, 0.05) 0%, transparent 50%),
-      radial-gradient(ellipse at 70% 80%, rgba(201, 169, 98, 0.03) 0%, transparent 50%);
-    animation:saaGradientMove 20s ease-in-out infinite;
-    pointer-events:none;
-    z-index:0;
-  }
-  @keyframes saaGradientMove{
-    0%,100%{transform:translate(0,0) scale(1)}
-    33%{transform:translate(2%,2%) scale(1.05)}
-    66%{transform:translate(-2%,-2%) scale(0.95)}
-  }
-
-  .saa-wp .content{
-    position:relative;
-    z-index:1;
-    max-width:1200px;
-    margin:0 auto;
-    padding:48px 24px 72px;
-  }
-
-  .saa-wp .topbar{
-    position:sticky;
-    top:0;
-    z-index:2;
-    background:rgba(10,9,8,0.85);
-    backdrop-filter:blur(10px);
-    border-bottom:1px solid var(--border-subtle);
-  }
-  .saa-wp .topbar-inner{
-    max-width:1200px;
-    margin:0 auto;
-    padding:16px 24px;
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-    gap:12px;
-  }
+  .saa-wp .saa-body{font-size:14px !important;font-weight:400 !important;letter-spacing:inherit;line-height:1.6 !important;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;font-optical-sizing:auto}
+  .saa-wp .saa-body p,.saa-wp .saa-body p *,.saa-wp .saa-body li,.saa-wp .saa-body ul,.saa-wp .saa-body .card,.saa-wp .saa-body .card *,.saa-wp .saa-body .tagline,.saa-wp .saa-body .kpi div:not(.dot){font-family:var(--font-sans) !important;font-size:14px !important;font-weight:400 !important;letter-spacing:inherit;line-height:1.6 !important}
+  .saa-wp .saa-body .lead{font-size:var(--text-lg) !important}
+  .saa-wp .saa-body strong{font-weight:600 !important;font-size:14px !important}
+  .saa-wp .saa-body code.mono{font-family:var(--font-mono) !important;font-size:13px !important}
+  .saa-wp .bg{position:absolute;inset:-50%;background:radial-gradient(ellipse at 30% 20%, rgba(201,169,98,0.05) 0%, transparent 50%),radial-gradient(ellipse at 70% 80%, rgba(201,169,98,0.03) 0%, transparent 50%);animation:saaGradientMove 20s ease-in-out infinite;pointer-events:none;z-index:0}
+  @keyframes saaGradientMove{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(2%,2%) scale(1.05)}66%{transform:translate(-2%,-2%) scale(0.95)}}
+  .saa-wp .saa-body{position:relative;z-index:1;width:100%;max-width:1400px;margin:0 auto;padding:48px clamp(24px, 5vw, 48px) 72px}
+  .saa-wp .topbar{position:sticky;top:0;z-index:2;background:rgba(10,9,8,0.85);backdrop-filter:blur(10px);border-bottom:1px solid var(--border-subtle)}
+  .saa-wp .topbar-inner{width:100%;max-width:1400px;margin:0 auto;padding:16px clamp(24px, 5vw, 48px);display:flex;align-items:center;justify-content:space-between;gap:12px}
   .saa-wp .brand{display:flex;align-items:center;gap:12px;text-decoration:none}
-  .saa-wp .brand-mark{
-    width:36px;height:36px;border:1px solid var(--accent-primary);border-radius:8px;
-    display:flex;align-items:center;justify-content:center;
-    font-family:var(--font-mono) !important;font-size:12px;font-weight:600;color:var(--accent-primary);
-  }
-  .saa-wp .brand-text{color:var(--text-primary);font-size:13px;font-weight:500}
+  .saa-wp .brand-logo{height:36px;width:auto;display:inline-block;flex-shrink:0}
+  .saa-wp .brand-logo svg{height:36px;width:auto;display:block;vertical-align:top}
   .saa-wp .nav{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}
-  .saa-wp .nav a{
-    font-size:13px;color:var(--text-secondary);
-    padding:8px 10px;border-radius:8px;border:1px solid transparent;
-  }
+  .saa-wp .nav a{font-size:13px;color:var(--text-secondary);padding:8px 10px;border-radius:8px;border:1px solid transparent}
   .saa-wp .nav a:hover{color:var(--text-primary);border-color:var(--border-light);text-decoration:none}
-
-  .saa-wp .eyebrow{
-    font-size:var(--text-xs);
-    letter-spacing:0.12em;
-    text-transform:uppercase;
-    color:var(--text-muted);
-    font-family:var(--font-mono) !important;
-  }
-  .saa-wp h1{
-    margin:12px 0 10px;
-    font-size:var(--text-3xl);
-    font-weight:700;
-    letter-spacing:-0.02em;
-    line-height:1.15;
-    font-family:var(--font-display) !important;
-    background:linear-gradient(135deg, var(--text-primary) 0%, var(--accent-primary) 50%, var(--text-primary) 100%);
-    background-size:200% auto;
-    -webkit-background-clip:text;
-    -webkit-text-fill-color:transparent;
-    background-clip:text;
-    animation:saaTitleShift 8s ease infinite;
-  }
+  .saa-wp .eyebrow{font-size:var(--text-xs);letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);font-family:var(--font-mono) !important}
+  .saa-wp h1{margin:12px 0 10px;font-size:var(--text-3xl);font-weight:700;letter-spacing:-0.02em;line-height:1.15;font-family:var(--font-display) !important;background:linear-gradient(135deg, var(--text-primary) 0%, var(--accent-primary) 50%, var(--text-primary) 100%);background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:saaTitleShift 8s ease infinite}
   @keyframes saaTitleShift{0%,100%{background-position:0% center}50%{background-position:200% center}}
-  .saa-wp h2{
-    margin:28px 0 12px;
-    font-size:var(--text-xl);
-    font-weight:600;
-    letter-spacing:-0.01em;
-    font-family:var(--font-display) !important;
-    color:var(--text-primary);
-  }
-  .saa-wp h3{
-    margin:0 0 6px;
-    font-size:var(--text-base);
-    font-weight:600;
-    color:var(--text-primary);
-    font-family:var(--font-display) !important;
-    letter-spacing:-0.01em;
-  }
-  .saa-wp .content p,
-  .saa-wp .content p *{
-    margin:10px 0;
-    color:var(--text-secondary) !important;
-    font-size:var(--text-base) !important;
-    font-weight:400 !important;
-    letter-spacing:-0.01em !important;
-  }
+  .saa-wp h2{margin:28px 0 12px;font-size:var(--text-xl);font-weight:600;letter-spacing:0.02em;font-family:var(--font-display) !important;color:var(--text-primary)}
+  .saa-wp h3{margin:0 0 6px;font-size:var(--text-base);font-weight:600;color:var(--text-primary);font-family:var(--font-display) !important;letter-spacing:0.02em}
+  .saa-wp .saa-body p,.saa-wp .saa-body p *{margin:10px 0;color:var(--text-secondary) !important;font-size:var(--text-base) !important;font-weight:400 !important;letter-spacing:inherit}
   .saa-wp .lead{font-size:var(--text-lg) !important;color:var(--text-secondary);max-width:92ch}
   .saa-wp .muted{color:var(--text-muted)}
-
-  .saa-wp .module-hero-visual{
-    width:100%;
-    max-width:720px;
-    height:200px;
-    margin:20px 0 28px;
-    border-radius:16px;
-    background:linear-gradient(135deg, rgba(212,175,55,0.05) 0%, rgba(10,14,23,0.8) 100%);
-    border:1px solid var(--border-subtle);
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    overflow:hidden;
-    position:relative;
-  }
-  .saa-wp .module-hero-visual .visual-glow{
-    position:absolute;
-    width:120px;
-    height:120px;
-    background:radial-gradient(circle, rgba(212,175,55,0.15) 0%, transparent 70%);
-    border-radius:50%;
-    filter:blur(20px);
-    animation:visualPulseCrypto 3s ease-in-out infinite;
-  }
-  @keyframes visualPulseCrypto{
-    0%,100%{opacity:0.5;transform:scale(1)}
-    50%{opacity:0.8;transform:scale(1.1)}
-  }
-  @keyframes nodeFloatCrypto{
-    0%,100%{transform:translateY(0)}
-    50%{transform:translateY(-5px)}
-  }
-  @keyframes dataPulseCrypto{
-    0%,100%{opacity:0.3}
-    50%{opacity:1}
-  }
-  @keyframes flowMoveCrypto{
-    0%{stroke-dashoffset:20}
-    100%{stroke-dashoffset:0}
-  }
-  .saa-wp .module-hero-visual svg{
-    width:100%;
-    height:100%;
-    object-fit:contain;
-    padding:0 24px;
-  }
-
+  .saa-wp .module-hero-canvas{width:100%;height:220px;margin:20px 0 28px;border-radius:16px;background:linear-gradient(135deg, rgba(212,175,55,0.03) 0%, rgba(10,14,23,0.6) 100%);border:1px solid var(--border-subtle);overflow:hidden;position:relative}
+  .saa-wp .module-hero-canvas canvas{width:100%;height:100%;display:block}
   .saa-wp .grid{display:grid;gap:16px}
-  @media (min-width: 900px){ .saa-wp .grid.cols-2{grid-template-columns:1fr 1fr} }
-  .saa-wp .card{
-    background:var(--bg-elevated);
-    border:1px solid var(--border-subtle);
-    border-radius:12px;
-    padding:16px;
-    transition:all .25s ease;
-  }
+  @media (min-width: 900px){.saa-wp .grid.cols-2{grid-template-columns:1fr 1fr}}
+  .saa-wp .card{background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:12px;padding:16px;transition:all .25s ease}
   .saa-wp .card:hover{border-color:rgba(201,169,98,.28);box-shadow:0 12px 30px rgba(0,0,0,.35);transform:translateY(-2px)}
   .saa-wp ul{margin:12px 0 0 18px;padding-left:20px;color:var(--text-secondary);line-height:1.8;font-size:var(--text-base)}
   .saa-wp ul li{margin:0 0 8px}
   .saa-wp .hr{height:1px;background:var(--border-subtle);margin:20px 0}
   .saa-wp .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
-  .saa-wp .btn{
-    display:inline-flex;align-items:center;justify-content:center;gap:10px;
-    padding:10px 14px;
-    border-radius:10px;
-    border:1px solid var(--border-light);
-    background:transparent;
-    color:var(--text-primary);
-    font-size:13px;
-    font-weight:500;
-    cursor:pointer;
-    transition:all .2s ease;
-    text-decoration:none;
-  }
+  .saa-wp .btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;padding:10px 14px;border-radius:10px;border:1px solid var(--border-light);background:transparent;color:var(--text-primary);font-size:13px;font-weight:500;cursor:pointer;transition:all .2s ease;text-decoration:none}
   .saa-wp .btn:hover{border-color:var(--accent-primary);color:var(--accent-primary);text-decoration:none}
   .saa-wp .btn.primary{background:var(--accent-primary);border-color:var(--accent-primary);color:#000}
   .saa-wp .btn.primary:hover{background:var(--accent-primary-hover);border-color:var(--accent-primary-hover);color:#000}
-  .saa-wp .page-footer{ margin-top:24px;padding-top:20px;border-top:1px solid var(--border-subtle);display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:20px }
-  .saa-wp .page-footer-copy{ color:var(--text-muted);font-size:12px }
-  .saa-wp .page-footer-legal{ display:flex;align-items:center;gap:8px;flex-wrap:wrap }
-  .saa-wp .page-footer-legal a{ color:var(--text-muted);font-size:12px;text-decoration:none }
-  .saa-wp .page-footer-legal a:hover{ color:var(--text-secondary) }
-  .saa-wp .page-footer-badge img{ height:32px;width:auto;display:block }
-  .saa-wp .page-footer-badge:hover img{ opacity:0.9 }
+  .saa-wp .page-footer{margin-top:24px;padding-top:20px;border-top:1px solid var(--border-subtle);display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:20px}
+  .saa-wp .page-footer-copy{color:var(--text-muted);font-size:12px}
+  .saa-wp .page-footer-legal{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .saa-wp .page-footer-legal a{color:var(--text-muted);font-size:12px;text-decoration:none}
+  .saa-wp .page-footer-legal a:hover{color:var(--text-secondary)}
+  .saa-wp .page-footer-badge img{height:32px;width:auto;display:block}
+  .saa-wp .page-footer-badge:hover img{opacity:0.9}
 </style>
-
 <div class="saa-wp-bleed">
   <div class="saa-wp">
     <div class="bg" aria-hidden="true"></div>
-
     <div class="topbar">
-      <div class="topbar-inner">
-        <a class="brand" href="/" aria-label="SAA Alliance home">
-          <div class="brand-mark">SAA</div>
-          <div class="brand-text">Scientific Analytics Alliance</div>
-        </a>
-        <nav class="nav" aria-label="SAA navigation">
-          <a href="/about/">About</a>
+  <div class="topbar-inner"><a class="brand" href="/" aria-label="SAA Alliance home">
+  <span class="brand-logo" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 200" role="img" aria-label="Scientific Analytics Alliance"><defs><radialGradient id="saa-wp-globe-da" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#b8962e" stop-opacity="0.2"/><stop offset="100%" stop-color="#b8962e" stop-opacity="0"/></radialGradient><filter id="saa-wp-glow-da"><feGaussianBlur stdDeviation="2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><rect width="900" height="200" fill="#080808"/><circle cx="100" cy="100" r="72" fill="url(#saa-wp-globe-da)"/><circle cx="100" cy="100" r="70" fill="none" stroke="#b8962e" stroke-width="0.9" opacity="0.45"/><ellipse cx="100" cy="100" rx="70" ry="15" fill="none" stroke="#b8962e" stroke-width="0.6" opacity="0.28"/><ellipse cx="100" cy="100" rx="61" ry="37" fill="none" stroke="#b8962e" stroke-width="0.6" opacity="0.22"/><ellipse cx="100" cy="100" rx="42" ry="54" fill="none" stroke="#b8962e" stroke-width="0.6" opacity="0.22"/><ellipse cx="100" cy="100" rx="17" ry="67" fill="none" stroke="#b8962e" stroke-width="0.6" opacity="0.22"/><path d="M100,30 Q174,100 100,170" fill="none" stroke="#b8962e" stroke-width="0.6" opacity="0.22"/><path d="M100,30 Q26,100 100,170" fill="none" stroke="#b8962e" stroke-width="0.6" opacity="0.22"/><circle cx="100" cy="38" r="4" fill="#b8962e" filter="url(#saa-wp-glow-da)"/><circle cx="148" cy="62" r="3" fill="#b8962e" opacity="0.88"/><circle cx="160" cy="108" r="3.5" fill="#b8962e" filter="url(#saa-wp-glow-da)"/><circle cx="136" cy="150" r="3" fill="#b8962e" opacity="0.85"/><circle cx="64" cy="150" r="3" fill="#b8962e" opacity="0.85"/><circle cx="40" cy="108" r="3.5" fill="#b8962e" filter="url(#saa-wp-glow-da)"/><circle cx="52" cy="62" r="3" fill="#b8962e" opacity="0.88"/><circle cx="100" cy="100" r="5" fill="#b8962e" filter="url(#saa-wp-glow-da)"/><g opacity="0.5"><line x1="100" y1="38" x2="148" y2="62" stroke="#b8962e" stroke-width="1.1"/><line x1="148" y1="62" x2="160" y2="108" stroke="#b8962e" stroke-width="1.1"/><line x1="160" y1="108" x2="136" y2="150" stroke="#b8962e" stroke-width="1.1"/><line x1="136" y1="150" x2="64" y2="150" stroke="#b8962e" stroke-width="1.1"/><line x1="64" y1="150" x2="40" y2="108" stroke="#b8962e" stroke-width="1.1"/><line x1="40" y1="108" x2="52" y2="62" stroke="#b8962e" stroke-width="1.1"/><line x1="52" y1="62" x2="100" y2="38" stroke="#b8962e" stroke-width="1.1"/></g><g opacity="0.45"><line x1="100" y1="38" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/><line x1="148" y1="62" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/><line x1="160" y1="108" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/><line x1="136" y1="150" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/><line x1="64" y1="150" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/><line x1="40" y1="108" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/><line x1="52" y1="62" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/></g><g opacity="0.2"><line x1="100" y1="38" x2="160" y2="108" stroke="#b8962e" stroke-width="0.7"/><line x1="148" y1="62" x2="136" y2="150" stroke="#b8962e" stroke-width="0.7"/><line x1="160" y1="108" x2="64" y2="150" stroke="#b8962e" stroke-width="0.7"/><line x1="136" y1="150" x2="40" y2="108" stroke="#b8962e" stroke-width="0.7"/><line x1="64" y1="150" x2="52" y2="62" stroke="#b8962e" stroke-width="0.7"/><line x1="40" y1="108" x2="100" y2="38" stroke="#b8962e" stroke-width="0.7"/></g><line x1="196" y1="30" x2="196" y2="170" stroke="#b8962e" stroke-width="0.8" opacity="0.35"/><text x="375" y="90" font-family="Georgia,serif" font-size="62" font-weight="700" fill="#f0ece0" text-anchor="middle" letter-spacing="10">SAA</text><line x1="240" y1="106" x2="510" y2="106" stroke="#b8962e" stroke-width="1.6"/><text x="375" y="142" font-family="Georgia,serif" font-size="26" font-weight="400" fill="#b8962e" text-anchor="middle" letter-spacing="13">ALLIANCE</text><line x1="556" y1="30" x2="556" y2="170" stroke="#b8962e" stroke-width="0.8" opacity="0.35"/><text x="728" y="88" font-family="Georgia,serif" font-size="13" fill="#f0ece0" opacity="0.85" text-anchor="middle" letter-spacing="3">SCIENTIFIC ANALYTICS ALLIANCE</text><line x1="572" y1="100" x2="884" y2="100" stroke="#b8962e" stroke-width="0.7" opacity="0.4"/><text x="728" y="118" font-family="Georgia,serif" font-size="11" fill="#b8962e" opacity="0.75" text-anchor="middle" letter-spacing="2">AI-Powered Research &amp; Risk Intelligence</text></svg></span>
+  </a><nav class="nav" aria-label="SAA navigation"><a href="/about/">About</a>
           <a href="/platform/">Platform</a>
           <a href="/how-it-works/">How it works</a>
           <a href="/team/">Team</a>
-          <a href="/contact/">Contact</a>
-        </nav>
+  <a href="/contact/">Contact</a></nav></div>
       </div>
-    </div>
-
-    <div class="content">
+  <div class="saa-body">
       <div class="eyebrow">Platform · Digital Assets</div>
       <h1>Crypto Analytics Portal</h1>
-      <p class="lead">
-        Institutional-grade digital asset intelligence platform: multi-metrics, AI analytics (NVIDIA DeepSeek R1, Llama), compliance map, trading dashboard with TradingView, ARIN integration, and multi-language reports.
-      </p>
-
-      <div class="module-hero-visual" aria-hidden="true">
-        <div class="visual-glow"></div>
-        <svg viewBox="0 0 400 180" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <linearGradient id="nodeGradCrypto" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="#d4af37" stop-opacity="0.8"/>
-              <stop offset="100%" stop-color="#d4af37" stop-opacity="0.3"/>
-            </linearGradient>
-          </defs>
-          <line x1="80" y1="90" x2="160" y2="50" stroke="#d4af37" stroke-width="1" opacity="0.4" stroke-dasharray="5 3"/>
-          <line x1="80" y1="90" x2="160" y2="130" stroke="#d4af37" stroke-width="1" opacity="0.4" stroke-dasharray="5 3"/>
-          <line x1="160" y1="50" x2="240" y2="90" stroke="#d4af37" stroke-width="1" opacity="0.4" stroke-dasharray="5 3"/>
-          <line x1="160" y1="130" x2="240" y2="90" stroke="#d4af37" stroke-width="1" opacity="0.4" stroke-dasharray="5 3"/>
-          <line x1="240" y1="90" x2="320" y2="50" stroke="#d4af37" stroke-width="1" opacity="0.4" stroke-dasharray="5 3"/>
-          <line x1="240" y1="90" x2="320" y2="130" stroke="#d4af37" stroke-width="1" opacity="0.4" stroke-dasharray="5 3"/>
-          <circle cx="80" cy="90" r="16" fill="url(#nodeGradCrypto)" style="animation: nodeFloatCrypto 3s ease-in-out infinite;"/>
-          <circle cx="160" cy="50" r="12" fill="url(#nodeGradCrypto)" style="animation: nodeFloatCrypto 3s ease-in-out 0.5s infinite;"/>
-          <circle cx="160" cy="130" r="12" fill="url(#nodeGradCrypto)" style="animation: nodeFloatCrypto 3s ease-in-out 1s infinite;"/>
-          <circle cx="240" cy="90" r="20" fill="#d4af37" style="animation: dataPulseCrypto 2s ease-in-out infinite;"/>
-          <circle cx="320" cy="50" r="10" fill="url(#nodeGradCrypto)" style="animation: nodeFloatCrypto 3s ease-in-out 1.5s infinite;"/>
-          <circle cx="320" cy="130" r="10" fill="url(#nodeGradCrypto)" style="animation: nodeFloatCrypto 3s ease-in-out 2s infinite;"/>
-          <text x="240" y="94" fill="#0a0e17" font-size="10" font-weight="bold" text-anchor="middle">BTC</text>
-        </svg>
-      </div>
-
-      <div class="btns">
-        <a class="btn primary" href="https://crypto.saa-alliance.com/" target="_blank" rel="noopener">Launch Crypto Analytics Portal</a>
-        <a class="btn" href="/platform/">Back to Platform</a>
-      </div>
-
+  <p class="lead">Institutional digital asset analytics: <strong>multi-metrics (6 categories)</strong>, <strong>rating v1.4</strong>, <strong>Risk &amp; Intelligence OS v2</strong> (Decisions, Send to ARIN, full audit trace). Report Orchestrator and Team; alert subscriptions. NVIDIA NIM: DeepSeek R1 (summary), Llama 3.1 8B (sentiment), Dracarys 70B (fallback). React + Go (Gin). crypto.saa-alliance.com</p>
+  
+  <div class="module-hero-canvas" aria-hidden="true"><canvas id="heroCanvas"></canvas></div>
+  <div class="btns"><a class="btn primary" href="https://crypto.saa-alliance.com/" target="_blank" rel="noopener">Launch Crypto Analytics Portal</a>
+  <a class="btn" href="https://saa-alliance.com/platform/">Back to Platform</a></div>
       <h2>About</h2>
-      <p>
-        Crypto Analytics Portal is a full-featured institutional digital asset analytics platform. It combines multi-metrics, AI analytics (NVIDIA DeepSeek R1, Llama), a compliance map, a trading dashboard with TradingView, ARIN Platform integration, and multi-language report generation. The service grew from a metrics dashboard into a full system: real-time data, WebSocket, AI summaries and sentiment, report delivery to ARIN, economic calendar, impact graph, and an extended trading block.
-      </p>
-
+  Crypto Analytics Portal is the institutional digital asset module of SAA Alliance. <strong>Multi-metrics</strong> across six categories (Fundamentals, On-Chain, Market &amp; Sentiment, Security, Regulatory, ESG), <strong>rating v1.4</strong>, and <strong>Risk &amp; Intelligence OS v2</strong>: Decisions, Send to ARIN, full audit trace. <strong>Report Orchestrator</strong> and Team; <strong>alert subscriptions</strong>. AI via NVIDIA NIM (DeepSeek R1, Llama 3.1 8B, Dracarys 70B). Compliance map, TradingView dashboard, WebSocket, impact graph, multi-language reports. Production: crypto.saa-alliance.com.
       <h2>Capabilities</h2>
-
       <h3>Multi-metrics and rating</h3>
       <ul>
-        <li>Fundamentals, On-Chain, Market &amp; Sentiment, Security, Regulatory, ESG</li>
-        <li>Weighted model v1.4, investment rating (AA)</li>
+	   <li><strong>Six categories</strong> — Fundamentals, On-Chain, Market &amp; Sentiment, Security, Regulatory, ESG</li>
+	   <li>Weighted model <strong>v1.4</strong>, investment rating (AA)</li>
       </ul>
-
       <h3>AI analytics</h3>
       <ul>
         <li><strong>Executive Summary</strong> in reports — NVIDIA DeepSeek R1 (reasoning, streaming)</li>
         <li><strong>Sentiment</strong> by ticker — Llama 3.1 8B (NVIDIA API)</li>
         <li><strong>Trading Insight</strong> — AI insights in the trading dashboard</li>
       </ul>
-
       <h3>Trading dashboard</h3>
       <ul>
         <li>TradingView widgets, real-time prices (WebSocket)</li>
         <li>Exchange flow, whale activity, orderbook, momentum, DEX volume</li>
         <li>Fear &amp; Greed, economic calendar, AI insight per asset</li>
       </ul>
-
       <h3>Reports and ARIN</h3>
       <ul>
-        <li>Institutional HTML/PDF reports, EN/RU</li>
-        <li><strong>Send to ARIN</strong> — send analysis to <a href="https://arin.saa-alliance.com" target="_blank" rel="noopener">ARIN Platform</a></li>
-        <li>Report window and offline HTML download</li>
+	   <li><strong>Risk &amp; Intelligence OS v2</strong> — Decisions, Send to ARIN, full audit trace</li>
+	   <li><strong>Report Orchestrator</strong> and Team; <strong>alert subscriptions</strong></li>
+	   <li>Institutional HTML/PDF reports, EN/RU; report window and offline HTML download</li>
+	   <li><strong>Send to ARIN</strong> — send analysis to <a href="https://arin.saa-alliance.com" target="_blank" rel="noopener">ARIN Platform</a> for unified verdict</li>
       </ul>
-
       <h3>Visualization and backend</h3>
       <ul>
         <li>Interactive <strong>Compliance Map</strong> by region</li>
         <li><strong>Impact Graph Network</strong> (vis-network) — metric influence graph</li>
         <li>Price charts and price block. CoinGecko (live + cache), multi-API layer, ARIN client. <strong>saa-metrics</strong> module (hexagonal: domain, adapters, usecase). Rate limiting, CORS, CSP, WebSocket hub.</li>
       </ul>
-
       <h2>Technology stack</h2>
       <div class="grid cols-2">
         <div class="card">
           <h3>Frontend</h3>
-          <p>React 18, TypeScript. TailwindCSS, Framer Motion. React Router, Lucide React. Three.js, @react-three/fiber, @react-three/drei (Earth 3D). vis-network (Impact Graph). MetricCard, ComplianceMap, TradingViewSection, PriceChartWidget, AISummary, ImpactGraphNetwork, ReportButton, ReportWindow.</p>
+  React 18, TypeScript. TailwindCSS, Framer Motion. React Router, Lucide React. Three.js, @react-three/fiber, @react-three/drei (Earth 3D). vis-network (Impact Graph). MetricCard, ComplianceMap, TradingViewSection, PriceChartWidget, AISummary, ImpactGraphNetwork, ReportButton, ReportWindow.
+  
         </div>
         <div class="card">
           <h3>Backend</h3>
-          <p>Go 1.24, Gin. CoinGecko API, multi-API, ARIN client. NVIDIA API: DeepSeek R1, Llama 3.1 8B (sentiment), Dracarys 70B (fallback). Gorilla WebSocket, rate limiting. SPA: static from <code class="mono">build/</code>, NoRoute → index.html.</p>
+  Go 1.24, Gin. CoinGecko API, multi-API, ARIN client. NVIDIA API: DeepSeek R1, Llama 3.1 8B (sentiment), Dracarys 70B (fallback). Gorilla WebSocket, rate limiting. SPA: static from <code class="mono">build/</code>, NoRoute → index.html.
+  
         </div>
         <div class="card">
           <h3>saa-metrics (hexagonal)</h3>
-          <p>domain (asset, metrics, ports), adapters (fundamentals, onchain, market, security, regulatory, esg), usecase (assessment, scoring), delivery/http.</p>
+  domain (asset, metrics, ports), adapters (fundamentals, onchain, market, security, regulatory, esg), usecase (assessment, scoring), delivery/http.
+  
         </div>
         <div class="card">
           <h3>Production</h3>
-          <p>Contabo. Live: <a href="https://crypto.saa-alliance.com" target="_blank" rel="noopener">crypto.saa-alliance.com</a>. Nginx: proxy <code class="mono">/api</code> and <code class="mono">/ws</code> to 8083, serve SPA from <code class="mono">build</code>. SSL via Certbot.</p>
+  Contabo. Live: <a href="https://crypto.saa-alliance.com" target="_blank" rel="noopener">crypto.saa-alliance.com</a>. Nginx: proxy <code class="mono">/api</code> and <code class="mono">/ws</code> to 8083, serve SPA from <code class="mono">build</code>. SSL via Certbot.
+  
         </div>
       </div>
-
       <h2>Institutional rating (v1.4)</h2>
-      <p>
         Fundamentals 30% (Market Cap, Dev Activity, Governance); On-Chain 20% (Active Addresses, Volume, TVL); Market &amp; Sentiment 20% (Volatility, BTC Correlation, Sentiment); Security 15% (Audits, Bug Bounty, Incidents); Regulatory 10% (US, EU, Sanctions); ESG 5% (ESG Score, DAO, Transparency).
-      </p>
-
       <h2>API (main)</h2>
       <p class="muted">Base: <code class="mono">/api</code></p>
+  
       <ul>
         <li><strong>GET</strong> <code class="mono">/api/live/:symbol</code> — Real-time metrics</li>
         <li><strong>GET</strong> <code class="mono">/api/asset/:symbol/metrics</code> — Dashboard metrics (aggregate)</li>
@@ -432,35 +149,105 @@
         <li><strong>GET</strong> <code class="mono">/api/trading/exchange-flow/:symbol</code>, <code class="mono">whale-activity</code>, <code class="mono">orderbook</code>, <code class="mono">momentum</code>, <code class="mono">dex-volume</code>, <code class="mono">fear-greed</code>, <code class="mono">insight/:symbol</code>, <code class="mono">economic-events</code></li>
         <li><strong>GET</strong> <code class="mono">/api/ws</code> — WebSocket (real-time prices). <strong>POST</strong> <code class="mono">/api/cache/clear</code> — Clear report cache</li>
       </ul>
-
       <h2>Quick start</h2>
-      <p>
         Prerequisites: Node.js 18+, Go 1.24+. Frontend: <code class="mono">npm install</code>, <code class="mono">npm start</code> (dev), <code class="mono">npm run build</code> (production). Backend: <code class="mono">go mod download</code>, <code class="mono">go build -o saa-backend main.go</code>, <code class="mono">./saa-backend</code> (port 8083). .env: COINGECKO_API_KEY, NVIDIA_API_KEY_CRYPTO, PORT, GIN_MODE, REACT_APP_API_URL.
-      </p>
-
       <h2>Security</h2>
-      <p>
         CORS whitelist in production; CSP (different policies for reports with TradingView and for SPA); rate limiting; X-Content-Type-Options, X-Frame-Options, Referrer-Policy; keys only via environment variables.
-      </p>
-
+  <h2>Related</h2>
+  Crypto Analytics Portal is one of six production modules in the SAA Alliance Risk &amp; Intelligence OS. The others: Global Risk Platform, Risk Analyzer, ARIN Platform, Investment Dashboard, News Analytics — see <a href="https://saa-alliance.com/platform/">Platform</a> and the main site.
       <div class="hr"></div>
-      <div class="btns">
-        <a class="btn primary" href="https://crypto.saa-alliance.com/" target="_blank" rel="noopener">Launch Crypto Analytics Portal</a>
-        <a class="btn" href="/platform/">All modules</a>
-        <a class="btn" href="/contact/">Contact</a>
-      </div>
-
-      <footer class="page-footer" role="contentinfo">
-        <span class="page-footer-copy">© 2025 Scientific Analytics Alliance • Premium Research & Wealth Intelligence</span>
-        <div class="page-footer-legal">
-          <a href="/privacy-policy/">Privacy Policy</a>
-          <span class="muted" style="font-size:12px">•</span>
-          <a href="/terms/">Terms of Use</a>
-        </div>
-        <a href="https://www.nvidia.com/en-us/startups/" target="_blank" rel="noopener" class="page-footer-badge" aria-label="NVIDIA Inception Program">
-          <img src="https://saa-alliance.com/wp-content/uploads/2026/01/nvidia-inception-program-badge-rgb-1c-blk-for-screen.png" alt="NVIDIA Inception Program Member" loading="lazy" decoding="async">
-        </a>
-      </footer>
+  <div class="btns"><a class="btn primary" href="https://crypto.saa-alliance.com/" target="_blank" rel="noopener">Launch Crypto Analytics Portal</a>
+  <a class="btn" href="https://saa-alliance.com/platform/">All modules</a>
+  <a class="btn" href="/contact/">Contact</a></div>
+  <footer class="page-footer" role="contentinfo"><span class="page-footer-copy">© 2026 Scientific Analytics Alliance Inc. • Premium Research &amp; Wealth Intelligence</span>
+  <div class="page-footer-legal"><a href="/privacy-policy/">Privacy Policy</a>
+  <span class="muted" style="font-size: 12px;">•</span>
+  <a href="/terms/">Terms of Use</a></div>
+  <a class="page-footer-badge" href="https://www.nvidia.com/en-us/startups/" target="_blank" rel="noopener" aria-label="NVIDIA Inception Program">
+  <img src="https://saa-alliance.com/wp-content/uploads/2026/01/nvidia-inception-program-badge-rgb-1c-blk-for-screen.png" alt="NVIDIA Inception Program Member" />
+  </a>
+  
+  </footer></div>
     </div>
   </div>
-</div>
+  <script>
+  (function(){
+  var c=document.getElementById('heroCanvas');if(!c)return;var x=c.getContext('2d');
+  var dpr=window.devicePixelRatio||1;
+  function phaseColor(phi,a){var h=42+145*(0.5+0.5*Math.sin(phi));return'hsla('+h+',55%,52%,'+a+')'}
+  function neonGlow(px,py,r,phi){var g=x.createRadialGradient(px,py,0,px,py,r);g.addColorStop(0,phaseColor(phi,0.7));g.addColorStop(0.35,phaseColor(phi,0.25));g.addColorStop(1,phaseColor(phi,0));x.fillStyle=g;x.beginPath();x.arc(px,py,r,0,Math.PI*2);x.fill()}
+  var particleX=-0.5,partDir=1,partSpeed=0.0003;
+  function sz(){var r=c.parentElement.getBoundingClientRect();c.width=r.width*dpr;c.height=r.height*dpr;x.setTransform(dpr,0,0,dpr,0,0)}
+  function draw(now){
+	var w=c.width/dpr,h=c.height/dpr;x.clearRect(0,0,w,h);
+	var cy=h*0.5,margin=w*0.06;
+	var bL=w*0.42,bR=w*0.58,bW=bR-bL;
+	var waveH=h*0.28,steps=200;
+	particleX+=partDir*partSpeed;
+	if(particleX>1.5){particleX=-0.5}
+	var k=6,decay=3.5,kT=4,transRatio=0.4;
+	var barrierPulse=0.5+0.15*Math.sin(now*0.002);
+	x.fillStyle='rgba(201,169,98,'+(0.04*barrierPulse)+')';
+	x.fillRect(bL,h*0.15,bW,h*0.7);
+	x.strokeStyle=phaseColor(Math.PI*0.5,0.35*barrierPulse);x.lineWidth=1.5;
+	x.strokeRect(bL,h*0.15,bW,h*0.7);
+	x.font='500 10px "JetBrains Mono",monospace';
+	x.textAlign='center';x.textBaseline='bottom';
+	x.fillStyle=phaseColor(Math.PI*0.5,0.5);x.fillText('V(x)',bL+bW/2,h*0.14);
+	x.font='400 8px "JetBrains Mono",monospace';
+	x.fillStyle=phaseColor(0,0.35);x.textBaseline='top';
+	x.fillText('E',margin+10,h*0.15);
+	x.setLineDash([3,5]);x.strokeStyle=phaseColor(0,0.2);x.lineWidth=0.8;
+	x.beginPath();x.moveTo(margin,cy);x.lineTo(w-margin,cy);x.stroke();x.setLineDash([]);
+	x.beginPath();
+	for(var s=0;s<=steps;s++){
+	  var xFrac=s/steps;var px=margin+xFrac*(w-2*margin);
+	  var xRel=(px-margin)/(w-2*margin);var py;
+	  if(px<bL){
+		var phase=now*0.002;
+		py=cy-Math.sin(xRel*k*Math.PI*2+phase)*waveH*(0.8+0.2*Math.sin(now*0.001));
+	  }else if(px<=bR){
+		var dIn=(px-bL)/bW;
+		var envL=Math.exp(-decay*dIn);var envR=transRatio*Math.exp(-decay*(1-dIn));
+		var env=envL+envR;
+		py=cy-env*Math.sin(now*0.002)*waveH*0.5;
+	  }else{
+		var phase2=now*0.002+Math.PI*0.7;
+		py=cy-Math.sin((xRel-0.58)*kT*Math.PI*2+phase2)*waveH*transRatio*(0.8+0.2*Math.sin(now*0.001));
+	  }
+	  if(s===0)x.moveTo(px,py);else x.lineTo(px,py);
+	}
+	var incPhi=0;var transPhi=Math.PI;
+	x.strokeStyle=phaseColor(incPhi,0.7);x.lineWidth=2;x.stroke();
+	x.beginPath();
+	for(var s2=0;s2<=steps;s2++){
+	  var xFrac2=s2/steps;var px2=margin+xFrac2*(w-2*margin);var py2;
+	  if(px2<bL){py2=cy}
+	  else if(px2<=bR){ var dIn2=(px2-bL)/bW;py2=cy-Math.exp(-decay*dIn2)*waveH*0.3-transRatio*Math.exp(-decay*(1-dIn2))*waveH*0.3; }else{ var phase3=now*0.002+Math.PI*0.7; py2=cy-Math.abs(Math.sin(((px2-margin)/(w-2*margin)-0.58)*kT*Math.PI*2+phase3))*waveH*transRatio*0.3; } if(s2===0)x.moveTo(px2,py2);else x.lineTo(px2,py2); } for(var s3=steps;s3>=0;s3--){
+	  var px3=margin+s3/steps*(w-2*margin);
+	  x.lineTo(px3,cy);
+	}
+	x.closePath();
+	if(particleX>0.58){x.fillStyle=phaseColor(transPhi,0.06)}
+	else{x.fillStyle=phaseColor(incPhi,0.06)}
+	x.fill();
+	var partPx=margin+((particleX+0.5)/2)*(w-2*margin);
+	if(partPx>margin&&partPx<w-margin){
+	  var partPhi=partPx<bL?0:(partPx>bR?Math.PI:Math.PI*0.5);
+	  var partA=1;
+	  if(partPx>=bL&&partPx<=bR){partA=Math.exp(-decay*(partPx-bL)/bW)*0.7} else if(partPx>bR){partA=transRatio}
+	  neonGlow(partPx,cy,18*partA+4,partPhi);
+	  x.fillStyle=phaseColor(partPhi,0.9*partA);
+	  x.beginPath();x.arc(partPx,cy,3.5*partA+1,0,Math.PI*2);x.fill();
+	}
+	x.font='400 9px "JetBrains Mono",monospace';x.textAlign='left';x.textBaseline='bottom';
+	x.fillStyle=phaseColor(0,0.45);x.fillText('\u03c8\u2081(x)',margin+5,cy-waveH*0.6);
+	x.textAlign='right';
+	x.fillStyle=phaseColor(Math.PI,0.45);x.fillText('\u03c8\u2082(x)',w-margin-5,cy-waveH*transRatio*0.4);
+	x.textAlign='center';x.textBaseline='top';
+	x.fillStyle=phaseColor(Math.PI*0.5,0.35);x.fillText('Quantum Tunneling',w/2,h-16);
+	requestAnimationFrame(draw);
+  }
+  sz();window.addEventListener('resize',sz);requestAnimationFrame(draw);
+  })();
+  </script>

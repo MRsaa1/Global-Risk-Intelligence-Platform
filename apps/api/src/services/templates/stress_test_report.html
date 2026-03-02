@@ -25,7 +25,7 @@
         }
         
         body {
-            font-family: 'Space Grotesk', 'Helvetica Neue', Arial, sans-serif;
+            font-family: 'JetBrains Mono', monospace;
             font-size: 10pt;
             line-height: 1.5;
             color: #1f2937;
@@ -208,7 +208,7 @@
 <body>
     <div class="header">
         <div class="doc-badge">Confidential · Risk Assessment</div>
-        <h1>Stress Test Report</h1>
+        <h1>{{ 'Stress Test Report V2.0' if report_v2 else 'Stress Test Report' }}</h1>
         <div class="subtitle">{{ report.test_name or 'Risk Analysis' }}</div>
         <div class="meta">
             <strong>City:</strong> {{ report.city_name or 'N/A' }} | 
@@ -216,12 +216,29 @@
             <strong>Generated:</strong> {{ report.generated_at or 'Today' }}
         </div>
     </div>
-    
+    {% if report.regulatory_opening_phrase %}
+    <div class="section" style="margin-top: 12px; padding: 10px; background: #f8fafc; border-left: 4px solid #3b82f6; font-size: 9pt; color: #374151;">
+        <p>{{ report.regulatory_opening_phrase }}</p>
+        <p style="margin-top: 6px; color: #6b7280;">{{ report.regulatory_export_note or 'For a disclosure structured in accordance with applicable framework, use Regulatory Export (Compliance / Municipal).' }}</p>
+    </div>
+    {% endif %}
     <div class="section">
         <h2 class="section-title">Executive Summary</h2>
         <div class="summary-box">
             {{ report.executive_summary | safe }}
         </div>
+        
+        {% if report.decision_object %}
+        <div class="section" style="background: #f1f5f9; border-left: 4px solid #1e3a8a; padding: 12px; margin-top: 15px;">
+            <h3 style="font-size: 11pt; color: #1e3a8a; margin: 0 0 8px;">Risk &amp; Intelligence OS — Decision Object</h3>
+            <p style="font-size: 9pt; margin: 0;"><strong>Consensus:</strong> {{ report.decision_object.consensus.level or '—' }} &nbsp; Score: {{ ((report.decision_object.consensus.score or 0) * 100) | int }}% &nbsp; Confidence: {{ ((report.decision_object.consensus.confidence or 0) * 100) | int }}% &nbsp; Agents: {{ report.decision_object.consensus.agent_count or '—' }}</p>
+            <p style="font-size: 9pt; margin: 4px 0 0;"><strong>Verdict:</strong> {{ report.decision_object.verdict.action or '—' }} &nbsp; Horizon: {{ report.decision_object.verdict.horizon or '—' }} &nbsp; Human review: {{ report.decision_object.verdict.human_review_required or '—' }}</p>
+            {% if report.decision_object.suggested_actions %}
+            <p style="font-size: 9pt; margin: 4px 0 0;">Suggested actions: {{ report.decision_object.suggested_actions | join('; ') }}</p>
+            {% endif %}
+            <p style="font-size: 8pt; color: #64748b; margin: 6px 0 0;"><em>Decision object ID: {{ report.decision_object.object_id or '—' }}</em></p>
+        </div>
+        {% endif %}
         
         <div class="metrics-grid">
             <div class="metric-card">
@@ -246,6 +263,177 @@
             {{ severity_gauge | safe }}
         </div>
     </div>
+
+    {% if report_v2 %}
+    <div class="section page-break">
+        <h2 class="section-title">Stress Test Report 2.0</h2>
+        <p class="text-sm" style="color: #64748b; margin-bottom: 15px;">VaR/CVaR from Monte Carlo (100,000 simulations), financial contagion, recovery timelines.</p>
+        {% if report.event_name and report.city_name %}
+        <div style="background: #ecfeff; border-left: 4px solid #0e7490; padding: 10px; margin-bottom: 15px; font-size: 8pt; color: #0e7490;">
+            <strong>How this scenario applies to this location:</strong> The scenario &quot;{{ report.event_name }}&quot; is used as a <em>hazard type and severity template</em> for {{ report.city_name }}. Impact zones and losses are estimated for this location using equivalent magnitude and exposure. The scenario name may refer to another geography; it does not imply that the named event physically occurs at this location.
+        </div>
+        {% endif %}
+
+        {% if report_v2.probabilistic_metrics %}
+        <h3 style="font-size: 11pt; color: #1e3a8a; margin: 12px 0 8px;">Probabilistic metrics</h3>
+        <table class="risk-zones-table" style="max-width: 480px;">
+            <tbody>
+                <tr><td>Mean (μ)</td><td>{{ report_v2.probabilistic_metrics.mean_loss | default(0) | int }} M</td></tr>
+                <tr><td>Median</td><td>{{ report_v2.probabilistic_metrics.median_loss | default(0) | int }} M</td></tr>
+                <tr><td>VaR 95%</td><td>{{ report_v2.probabilistic_metrics.var_95 | default(0) | int }} M</td></tr>
+                <tr><td>VaR 99%</td><td>{{ report_v2.probabilistic_metrics.var_99 | default(0) | int }} M</td></tr>
+                <tr><td>CVaR 99%</td><td>{{ report_v2.probabilistic_metrics.cvar_99 | default(0) | int }} M</td></tr>
+                <tr><td>Std dev (σ)</td><td>{{ report_v2.probabilistic_metrics.std_dev | default(0) | int }} M</td></tr>
+                {% if report_v2.probabilistic_metrics.confidence_interval_90 and report_v2.probabilistic_metrics.confidence_interval_90 | length >= 2 %}
+                <tr><td>90% CI</td><td>{{ report_v2.probabilistic_metrics.confidence_interval_90[0] | int }} – {{ report_v2.probabilistic_metrics.confidence_interval_90[1] | int }} M</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+        {% endif %}
+
+        {% if report_v2.temporal_dynamics %}
+        <h3 style="font-size: 11pt; color: #1e3a8a; margin: 12px 0 8px;">Temporal dynamics</h3>
+        <p style="font-size: 9pt; color: #374151;">RTO: {{ report_v2.temporal_dynamics.rto_hours or '—' }}h · RPO: {{ report_v2.temporal_dynamics.rpo_hours or '—' }}h · Recovery: {{ (report_v2.temporal_dynamics.recovery_time_months or [0,0])[0] }}–{{ (report_v2.temporal_dynamics.recovery_time_months or [0,0])[1] }} mo · BI duration: {{ report_v2.temporal_dynamics.business_interruption_days or '—' }} days</p>
+        {% if report_v2.temporal_dynamics.loss_accumulation and report_v2.temporal_dynamics.loss_accumulation | length > 0 %}
+        <table class="risk-zones-table" style="max-width: 320px; margin-top: 8px;">
+            <thead><tr><th>Period</th><th>Amount (M)</th></tr></thead>
+            <tbody>
+                {% for row in report_v2.temporal_dynamics.loss_accumulation %}
+                <tr><td>{{ row.period or '—' }}</td><td>{{ row.amount_m | default(0) | int }}</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+        {% endif %}
+
+        {% if report_v2.financial_contagion and (report_v2.financial_contagion.banking or report_v2.financial_contagion.insurance or report_v2.financial_contagion.real_estate or report_v2.financial_contagion.supply_chain) %}
+        <h3 style="font-size: 11pt; color: #1e3a8a; margin: 12px 0 8px;">Financial contagion (cross-sector)</h3>
+        <ul style="font-size: 9pt; color: #374151; margin-left: 20px;">
+            {% if report_v2.financial_contagion.banking %}<li>Banking: NPL +{{ report_v2.financial_contagion.banking.npl_increase_pct or '—' }}%, provisions {{ report_v2.financial_contagion.banking.provisions_eur_m or 0 }}M, CET1 {{ report_v2.financial_contagion.banking.cet1_impact_bps or '—' }} bps</li>{% endif %}
+            {% if report_v2.financial_contagion.insurance %}<li>Insurance: claims {{ report_v2.financial_contagion.insurance.claims_gross_eur_m or 0 }}M, net {{ report_v2.financial_contagion.insurance.net_retained_eur_m or 0 }}M, Solvency {{ report_v2.financial_contagion.insurance.solvency_impact_pp or '—' }} pp</li>{% endif %}
+            {% if report_v2.financial_contagion.real_estate %}<li>Real estate: value −{{ report_v2.financial_contagion.real_estate.value_decline_pct or '—' }}%, vacancy +{{ report_v2.financial_contagion.real_estate.vacancy_increase_pct or '—' }}%</li>{% endif %}
+            {% if report_v2.financial_contagion.supply_chain %}<li>Supply chain: GDP {{ report_v2.financial_contagion.supply_chain.direct_gdp_pct or '—' }}% / {{ report_v2.financial_contagion.supply_chain.indirect_gdp_pct or '—' }}%, jobs −{{ report_v2.financial_contagion.supply_chain.job_losses or 0 }}</li>{% endif %}
+        </ul>
+        {% if report_v2.financial_contagion.total_economic_impact_eur_m is defined %}<p style="font-size: 9pt; margin-top: 6px;">Total economic impact: {{ report_v2.financial_contagion.total_economic_impact_eur_m | int }}M (×{{ report_v2.financial_contagion.economic_multiplier or '—' }} direct)</p>{% endif %}
+        {% endif %}
+
+        {% if report_v2.predictive_indicators %}
+        <h3 style="font-size: 11pt; color: #1e3a8a; margin: 12px 0 8px;">Predictive indicators</h3>
+        <p style="font-size: 9pt;">Status: {{ report_v2.predictive_indicators.status or '—' }} · P(event): {{ ((report_v2.predictive_indicators.probability_event or 0) * 100) | int }}%</p>
+        {% endif %}
+
+        {% if report_v2.network_risk and (report_v2.network_risk.critical_nodes or report_v2.network_risk.cascade_path) %}
+        <h3 style="font-size: 11pt; color: #1e3a8a; margin: 12px 0 8px;">Network / systemic risk</h3>
+        <p style="font-size: 9pt;">Critical nodes: {% for n in (report_v2.network_risk.critical_nodes or [])[:5] %}{{ n.get('name', n.get('id', '—')) }}{% if not loop.last %}, {% endif %}{% endfor %}{% if not (report_v2.network_risk.critical_nodes or []) %}—{% endif %}{% if report_v2.network_risk.cascade_path %} · Cascade path: {{ report_v2.network_risk.cascade_path }}{% endif %}{% if report_v2.network_risk.amplification_factor is defined %} · Amplification: {{ report_v2.network_risk.amplification_factor }}×{% endif %}</p>
+        {% endif %}
+
+        {% if report_v2.multi_scenario_table and report_v2.multi_scenario_table | length > 0 %}
+        <h3 style="font-size: 11pt; color: #1e3a8a; margin: 12px 0 8px;">Multi-scenario comparison</h3>
+        <table class="risk-zones-table" style="font-size: 8pt;">
+            <thead><tr><th>Return</th><th>AEP</th><th>Loss (M)</th><th>Buildings</th><th>Recovery</th><th>Severity</th></tr></thead>
+            <tbody>
+                {% for row in report_v2.multi_scenario_table[:6] %}
+                <tr>
+                    <td>{{ row.return_period_y or '—' }}Y</td>
+                    <td>{{ row.probability_pct or '—' }}%</td>
+                    <td>{{ row.expected_loss_m | default(0) | int }}</td>
+                    <td>{{ row.buildings or '—' }}</td>
+                    <td>{{ row.recovery_months or '—' }} mo</td>
+                    <td>{{ row.severity | default(0) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+
+        {% if report_v2.climate_scenarios and report_v2.climate_scenarios | length > 0 %}
+        <h3 style="font-size: 11pt; color: #1e3a8a; margin: 12px 0 8px;">Climate change scenarios</h3>
+        <table class="risk-zones-table" style="font-size: 8pt;">
+            <thead><tr><th>Scenario</th><th>Temp</th><th>Frequency</th><th>Multiplier</th><th>Loss (M)</th></tr></thead>
+            <tbody>
+                {% for cs in report_v2.climate_scenarios %}
+                <tr>
+                    <td>{{ cs.scenario or '—' }}</td>
+                    <td>{{ cs.temp_increase or '—' }}</td>
+                    <td>{{ cs.frequency_shift or '—' }}</td>
+                    <td>{{ cs.loss_multiplier | default(1) }}x</td>
+                    <td>{{ cs.projected_loss_m | default(0) | int }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+
+        {% if report_v2.insurance_analysis and report_v2.insurance_analysis.categories %}
+        <h3 style="font-size: 11pt; color: #1e3a8a; margin: 12px 0 8px;">Insurance coverage analysis</h3>
+        <table class="risk-zones-table" style="font-size: 8pt;">
+            <thead><tr><th>Category</th><th>Exposure (M)</th><th>Insured (M)</th><th>Uninsured (M)</th><th>Coverage</th></tr></thead>
+            <tbody>
+                {% for cat in report_v2.insurance_analysis.categories %}
+                <tr>
+                    <td>{{ cat.category or '—' }}</td>
+                    <td>{{ cat.exposure_m | default(0) | int }}</td>
+                    <td>{{ cat.insured_m | default(0) | int }}</td>
+                    <td>{{ cat.uninsured_m | default(0) | int }}</td>
+                    <td>{{ cat.coverage_rate_pct | default(0) }}%</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <p style="font-size: 9pt;">Total coverage: {{ report_v2.insurance_analysis.total_coverage_rate_pct or 0 }}% · Uninsured gap: {{ report_v2.insurance_analysis.total_uninsured_m or 0 }}M</p>
+        {% if report_v2.insurance_analysis.gap_warning %}<p style="font-size: 8pt; color: #6b7280;">{{ report_v2.insurance_analysis.gap_warning }}</p>{% endif %}
+        {% endif %}
+
+        {% if report_v2.stakeholder_impacts and (report_v2.stakeholder_impacts.residential or report_v2.stakeholder_impacts.commercial or report_v2.stakeholder_impacts.government or report_v2.stakeholder_impacts.financial) %}
+        <h3 style="font-size: 11pt; color: #1e3a8a; margin: 12px 0 8px;">Stakeholder-specific impacts</h3>
+        <ul style="font-size: 9pt;">
+            {% if report_v2.stakeholder_impacts.residential %}<li>Residential: {{ report_v2.stakeholder_impacts.residential.households_displaced or '—' }} households displaced{% if report_v2.stakeholder_impacts.residential.uninsured_loss_eur_m is defined %}, uninsured {{ report_v2.stakeholder_impacts.residential.uninsured_loss_eur_m }}M{% endif %}</li>{% endif %}
+            {% if report_v2.stakeholder_impacts.commercial %}<li>Commercial: {{ report_v2.stakeholder_impacts.commercial.businesses_interrupted or '—' }} interrupted, {{ report_v2.stakeholder_impacts.commercial.downtime_days or '—' }} days downtime</li>{% endif %}
+            {% if report_v2.stakeholder_impacts.government %}<li>Government: emergency {{ report_v2.stakeholder_impacts.government.emergency_cost_eur_m or 0 }}M, infrastructure {{ report_v2.stakeholder_impacts.government.infrastructure_repair_eur_m or 0 }}M</li>{% endif %}
+            {% if report_v2.stakeholder_impacts.financial %}<li>Financial: loan defaults {{ report_v2.stakeholder_impacts.financial.loan_defaults_eur_m or 0 }}M, claims {{ report_v2.stakeholder_impacts.financial.insurance_claims_eur_m or 0 }}M</li>{% endif %}
+        </ul>
+        {% endif %}
+
+        {% if report_v2.sensitivity and report_v2.sensitivity.parameters and report_v2.sensitivity.parameters | length > 0 %}
+        <h3 style="font-size: 11pt; color: #1e3a8a; margin: 12px 0 8px;">Sensitivity analysis</h3>
+        <table class="risk-zones-table" style="max-width: 360px; font-size: 8pt;">
+            <thead><tr><th>Parameter</th><th>Loss delta %</th><th>Loss delta (M)</th></tr></thead>
+            <tbody>
+                {% for p in report_v2.sensitivity.parameters %}
+                <tr><td>{{ p.name or '—' }}</td><td>{{ p.loss_delta_pct | default(0) }}%</td><td>{{ p.loss_delta_m | default(0) | int }}</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+
+        {% if report_v2.model_uncertainty %}
+        <h3 style="font-size: 11pt; color: #1e3a8a; margin: 12px 0 8px;">Model uncertainty &amp; validation</h3>
+        {% set dq = report_v2.model_uncertainty.data_quality or {} %}
+        <p style="font-size: 9pt;">Data quality: exposure {{ dq.exposure_pct or '—' }}%, valuations {{ dq.valuations_pct or '—' }}%, vulnerability {{ dq.vulnerability_pct or '—' }}%</p>
+        {% set up = report_v2.model_uncertainty.uncertainty_pct or {} %}
+        <p style="font-size: 9pt;">Uncertainty: hazard ±{{ up.hazard or '—' }}%, exposure ±{{ up.exposure or '—' }}%, vulnerability ±{{ up.vulnerability or '—' }}%, combined ±{{ up.combined or '—' }}%</p>
+        {% if report_v2.model_uncertainty.limitations %}<p style="font-size: 9pt;">Limitations: {{ (report_v2.model_uncertainty.limitations or [])[:5] | join('; ') }}</p>{% endif %}
+        {% if report_v2.model_uncertainty.backtesting and report_v2.model_uncertainty.backtesting | length > 0 %}
+        <p style="font-size: 9pt; margin-top: 6px;"><strong>Backtesting (region-calibrated)</strong></p>
+        <table class="risk-zones-table" style="max-width: 400px; font-size: 8pt;">
+            <thead><tr><th>Event</th><th>Predicted (M)</th><th>Actual (M)</th><th>Error</th></tr></thead>
+            <tbody>
+                {% for b in report_v2.model_uncertainty.backtesting %}
+                <tr><td>{{ b.event or '—' }}</td><td>{{ b.predicted_eur_m | default(0) | int }}</td><td>{{ b.actual_eur_m | default(0) | int }}</td><td>{{ b.error_pct | default(0) }}%</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% if report_v2.model_uncertainty.backtesting_avg_error_pct is defined %}<p style="font-size: 9pt;">Average absolute error: {{ report_v2.model_uncertainty.backtesting_avg_error_pct }}%</p>{% endif %}
+        {% endif %}
+        {% endif %}
+
+        {% if report_v2.regulatory_relevance %}
+        <h3 style="font-size: 11pt; color: #1e3a8a; margin: 12px 0 8px;">Regulatory relevance</h3>
+        <p style="font-size: 9pt;">Entity type: {{ report_v2.regulatory_relevance.entity_type or '—' }} · Jurisdiction: {{ report_v2.regulatory_relevance.jurisdiction or '—' }} · Disclosure required: {{ 'Yes' if report_v2.regulatory_relevance.disclosure_required else 'No' }}</p>
+        {% if report_v2.regulatory_relevance.regulation_labels %}<p style="font-size: 9pt;">Applicable: {{ report_v2.regulatory_relevance.regulation_labels.values() | list | join(', ') }}</p>{% elif report_v2.regulatory_relevance.regulations %}<p style="font-size: 9pt;">Applicable: {{ (report_v2.regulatory_relevance.regulations or [])[:8] | join(', ') }}</p>{% endif %}
+        {% endif %}
+    </div>
+    {% endif %}
     
     {% if region_action_plan %}
     <div class="section">
@@ -373,6 +561,14 @@
     </div>
     {% endif %}
     
+    {% if report.disclosure_draft %}
+    <div class="section page-break">
+        <h2 class="section-title">Disclosure Draft (NGFS)</h2>
+        <p class="text-sm" style="color: #64748b; margin-bottom: 10px;"><em>Draft for internal review. Not for regulatory submission without separate review.</em></p>
+        <div class="summary-box" style="white-space: pre-wrap;">{{ report.disclosure_draft }}</div>
+    </div>
+    {% endif %}
+    
     {% if report.concluding_summary %}
     <div class="section page-break">
         <h2 class="section-title">Conclusions & Next Steps</h2>
@@ -388,7 +584,7 @@
         <p>This stress test was conducted using the Physical-Financial Risk Platform's 
         multi-layered risk assessment framework, incorporating:</p>
         <ul style="margin-left: 20px; margin-top: 10px;">
-            <li>Monte Carlo simulation with {{ report.simulation_runs or '10,000' }} iterations</li>
+            <li>Monte Carlo simulation with {{ report.simulation_runs or '100,000' }} iterations</li>
             <li>VaR 99% and Expected Shortfall (CVaR) calculations</li>
             <li>Gaussian copula for correlated defaults</li>
             <li>Historical event calibration</li>
@@ -402,17 +598,25 @@
     <div class="sources">
         <h3 style="margin-bottom: 10px; color: #374151;">Data Sources</h3>
         <ul>
+            {% if report.data_sources_used and report.data_sources_used | length > 0 %}
+                {% for src in report.data_sources_used %}
+                <li>{{ src }}</li>
+                {% endfor %}
+            {% else %}
             <li>Building Registry Database ({{ report.data_freshness or '2026-01-15' }})</li>
             <li>Topographic Elevation Model (Copernicus DEM)</li>
             <li>Historical Event Records ({{ report.historical_events_count or '50+' }} events)</li>
             <li>Infrastructure Grid Mapping (OpenStreetMap)</li>
             <li>Population Density Census (UN World Population Prospects)</li>
+            {% endif %}
         </ul>
     </div>
     
     <div class="footer">
-        <p>Generated by Physical-Financial Risk Platform v1.5.0</p>
-        <p>© 2026 SAA Alliance. All rights reserved.</p>
+        <p style="text-align: left; margin-bottom: 8px; font-size: 8pt; color: #6b7280;"><strong>Regulatory notice:</strong></p>
+        <p style="text-align: left; margin-bottom: 6px; font-size: 8pt; color: #6b7280;">{{ report.regulatory_disclaimer or 'Estimates and projections are indicative. For internal risk management purposes. Not for regulatory submission without review. Model outputs subject to assumptions and data as of report date.' }}</p>
+        <p style="margin-top: 12px;">Generated by Physical-Financial Risk Platform v1.5.0 · {{ report.generated_at or 'N/A' }}</p>
+        <p>© 2026 Scientific Analytics Alliance Inc. All rights reserved.</p>
     </div>
 </body>
 </html>

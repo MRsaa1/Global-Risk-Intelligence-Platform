@@ -69,7 +69,7 @@ echo "Starting API on port 9002 (background, log: .services-logs/api.log)..."
     if [ -d ".venv" ]; then
         source .venv/bin/activate
     fi
-    exec uvicorn src.main:app --host 0.0.0.0 --port 9002 >> "${LOG_DIR}/api.log" 2>&1
+    exec uvicorn src.main:app --host 0.0.0.0 --port 9002 --no-access-log >> "${LOG_DIR}/api.log" 2>&1
 ) &
 API_PID=$!
 echo $API_PID > "${LOG_DIR}/api.pid"

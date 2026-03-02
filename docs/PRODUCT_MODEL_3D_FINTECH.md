@@ -233,4 +233,30 @@
 
 ---
 
+## Что доделать до продакшен
+
+Краткий список по документам [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md), [LAUNCH_AND_COMMERCIAL_READINESS.md](LAUNCH_AND_COMMERCIAL_READINESS.md), [NOT_IMPLEMENTED.md](NOT_IMPLEMENTED.md) и MASTER_PLAN.
+
+### Обязательно перед каждым деплоем
+- **Health** — API стартует, `GET /api/v1/health` → `{"status":"healthy"}`.
+- **Миграции** — `cd apps/api && alembic upgrade head` без ошибок.
+- **Сборка фронта** — `npm run build` с нужным `VITE_API_URL` для prod.
+- **Не перезаписывать** серверные `.env` и prod DB при деплое (использовать deploy-safe).
+- **На сервере:** задать `SECRET_KEY`, `CORS_ORIGINS`, `ALLOW_SEED_IN_PRODUCTION=false`.
+
+### Продуктово / коммерчески до production
+- **Города/страны:** расширить базу (не только один город на страну); полная согласованность всех метрик с выбранным городом/страной по всем модулям.
+- **SLA и лимиты:** зафиксировать uptime, response time, rate limits, retention; шаблон в LAUNCH_AND_COMMERCIAL_READINESS; детализацию дополнять под контракты.
+- **Медленные эндпоинты:** оптимизировать `/api/v1/dashboard/today-card`, `/api/v1/cadapt/flood-risk-product`, `/cadapt/flood-buildings`, `/cadapt/flood-model/*` (сейчас помечаются как slow в System Overseer).
+- **Внешние API:** таймауты GDELT/Open-Meteo/USGS — настроить retry, кэш или fallback; при необходимости — внешний мониторинг (UptimeRobot и т.п.).
+- **Презентация и первый клиент:** «10 кейсов, accuracy 90%+» и сценарий пилота под первого платящего клиента (по NOT_IMPLEMENTED).
+
+### Желательно (enterprise / roadmap)
+- Enterprise: SSO, роли/права, расширенный audit log.
+- PARS v1.0 и движение к ISO стандартизации.
+- SRS, CityOS, FST — в статусе пилота (не production), доработка по MASTER_PLAN.
+- Регуляторика: материалы для ECB/Fed, лимиты и SLA в договорах.
+
+---
+
 *Последнее обновление: январь 2026*

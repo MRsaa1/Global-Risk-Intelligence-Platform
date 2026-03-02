@@ -1,0 +1,23 @@
+name: Taiwan Strait Conflict
+description: Geopolitical scenario - Supply chain disruption + financial stress
+initial_shocks:
+  - type: geopolitical_shock
+    magnitude: 2.5
+    affected_regions: [ASIA, GLOBAL]
+    duration_days: 90
+  - type: supply_chain_disruption
+    magnitude: 1.8
+    affected_sectors: [semiconductors, electronics]
+transmission_channels:
+  direct_exposure:
+    banks_to_affected_sectors: 200e9
+  indirect_effects:
+    fire_sales_trigger: 0.12
+    confidence_shock_threshold: 0.18
+interventions:
+  - day: 5
+    type: emergency_liquidity
+    amount_usd: 300e9
+  - day: 10
+    type: swap_lines
+    recipients: [BOJ, MAS]

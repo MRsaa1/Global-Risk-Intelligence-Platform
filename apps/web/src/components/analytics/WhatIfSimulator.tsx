@@ -20,6 +20,8 @@ import {
   CheckCircleIcon,
   SparklesIcon,
   CurrencyDollarIcon,
+  ScaleIcon,
+  ShieldExclamationIcon,
 } from '@heroicons/react/24/outline'
 
 // Types
@@ -75,10 +77,10 @@ function formatCurrency(value: number): string {
 
 // Scenario color based on risk
 function getScenarioColor(name: string): string {
-  if (name.toLowerCase().includes('stress')) return 'text-red-400'
-  if (name.toLowerCase().includes('pessimistic')) return 'text-orange-400'
-  if (name.toLowerCase().includes('optimistic')) return 'text-emerald-400'
-  return 'text-blue-400'
+  if (name.toLowerCase().includes('stress')) return 'text-red-400/80'
+  if (name.toLowerCase().includes('pessimistic')) return 'text-orange-400/80'
+  if (name.toLowerCase().includes('optimistic')) return 'text-emerald-400/80'
+  return 'text-zinc-400'
 }
 
 // Parameter Slider
@@ -96,14 +98,14 @@ function ParameterSlider({
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between text-xs">
-        <span className="text-white/60">{param.name.replace(/_/g, ' ')}</span>
-        <span className="text-white font-medium">
+        <span className="text-zinc-400">{param.name.replace(/_/g, ' ')}</span>
+        <span className="text-zinc-100 font-medium">
           {value.toFixed(2)} {param.unit}
         </span>
       </div>
-      <div className="relative h-2 bg-white/10 rounded-full">
+      <div className="relative h-2 bg-zinc-800 rounded-full">
         <div 
-          className="absolute h-full bg-primary-500 rounded-full"
+          className="absolute h-full bg-zinc-500 rounded-full"
           style={{ width: `${percent}%` }}
         />
         <input
@@ -116,7 +118,7 @@ function ParameterSlider({
           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
         />
       </div>
-      <div className="flex justify-between text-[10px] text-white/30">
+      <div className="flex justify-between text-[10px] text-zinc-600">
         <span>{param.min_value}</span>
         <span>{param.max_value}</span>
       </div>
@@ -136,22 +138,22 @@ function ComparisonChart({ scenarios }: { scenarios: ScenarioResult[] }) {
             <span className={getScenarioColor(scenario.scenario_name)}>
               {scenario.scenario_name}
             </span>
-            <span className="text-white/60 text-xs">
+            <span className="text-zinc-400 text-xs">
               EL: {formatCurrency(scenario.expected_loss)}
             </span>
           </div>
           
           {/* Loss bar with VaR markers */}
-          <div className="relative h-6 bg-white/5 rounded">
+          <div className="relative h-6 bg-zinc-900/80 rounded border border-zinc-800/60">
             {/* Expected Loss bar */}
             <div 
-              className="absolute h-full bg-primary-500/50 rounded-l"
+              className="absolute h-full bg-zinc-600 rounded-l"
               style={{ width: `${(scenario.expected_loss / maxLoss) * 100}%` }}
             />
             
             {/* VaR 95 marker */}
             <div 
-              className="absolute top-0 h-full w-0.5 bg-amber-500"
+              className="absolute top-0 h-full w-0.5 bg-zinc-500"
               style={{ left: `${(scenario.var_95 / maxLoss) * 100}%` }}
               title={`VaR 95: ${formatCurrency(scenario.var_95)}`}
             />
@@ -164,7 +166,7 @@ function ComparisonChart({ scenarios }: { scenarios: ScenarioResult[] }) {
             />
             
             {/* Labels */}
-            <div className="absolute inset-0 flex items-center justify-end pr-2 text-[10px] text-white/60">
+            <div className="absolute inset-0 flex items-center justify-end pr-2 text-[10px] text-zinc-400">
               VaR99: {formatCurrency(scenario.var_99)}
             </div>
           </div>
@@ -172,13 +174,13 @@ function ComparisonChart({ scenarios }: { scenarios: ScenarioResult[] }) {
       ))}
       
       {/* Legend */}
-      <div className="flex items-center gap-4 text-[10px] text-white/40 pt-2 border-t border-white/10">
+      <div className="flex items-center gap-4 font-mono text-[10px] text-zinc-500 pt-2 border-t border-zinc-800/60">
         <div className="flex items-center gap-1">
-          <div className="w-3 h-2 bg-primary-500/50 rounded" />
+          <div className="w-3 h-2 bg-zinc-600 rounded" />
           <span>Expected Loss</span>
         </div>
         <div className="flex items-center gap-1">
-          <div className="w-0.5 h-3 bg-amber-500" />
+          <div className="w-0.5 h-3 bg-zinc-500" />
           <span>VaR 95%</span>
         </div>
         <div className="flex items-center gap-1">
@@ -201,7 +203,7 @@ function SensitivityChart({ data }: { data: SensitivityResult }) {
         <div 
           key={i}
           className={`flex-1 rounded-t transition-all ${
-            data.is_critical ? 'bg-red-500' : 'bg-primary-500'
+            data.is_critical ? 'bg-red-500' : 'bg-zinc-500'
           }`}
           style={{ 
             height: `${((val - minVal) / (maxVal - minVal || 1)) * 100 + 10}%`,
@@ -243,8 +245,23 @@ function normalizeAiqSources(input: unknown): Array<{ id?: string; kind?: string
     .filter((s) => Boolean(s.id || s.title))
 }
 
+// Stress Duel types
+interface StressDuelResult {
+  scenario_a: { id: string; name: string; description: string; metrics: Array<{ id: string; label: string; before: number; after: number; format: string; higherIsBetter: boolean }> }
+  scenario_b: { id: string; name: string; description: string; metrics: Array<{ id: string; label: string; before: number; after: number; format: string; higherIsBetter: boolean }> }
+  verdict: string
+  more_dangerous: string
+  hedge_first: string
+  confidence: string
+}
+
+interface ScenarioOption {
+  id: string
+  name: string
+}
+
 export default function WhatIfSimulator({ baseExposure = 100_000_000 }: WhatIfSimulatorProps) {
-  const [activeTab, setActiveTab] = useState<'scenarios' | 'sensitivity' | 'optimize'>('scenarios')
+  const [activeTab, setActiveTab] = useState<'scenarios' | 'sensitivity' | 'optimize' | 'duel'>('scenarios')
   const [parameters, setParameters] = useState<Record<string, number>>({
     event_severity: 0.5,
     event_probability: 0.1,
@@ -260,6 +277,48 @@ export default function WhatIfSimulator({ baseExposure = 100_000_000 }: WhatIfSi
   const [aiSources, setAiSources] = useState<Array<{ id?: string; kind?: string; title?: string; url?: string; snippet?: string }>>([])
   const [aiError, setAiError] = useState<string | null>(null)
   const [aiLoading, setAiLoading] = useState(false)
+
+  // Stress Duel state
+  const [duelScenarios, setDuelScenarios] = useState<ScenarioOption[]>([])
+  const [duelA, setDuelA] = useState('')
+  const [duelB, setDuelB] = useState('')
+
+  // Fetch available scenarios for duel
+  const duelScenariosMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch('/api/v1/analytics/scenario-comparison')
+      if (!res.ok) throw new Error('Failed to fetch scenarios')
+      const data = await res.json()
+      return (data.scenarios || []).map((s: any) => ({ id: s.id, name: s.name })) as ScenarioOption[]
+    },
+    onSuccess: (data) => {
+      setDuelScenarios(data)
+      if (data.length >= 2) {
+        setDuelA(data[0].id)
+        setDuelB(data[1].id)
+      }
+    },
+  })
+
+  // Run duel
+  const duelMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch('/api/v1/analytics/stress-duel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scenario_id_a: duelA, scenario_id_b: duelB }),
+      })
+      if (!res.ok) throw new Error('Failed to run stress duel')
+      return res.json() as Promise<StressDuelResult>
+    },
+  })
+
+  // Load scenarios when switching to duel tab
+  useEffect(() => {
+    if (activeTab === 'duel' && duelScenarios.length === 0) {
+      duelScenariosMutation.mutate()
+    }
+  }, [activeTab])
   
   // Create predefined scenarios
   const createScenariosMutation = useMutation({
@@ -307,7 +366,11 @@ export default function WhatIfSimulator({ baseExposure = 100_000_000 }: WhatIfSi
           base_exposure: baseExposure,
         }),
       })
-      if (!res.ok) throw new Error('Failed to run sensitivity')
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        const msg = (body?.detail ?? body?.message ?? res.statusText) || 'Failed to run sensitivity'
+        throw new Error(typeof msg === 'string' ? msg : 'Failed to run sensitivity')
+      }
       return res.json() as Promise<SensitivityResult>
     },
   })
@@ -351,29 +414,39 @@ export default function WhatIfSimulator({ baseExposure = 100_000_000 }: WhatIfSi
       'Explain the scenario comparison results and recommendations. Which parameters are driving the loss range? Provide 3 concrete next actions.'
     )
   }
+
+  const whatifError =
+    duelScenariosMutation.error ||
+    duelMutation.error ||
+    createScenariosMutation.error ||
+    comparisonMutation.error ||
+    sensitivityMutation.error ||
+    optimizeMutation.error
+  const whatifErrorMessage =
+    whatifError instanceof Error ? whatifError.message : whatifError ? String(whatifError) : null
   
   return (
-    <div className="glass rounded-2xl p-6">
+    <div className="rounded-md border border-zinc-800/60 bg-zinc-900/50 p-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-2">
-          <BeakerIcon className="w-5 h-5 text-accent-400" />
-          <h2 className="text-lg font-display font-semibold">What-If Simulator</h2>
-          <span className="text-[10px] px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded-full">
+          <BeakerIcon className="w-5 h-5 text-zinc-400" />
+          <h2 className="text-lg font-display font-semibold text-zinc-100 tracking-tight">What-If Simulator</h2>
+          <span className="font-mono text-[10px] uppercase tracking-widest px-2 py-0.5 bg-zinc-900/80 border border-zinc-800/60 text-zinc-400 rounded-full">
             Monte Carlo
           </span>
         </div>
         
         {/* Tabs */}
-        <div className="flex gap-1 bg-white/5 rounded-lg p-1">
-          {(['scenarios', 'sensitivity', 'optimize'] as const).map(tab => (
+        <div className="flex gap-1 bg-zinc-900/80 rounded-md border border-zinc-800/60 p-1">
+          {(['scenarios', 'duel', 'sensitivity', 'optimize'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-3 py-1 text-xs rounded-md transition-colors ${
+              className={`px-3 py-1 font-mono text-[10px] uppercase tracking-widest rounded-md transition-colors ${
                 activeTab === tab
-                  ? 'bg-accent-500/30 text-accent-400'
-                  : 'text-white/40 hover:text-white/60'
+                  ? 'bg-zinc-800 text-zinc-300 border border-zinc-800/60'
+                  : 'text-zinc-500 hover:text-zinc-400'
               }`}
             >
               {tab.charAt(0).toUpperCase() + tab.slice(1)}
@@ -381,6 +454,12 @@ export default function WhatIfSimulator({ baseExposure = 100_000_000 }: WhatIfSi
           ))}
         </div>
       </div>
+
+      {whatifErrorMessage && (
+        <div className="mb-4 p-3 rounded-md bg-red-500/10 border border-red-500/30 text-red-300 text-sm" role="alert">
+          {whatifErrorMessage}
+        </div>
+      )}
       
       {/* Content */}
       <AnimatePresence mode="wait">
@@ -394,8 +473,8 @@ export default function WhatIfSimulator({ baseExposure = 100_000_000 }: WhatIfSi
             className="space-y-4"
           >
             {/* Conditions: editable parameters */}
-            <div className="p-3 bg-white/5 rounded-xl border border-white/10">
-              <h4 className="text-xs font-medium text-white/60 mb-3">Conditions</h4>
+            <div className="p-3 bg-zinc-900/50 rounded-md border border-zinc-800/60">
+              <h4 className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-3">Conditions</h4>
               <div className="grid grid-cols-2 gap-4">
                 {(['event_severity', 'event_probability', 'portfolio_exposure', 'mitigation_level', 'recovery_speed'] as const).map((k) => {
                   const config = { event_severity: { min: 0, max: 1, unit: '' }, event_probability: { min: 0, max: 1, unit: '' }, portfolio_exposure: { min: 0.1, max: 2, unit: 'x' }, mitigation_level: { min: 0, max: 1, unit: '' }, recovery_speed: { min: 0.5, max: 2, unit: 'x' } }[k]
@@ -415,7 +494,7 @@ export default function WhatIfSimulator({ baseExposure = 100_000_000 }: WhatIfSi
             <button
               onClick={() => comparisonMutation.mutate()}
               disabled={comparisonMutation.isPending}
-              className="w-full py-2 bg-accent-500/20 hover:bg-accent-500/30 text-accent-400 rounded-lg text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+              className="w-full py-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 text-zinc-300 rounded-md text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
             >
               {comparisonMutation.isPending ? (
                 <ArrowPathIcon className="w-4 h-4 animate-spin" />
@@ -430,21 +509,21 @@ export default function WhatIfSimulator({ baseExposure = 100_000_000 }: WhatIfSi
               <div className="space-y-4">
                 {/* Summary */}
                 <div className="grid grid-cols-3 gap-3">
-                  <div className="p-3 bg-emerald-500/10 rounded-lg border border-emerald-500/20">
-                    <div className="text-xs text-white/40">Best Case</div>
-                    <div className="text-sm font-medium text-emerald-400">
+                  <div className="p-3 bg-emerald-500/10 rounded-md border border-emerald-500/20">
+                    <div className="text-xs text-zinc-500">Best Case</div>
+                    <div className="text-sm font-medium text-emerald-400/80">
                       {comparisonMutation.data.best_scenario}
                     </div>
                   </div>
-                  <div className="p-3 bg-blue-500/10 rounded-lg border border-blue-500/20">
-                    <div className="text-xs text-white/40">Baseline</div>
-                    <div className="text-sm font-medium text-blue-400">
+                  <div className="p-3 bg-zinc-900/50 rounded-md border border-zinc-800/60">
+                    <div className="text-xs text-zinc-500">Baseline</div>
+                    <div className="text-sm font-medium text-zinc-400">
                       {comparisonMutation.data.baseline_scenario}
                     </div>
                   </div>
-                  <div className="p-3 bg-red-500/10 rounded-lg border border-red-500/20">
-                    <div className="text-xs text-white/40">Worst Case</div>
-                    <div className="text-sm font-medium text-red-400">
+                  <div className="p-3 bg-red-500/10 rounded-md border border-red-500/20">
+                    <div className="text-xs text-zinc-500">Worst Case</div>
+                    <div className="text-sm font-medium text-red-400/80">
                       {comparisonMutation.data.worst_scenario}
                     </div>
                   </div>
@@ -454,14 +533,14 @@ export default function WhatIfSimulator({ baseExposure = 100_000_000 }: WhatIfSi
                 <ComparisonChart scenarios={comparisonMutation.data.scenarios} />
                 
                 {/* Loss Range */}
-                <div className="p-3 bg-white/5 rounded-lg">
-                  <div className="text-xs text-white/40 mb-1">Loss Range</div>
+                <div className="p-3 bg-zinc-900/80 rounded-md border border-zinc-800/60">
+                  <div className="text-xs text-zinc-500 mb-1">Loss Range</div>
                   <div className="flex items-center justify-between">
-                    <span className="text-emerald-400 font-medium">
+                    <span className="text-emerald-400/80 font-medium">
                       {formatCurrency(comparisonMutation.data.loss_range[0])}
                     </span>
                     <div className="flex-1 mx-3 h-1 bg-gradient-to-r from-emerald-500 to-red-500 rounded" />
-                    <span className="text-red-400 font-medium">
+                    <span className="text-red-400/80 font-medium">
                       {formatCurrency(comparisonMutation.data.loss_range[1])}
                     </span>
                   </div>
@@ -470,11 +549,11 @@ export default function WhatIfSimulator({ baseExposure = 100_000_000 }: WhatIfSi
                 {/* Recommendations */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-3">
-                    <div className="text-xs text-white/40">Recommendations</div>
+                    <div className="text-xs text-zinc-500">Recommendations</div>
                     <button
                       type="button"
                       onClick={openAiExplain}
-                      className="text-[11px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 border border-white/10 text-white/60 hover:text-white/80 transition-colors"
+                      className="text-[11px] px-2 py-1 rounded bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800/60 text-zinc-400 hover:text-zinc-300 transition-colors"
                       title="Explain results with AI (citations)"
                     >
                       Explain (AI)
@@ -482,14 +561,14 @@ export default function WhatIfSimulator({ baseExposure = 100_000_000 }: WhatIfSi
                   </div>
                   {comparisonMutation.data.recommendations.length > 0 ? (
                     comparisonMutation.data.recommendations.map((rec, i) => (
-                      <div key={i} className="flex items-start gap-2 text-xs text-white/70">
-                        <CheckCircleIcon className="w-4 h-4 text-accent-400 flex-shrink-0" />
+                      <div key={i} className="flex items-start gap-2 text-xs text-zinc-300">
+                        <CheckCircleIcon className="w-4 h-4 text-zinc-400 flex-shrink-0" />
                         {rec}
                       </div>
                     ))
                   ) : (
-                    <div className="text-xs text-white/40">
-                      No recommendations returned by the service. You can still use <span className="text-white/60">Explain (AI)</span> to interpret the results.
+                    <div className="text-xs text-zinc-500">
+                      No recommendations returned by the service. You can still use <span className="text-zinc-400">Explain (AI)</span> to interpret the results.
                     </div>
                   )}
                 </div>
@@ -498,6 +577,151 @@ export default function WhatIfSimulator({ baseExposure = 100_000_000 }: WhatIfSi
           </motion.div>
         )}
         
+        {/* Stress Duel Tab */}
+        {activeTab === 'duel' && (
+          <motion.div
+            key="duel"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="space-y-4"
+          >
+            <div className="flex items-center gap-2 text-sm text-zinc-400">
+              <ScaleIcon className="w-4 h-4" />
+              Compare two stress scenarios head-to-head
+            </div>
+
+            {/* Scenario selectors */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] text-zinc-500 uppercase tracking-wide mb-1 block">Scenario A</label>
+                <select
+                  value={duelA}
+                  onChange={(e) => setDuelA(e.target.value)}
+                  className="w-full px-3 py-2 bg-zinc-900/80 border border-zinc-800/60 rounded-md text-sm text-zinc-300 font-sans focus:ring-1 focus:ring-red-500/50"
+                >
+                  {duelScenarios.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] text-zinc-500 uppercase tracking-wide mb-1 block">Scenario B</label>
+                <select
+                  value={duelB}
+                  onChange={(e) => setDuelB(e.target.value)}
+                  className="w-full px-3 py-2 bg-zinc-900/80 border border-zinc-800/60 rounded-md text-sm text-zinc-300 font-sans focus:ring-1 focus:ring-blue-500/50"
+                >
+                  {duelScenarios.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Run Duel */}
+            <button
+              onClick={() => duelMutation.mutate()}
+              disabled={duelMutation.isPending || !duelA || !duelB || duelA === duelB}
+              className="w-full py-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 text-zinc-300 rounded-md text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+            >
+              {duelMutation.isPending ? (
+                <ArrowPathIcon className="w-4 h-4 animate-spin" />
+              ) : (
+                <ScaleIcon className="w-4 h-4" />
+              )}
+              {duelMutation.isPending ? 'Comparing...' : 'Run Stress Duel'}
+            </button>
+
+            {duelA === duelB && duelA && (
+              <p className="text-xs text-amber-400/80">Select two different scenarios to compare.</p>
+            )}
+
+            {/* Duel Results */}
+            {duelMutation.data && (
+              <div className="space-y-4">
+                {/* Side by side metrics */}
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Scenario A */}
+                  <div className={`p-3 rounded-md border ${duelMutation.data.more_dangerous === duelMutation.data.scenario_a.id ? 'bg-red-500/10 border-red-500/20' : 'bg-zinc-900/50 border-zinc-800/60'}`}>
+                    <div className="flex items-center gap-1.5 mb-2">
+                      {duelMutation.data.more_dangerous === duelMutation.data.scenario_a.id && (
+                        <ShieldExclamationIcon className="w-3.5 h-3.5 text-red-400/80" />
+                      )}
+                      <span className={`text-xs font-medium ${duelMutation.data.more_dangerous === duelMutation.data.scenario_a.id ? 'text-red-300' : 'text-zinc-300'}`}>
+                        {duelMutation.data.scenario_a.name}
+                      </span>
+                    </div>
+                    {duelMutation.data.scenario_a.metrics.map((m) => (
+                      <div key={m.id} className="flex justify-between text-[11px] py-0.5">
+                        <span className="text-zinc-500">{m.label}</span>
+                        <span className={`font-mono ${
+                          m.higherIsBetter
+                            ? (m.after < m.before ? 'text-red-400/80' : 'text-emerald-400/80')
+                            : (m.after > m.before ? 'text-red-400/80' : 'text-emerald-400/80')
+                        }`}>
+                          {m.format === 'currency' ? formatCurrency(m.after) : m.format === 'percent' ? `${(m.after * 100).toFixed(1)}%` : m.after}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Scenario B */}
+                  <div className={`p-3 rounded-md border ${duelMutation.data.more_dangerous === duelMutation.data.scenario_b.id ? 'bg-red-500/10 border-red-500/20' : 'bg-zinc-900/50 border-zinc-800/60'}`}>
+                    <div className="flex items-center gap-1.5 mb-2">
+                      {duelMutation.data.more_dangerous === duelMutation.data.scenario_b.id && (
+                        <ShieldExclamationIcon className="w-3.5 h-3.5 text-red-400/80" />
+                      )}
+                      <span className={`text-xs font-medium ${duelMutation.data.more_dangerous === duelMutation.data.scenario_b.id ? 'text-red-300' : 'text-zinc-300'}`}>
+                        {duelMutation.data.scenario_b.name}
+                      </span>
+                    </div>
+                    {duelMutation.data.scenario_b.metrics.map((m) => (
+                      <div key={m.id} className="flex justify-between text-[11px] py-0.5">
+                        <span className="text-zinc-500">{m.label}</span>
+                        <span className={`font-mono ${
+                          m.higherIsBetter
+                            ? (m.after < m.before ? 'text-red-400/80' : 'text-emerald-400/80')
+                            : (m.after > m.before ? 'text-red-400/80' : 'text-emerald-400/80')
+                        }`}>
+                          {m.format === 'currency' ? formatCurrency(m.after) : m.format === 'percent' ? `${(m.after * 100).toFixed(1)}%` : m.after}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Verdict */}
+                <div className="p-3 rounded-md bg-gradient-to-r from-red-500/10 to-zinc-800 border border-red-500/20">
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <ShieldExclamationIcon className="w-4 h-4 text-red-400/80" />
+                    <span className="text-[10px] text-red-400/80 uppercase tracking-wider font-semibold">Verdict</span>
+                    <span className="text-[10px] text-zinc-600 ml-auto">
+                      Confidence: {duelMutation.data.confidence}
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-300 leading-relaxed">{duelMutation.data.verdict}</p>
+                </div>
+
+                {/* Hedge Recommendation */}
+                <div className="p-3 rounded-md bg-zinc-900/50 border border-zinc-800/60">
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <CheckCircleIcon className="w-4 h-4 text-emerald-400/80" />
+                    <span className="text-[10px] text-emerald-400/80 uppercase tracking-wider font-semibold">Hedge First</span>
+                  </div>
+                  <p className="text-xs text-zinc-300 leading-relaxed">{duelMutation.data.hedge_first}</p>
+                </div>
+              </div>
+            )}
+
+            {duelScenariosMutation.isPending && (
+              <div className="flex items-center justify-center py-8">
+                <div className="w-6 h-6 border-2 border-zinc-500 border-t-transparent rounded-full animate-spin" />
+              </div>
+            )}
+          </motion.div>
+        )}
+
         {/* Sensitivity Tab */}
         {activeTab === 'sensitivity' && (
           <motion.div
@@ -514,10 +738,10 @@ export default function WhatIfSimulator({ baseExposure = 100_000_000 }: WhatIfSi
                   key={param}
                   onClick={() => sensitivityMutation.mutate(param)}
                   disabled={sensitivityMutation.isPending}
-                  className={`p-2 text-xs rounded-lg border transition-colors ${
+                  className={`p-2 text-xs rounded-md border transition-colors ${
                     sensitivityMutation.variables === param
-                      ? 'bg-accent-500/20 border-accent-500/40 text-accent-400'
-                      : 'bg-white/5 border-white/10 text-white/60 hover:border-white/20'
+                      ? 'bg-zinc-900/80 border-zinc-800/60 text-zinc-400'
+                      : 'bg-zinc-900/80 border-zinc-800/60 text-zinc-400 hover:bg-zinc-800'
                   }`}
                 >
                   <AdjustmentsHorizontalIcon className="w-4 h-4 inline mr-1" />
@@ -530,13 +754,13 @@ export default function WhatIfSimulator({ baseExposure = 100_000_000 }: WhatIfSi
             {sensitivityMutation.data && (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-white">
+                  <span className="text-sm text-zinc-100">
                     {sensitivityMutation.data.parameter_name.replace(/_/g, ' ')}
                   </span>
                   <span className={`text-xs px-2 py-1 rounded-full ${
                     sensitivityMutation.data.is_critical
-                      ? 'bg-red-500/20 text-red-400'
-                      : 'bg-emerald-500/20 text-emerald-400'
+                      ? 'bg-red-500/20 text-red-400/80'
+                      : 'bg-emerald-500/20 text-emerald-400/80'
                   }`}>
                     {sensitivityMutation.data.is_critical ? 'Critical' : 'Normal'}
                   </span>
@@ -545,14 +769,14 @@ export default function WhatIfSimulator({ baseExposure = 100_000_000 }: WhatIfSi
                 <SensitivityChart data={sensitivityMutation.data} />
                 
                 <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div className="p-3 bg-white/5 rounded-lg">
-                    <div className="text-white/40 text-xs">Elasticity</div>
+                  <div className="p-3 bg-zinc-900/80 rounded-md border border-zinc-800/60">
+                    <div className="text-zinc-500 text-xs">Elasticity</div>
                     <div className="font-medium">
                       {sensitivityMutation.data.elasticity.toFixed(2)}
                     </div>
                   </div>
-                  <div className="p-3 bg-white/5 rounded-lg">
-                    <div className="text-white/40 text-xs">Impact Range</div>
+                  <div className="p-3 bg-zinc-900/80 rounded-md border border-zinc-800/60">
+                    <div className="text-zinc-500 text-xs">Impact Range</div>
                     <div className="font-medium">
                       {formatCurrency(Math.min(...sensitivityMutation.data.output_values))} - {formatCurrency(Math.max(...sensitivityMutation.data.output_values))}
                     </div>
@@ -563,7 +787,7 @@ export default function WhatIfSimulator({ baseExposure = 100_000_000 }: WhatIfSi
             
             {sensitivityMutation.isPending && (
               <div className="flex items-center justify-center py-8">
-                <div className="w-6 h-6 border-2 border-accent-500 border-t-transparent rounded-full animate-spin" />
+                <div className="w-6 h-6 border-2 border-zinc-500 border-t-transparent rounded-full animate-spin" />
               </div>
             )}
           </motion.div>
@@ -578,7 +802,7 @@ export default function WhatIfSimulator({ baseExposure = 100_000_000 }: WhatIfSi
             exit={{ opacity: 0, y: -10 }}
             className="space-y-4"
           >
-            <div className="text-sm text-white/60">
+            <div className="text-sm text-zinc-400">
               Optimize mitigation strategy within budget constraints
             </div>
             
@@ -589,44 +813,50 @@ export default function WhatIfSimulator({ baseExposure = 100_000_000 }: WhatIfSi
                   key={budget}
                   onClick={() => optimizeMutation.mutate(budget)}
                   disabled={optimizeMutation.isPending}
-                  className="p-3 bg-white/5 hover:bg-white/10 rounded-lg text-center transition-colors"
+                  className="p-3 bg-zinc-900/50 border border-zinc-800/60 hover:bg-zinc-800 rounded-md text-center transition-colors"
                 >
-                  <CurrencyDollarIcon className="w-5 h-5 mx-auto text-accent-400 mb-1" />
+                  <CurrencyDollarIcon className="w-5 h-5 mx-auto text-zinc-400 mb-1" />
                   <div className="text-sm font-medium">{formatCurrency(budget)}</div>
-                  <div className="text-[10px] text-white/40">Budget</div>
+                  <div className="text-[10px] text-zinc-500">Budget</div>
                 </button>
               ))}
             </div>
             
             {/* Results */}
             {optimizeMutation.data && (
-              <div className="space-y-3 p-4 bg-gradient-to-r from-accent-500/10 to-purple-500/10 rounded-xl border border-accent-500/20">
+              <div className="space-y-3 p-4 bg-zinc-900/50 rounded-md border border-zinc-800/60">
                 <div className="flex items-center gap-2">
-                  <SparklesIcon className="w-5 h-5 text-accent-400" />
+                  <SparklesIcon className="w-5 h-5 text-zinc-400" />
                   <span className="font-medium">Optimization Result</span>
                 </div>
                 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <div className="text-xs text-white/40">Expected Improvement</div>
-                    <div className="text-lg font-bold text-emerald-400">
-                      +{optimizeMutation.data.expected_improvement_pct.toFixed(1)}%
+                    <div className="text-xs text-zinc-500">Expected Improvement</div>
+                    <div className={`text-lg font-bold ${(optimizeMutation.data.expected_improvement_pct ?? 0) >= 0 ? 'text-emerald-400/80' : 'text-amber-400/80'}`}>
+                      {(optimizeMutation.data.expected_improvement_pct ?? 0) >= 0 ? '+' : ''}{(optimizeMutation.data.expected_improvement_pct ?? 0).toFixed(1)}%
                     </div>
                   </div>
                   <div>
-                    <div className="text-xs text-white/40">ROI</div>
-                    <div className="text-lg font-bold text-accent-400">
-                      {optimizeMutation.data.roi_pct.toFixed(0)}%
+                    <div className="text-xs text-zinc-500">ROI</div>
+                    <div className={`text-lg font-bold ${(optimizeMutation.data.roi_pct ?? 0) >= 0 ? 'text-zinc-400' : 'text-amber-400/80'}`}>
+                      {(optimizeMutation.data.roi_pct ?? 0).toFixed(0)}%
+                    </div>
+                  </div>
+                  <div className="col-span-2">
+                    <div className="text-xs text-zinc-500">Cost of mitigation</div>
+                    <div className="text-sm font-medium text-zinc-300">
+                      {formatCurrency(optimizeMutation.data.cost_of_mitigation ?? 0)}
                     </div>
                   </div>
                 </div>
                 
                 <div>
-                  <div className="text-xs text-white/40 mb-2">Implementation Priority</div>
+                  <div className="text-xs text-zinc-500 mb-2">Implementation Priority</div>
                   <ol className="space-y-1">
                     {optimizeMutation.data.implementation_priority.map((item: string, i: number) => (
-                      <li key={i} className="text-xs text-white/70 flex items-center gap-2">
-                        <span className="w-4 h-4 bg-accent-500/20 rounded-full text-accent-400 text-[10px] flex items-center justify-center">
+                      <li key={i} className="text-xs text-zinc-300 flex items-center gap-2">
+                        <span className="w-4 h-4 bg-zinc-900/80 border border-zinc-800/60 rounded-full text-zinc-400 font-mono text-[10px] flex items-center justify-center">
                           {i + 1}
                         </span>
                         {item}
@@ -639,7 +869,7 @@ export default function WhatIfSimulator({ baseExposure = 100_000_000 }: WhatIfSi
             
             {optimizeMutation.isPending && (
               <div className="flex items-center justify-center py-8">
-                <div className="w-6 h-6 border-2 border-accent-500 border-t-transparent rounded-full animate-spin" />
+                <div className="w-6 h-6 border-2 border-zinc-500 border-t-transparent rounded-full animate-spin" />
               </div>
             )}
           </motion.div>
@@ -660,17 +890,17 @@ export default function WhatIfSimulator({ baseExposure = 100_000_000 }: WhatIfSi
               initial={{ opacity: 0, y: 10, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 10, scale: 0.98 }}
-              className="w-full max-w-2xl rounded-2xl bg-zinc-950/90 border border-white/10 p-4"
+              className="w-full max-w-2xl rounded-md bg-zinc-950/90 border border-zinc-800/60 p-4"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="text-sm font-semibold text-white/80">AI Explain (What-If)</div>
-                  <div className="text-[11px] text-white/40">Answer includes citations and sources.</div>
+                  <div className="text-sm font-display font-semibold text-zinc-300">AI Explain (What-If)</div>
+                  <div className="text-[11px] text-zinc-500">Answer includes citations and sources.</div>
                 </div>
                 <button
                   type="button"
-                  className="text-white/40 hover:text-white/70 text-xs"
+                  className="text-zinc-500 hover:text-zinc-300 text-xs"
                   onClick={() => setAiOpen(false)}
                 >
                   Close
@@ -680,7 +910,7 @@ export default function WhatIfSimulator({ baseExposure = 100_000_000 }: WhatIfSi
               <textarea
                 value={aiQuestion}
                 onChange={(e) => setAiQuestion(e.target.value)}
-                className="mt-3 w-full min-h-[90px] rounded-lg bg-black/40 border border-white/10 p-3 text-sm text-white/80 placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/10"
+                className="mt-3 w-full min-h-[90px] rounded-md bg-zinc-900/80 border border-zinc-800/60 p-3 text-sm text-zinc-300 placeholder-zinc-500 font-sans focus:outline-none focus:ring-2 focus:ring-zinc-600"
                 placeholder="Ask about what-if results…"
               />
 
@@ -688,7 +918,7 @@ export default function WhatIfSimulator({ baseExposure = 100_000_000 }: WhatIfSi
                 <button
                   type="button"
                   disabled={aiLoading || aiQuestion.trim().length < 2}
-                  className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-white/80 text-xs disabled:opacity-50"
+                  className="px-3 py-1.5 rounded-md bg-zinc-800 border border-zinc-800/60 hover:bg-zinc-700 text-zinc-300 text-xs disabled:opacity-50"
                   onClick={async () => {
                     setAiLoading(true)
                     setAiError(null)
@@ -726,22 +956,22 @@ export default function WhatIfSimulator({ baseExposure = 100_000_000 }: WhatIfSi
                 </button>
               </div>
 
-              {aiError && <div className="mt-3 text-xs text-amber-400">{aiError}</div>}
+              {aiError && <div className="mt-3 text-xs text-amber-400/80">{aiError}</div>}
 
               {aiAnswer != null && (
-                <div className="mt-3 rounded-lg bg-black/30 border border-white/10 p-3">
-                  <div className="text-[11px] text-white/40 mb-1">Answer</div>
-                  <pre className="whitespace-pre-wrap break-words text-sm text-white/75">{aiAnswer}</pre>
+                <div className="mt-3 rounded-md bg-zinc-900/80 border border-zinc-800/60 p-3">
+                  <div className="text-[11px] text-zinc-500 mb-1">Answer</div>
+                  <pre className="whitespace-pre-wrap break-words text-sm text-zinc-300">{aiAnswer}</pre>
 
                   {normalizeAiqSources(aiSources).length > 0 && (
                     <>
-                      <div className="text-[11px] text-white/40 mt-3 mb-1">Sources</div>
+                      <div className="text-[11px] text-zinc-500 mt-3 mb-1">Sources</div>
                       <ul className="space-y-1">
                         {normalizeAiqSources(aiSources).slice(0, 10).map((s, i) => (
-                          <li key={s.id || i} className="text-[11px] text-white/45">
-                            <span className="text-white/30">[{i + 1}]</span>{' '}
-                            <span className="text-white/70">{s.title || s.id}</span>
-                            {s.kind && <span className="text-white/25"> · {s.kind}</span>}
+                          <li key={s.id || i} className="text-[11px] text-zinc-500">
+                            <span className="text-zinc-600">[{i + 1}]</span>{' '}
+                            <span className="text-zinc-300">{s.title || s.id}</span>
+                            {s.kind && <span className="text-zinc-600"> · {s.kind}</span>}
                           </li>
                         ))}
                       </ul>

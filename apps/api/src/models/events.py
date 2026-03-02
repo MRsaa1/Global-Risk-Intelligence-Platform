@@ -77,10 +77,19 @@ class EventTypes:
     SYSTEM_HEALTH_CHANGED = "system.health_changed"
     ALERT_GENERATED = "alert.generated"
 
+    # Risk & Intelligence OS (ARIN/DAE)
+    RISK_ASSESSMENT = "risk_assessment"
+
     # Event-driven stress test (Phase 3)
     GEOPOLITICAL_ALERT = "geopolitical.alert"
     STRESS_TEST_TRIGGER = "stress_test.trigger"
     STRESS_TEST_UPDATE = "stress_test.update"
+
+    # Real-time data ingestion (Phase 1)
+    DATA_REFRESH_COMPLETED = "data.refresh_completed"
+    THREAT_DETECTED = "threat.detected"
+    MARKET_UPDATE = "market.update"
+    SOCIAL_THREAT_DETECTED = "social.threat_detected"
     
     @classmethod
     def get_channel_for_event(cls, event_type: str) -> str:
@@ -92,6 +101,12 @@ class EventTypes:
             return "command_center"
         if event_type in (cls.GEOPOLITICAL_ALERT, cls.STRESS_TEST_TRIGGER, cls.STRESS_TEST_UPDATE):
             return "stress_tests"
+        if event_type == cls.DATA_REFRESH_COMPLETED:
+            return "dashboard"
+        if event_type == cls.THREAT_DETECTED or event_type == cls.SOCIAL_THREAT_DETECTED:
+            return "threat_intelligence"
+        if event_type == cls.MARKET_UPDATE:
+            return "market_data"
         # Pattern-based mappings
         if event_type.startswith("stress_test") or event_type.startswith("geopolitical"):
             return "stress_tests"
@@ -105,5 +120,11 @@ class EventTypes:
             return "command_center"
         elif event_type.startswith("alert"):
             return "alerts"
+        elif event_type.startswith("risk"):
+            return "dashboard"
+        elif event_type in (cls.DATA_REFRESH_COMPLETED, cls.THREAT_DETECTED, cls.SOCIAL_THREAT_DETECTED):
+            return "threat_intelligence"
+        elif event_type == cls.MARKET_UPDATE:
+            return "market_data"
         else:
             return "dashboard"

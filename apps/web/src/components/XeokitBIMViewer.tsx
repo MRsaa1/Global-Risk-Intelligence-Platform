@@ -18,6 +18,39 @@ export interface XeokitBIMViewerProps {
   onError?: (message: string) => void
 }
 
+/**
+ * Pre-validate that the project index JSON exists and is parseable
+ * before handing off to xeokit (whose internal XHR callbacks throw
+ * uncatchable errors when the response is not valid JSON).
+ */
+async function validateProjectData(
+  dataDir: string,
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  try {
+    const url = `${dataDir}/projects/${projectId}/index.json`
+    const res = await fetch(url, { signal })
+    if (!res.ok) {
+      return { ok: false, reason: `Project data not found (HTTP ${res.status})` }
+    }
+    const ct = res.headers.get('content-type') ?? ''
+    if (!ct.includes('json')) {
+      return { ok: false, reason: 'Project index is not JSON (SPA fallback?)' }
+    }
+    const json = await res.json()
+    if (!json || typeof json !== 'object') {
+      return { ok: false, reason: 'Project index is not a valid object' }
+    }
+    return { ok: true }
+  } catch (err: any) {
+    if (err?.name === 'AbortError') {
+      return { ok: false, reason: 'Cancelled' }
+    }
+    return { ok: false, reason: err?.message ?? String(err) }
+  }
+}
+
 export default function XeokitBIMViewer({
   projectId,
   dataDir = XEOKIT_DATA_BASE,
@@ -38,12 +71,13 @@ export default function XeokitBIMViewer({
 
     setContextLost(false)
     let mounted = true
+    const abortCtrl = new AbortController()
     const container = containerRef.current
 
     // DOM structure required by xeokit BIMViewer
     const backdrop = document.createElement('div')
     backdrop.className = 'xeokit-busy-modal-backdrop'
-    backdrop.style.cssText = 'position:relative;width:100%;height:100%;display:flex;flex-direction:column;background:#0a0f1a;'
+    backdrop.style.cssText = 'position:relative;width:100%;height:100%;display:flex;flex-direction:column;background:#09090b;'
     const explorer = document.createElement('div')
     explorer.className = 'xeokit-explorer'
     explorer.style.cssText = 'min-width:200px;max-width:280px;border-right:1px solid rgba(255,255,255,0.1);'
@@ -64,8 +98,31 @@ export default function XeokitBIMViewer({
     backdrop.appendChild(content)
     container.appendChild(backdrop)
 
+    // Suppress uncaught xeokit errors that escape from internal XHR callbacks
+    // after the component unmounts and DOM elements are removed.
+    const suppressXeokitError = (event: ErrorEvent) => {
+      if (
+        !mounted &&
+        event.filename &&
+        event.filename.includes('xeokit-bim-viewer')
+      ) {
+        event.preventDefault()
+      }
+    }
+    window.addEventListener('error', suppressXeokitError)
+
     async function init() {
       try {
+        // Pre-check: verify project data is available before engaging xeokit
+        const check = await validateProjectData(dataDir, projectId, abortCtrl.signal)
+        if (!mounted) return
+        if (!check.ok) {
+          setStatus('error')
+          setErrorMessage(check.reason)
+          onError?.(check.reason)
+          return
+        }
+
         await import('@xeokit/xeokit-bim-viewer/dist/xeokit-bim-viewer.css').catch(() => {})
 
         // Package ships only dist/ (no src/); named exports from dist build
@@ -76,6 +133,8 @@ export default function XeokitBIMViewer({
           throw new Error('xeokit-bim-viewer: Server or BIMViewer not found')
         }
 
+        if (!mounted) return
+
         const server = new Server({ dataDir })
         serverRef.current = server
 
@@ -85,24 +144,26 @@ export default function XeokitBIMViewer({
           toolbarElement: toolbar,
           navCubeCanvasElement: navCube,
           busyModelBackdropElement: backdrop,
-          navMode: "orbit" // Use navMode instead of deprecated planView
+          // Scope all internal querySelector calls to our own DOM tree,
+          // preventing ID clashes across multiple viewer instances.
+          containerElement: backdrop,
         })
         viewerRef.current = viewer
 
         const loadProject = () => {
           if (!mounted || !viewerRef.current) return
-          const viewer = viewerRef.current
-          viewer.loadProject(
+          const v = viewerRef.current
+          v.loadProject(
             projectId,
             () => {
-              if (!mounted || viewerRef.current !== viewer) return
+              if (!mounted || viewerRef.current !== v) return
               setStatus('ready')
               setErrorMessage(null)
               setContextLost(false)
               onLoad?.()
             },
             (errMsg: string) => {
-              if (!mounted || viewerRef.current !== viewer) return
+              if (!mounted || viewerRef.current !== v) return
               setStatus('error')
               setErrorMessage(errMsg || 'Failed to load project')
               onError?.(errMsg || 'Failed to load project')
@@ -121,7 +182,7 @@ export default function XeokitBIMViewer({
           try {
             if (typeof prevViewer.unloadProject === 'function') prevViewer.unloadProject()
             if (typeof prevViewer.destroy === 'function') prevViewer.destroy()
-          } catch {}
+          } catch { /* ignore */ }
           viewerRef.current = null
           const newViewer = new BIMViewer(serverRef.current, {
             canvasElement: canvas,
@@ -129,7 +190,7 @@ export default function XeokitBIMViewer({
             toolbarElement: toolbar,
             navCubeCanvasElement: navCube,
             busyModelBackdropElement: backdrop,
-            navMode: "orbit"
+            containerElement: backdrop,
           })
           viewerRef.current = newViewer
           loadProject()
@@ -156,35 +217,43 @@ export default function XeokitBIMViewer({
 
     return () => {
       mounted = false
+      abortCtrl.abort()
+      // Destroy viewer before removing DOM so pending XHR callbacks
+      // still find elements (reduces null-pointer race window).
       const v = viewerRef.current
       viewerRef.current = null
       serverRef.current = null
       try {
         if (v?.unloadProject) v.unloadProject()
         if (typeof v?.destroy === 'function') v.destroy()
-      } catch (_) {}
+      } catch (_) { /* ignore */ }
       const c = canvasRef.current
       const h = webglHandlersRef.current
       if (c && h) {
         try {
           c.removeEventListener('webglcontextlost', h.lost, false)
           c.removeEventListener('webglcontextrestored', h.restored, false)
-        } catch (_) {}
+        } catch (_) { /* ignore */ }
         webglHandlersRef.current = null
         canvasRef.current = null
       }
-      try {
-        while (container.firstChild) container.removeChild(container.firstChild)
-      } catch (_) {}
+      // Remove DOM after a short delay so any in-flight XHR callbacks
+      // can still resolve without null-pointer crashes.
+      setTimeout(() => {
+        try {
+          while (container.firstChild) container.removeChild(container.firstChild)
+        } catch (_) { /* ignore */ }
+        window.removeEventListener('error', suppressXeokitError)
+      }, 500)
     }
   }, [projectId, dataDir, onLoad, onError])
 
   if (status === 'error' && errorMessage) {
     return (
-      <div className="flex flex-col items-center justify-center h-full min-h-[320px] bg-[#0a0f1a] rounded-xl p-6 text-center">
-        <p className="text-red-400 font-medium mb-2">BIM (XKT) load failed</p>
-        <p className="text-sm text-white/60 mb-4">{errorMessage}</p>
-        <p className="text-xs text-white/40">
+      <div className="flex flex-col items-center justify-center h-full min-h-[320px] bg-zinc-950 rounded-md p-6 text-center">
+        <p className="text-red-400/80 font-medium mb-2">BIM (XKT) load failed</p>
+        <p className="text-sm text-zinc-400 mb-4">{errorMessage}</p>
+        <p className="text-xs text-zinc-500">
           Add XKT data under <code className="text-cyan-400/80">public/xeokit-data/projects</code> and set <code className="text-cyan-400/80">projectId</code>. See docs/XEOKIT_INTEGRATION.md.
         </p>
       </div>
@@ -192,14 +261,14 @@ export default function XeokitBIMViewer({
   }
 
   return (
-    <div className="relative w-full h-full min-h-[320px] rounded-xl overflow-hidden">
+    <div className="relative w-full h-full min-h-[320px] rounded-md overflow-hidden">
       <div ref={containerRef} className="w-full h-full min-h-[320px]" />
       {contextLost && (
         <div
-          className="absolute inset-0 flex items-center justify-center bg-[#0a0f1a]/90 rounded-xl"
+          className="absolute inset-0 flex items-center justify-center bg-zinc-950/90 rounded-md"
           aria-live="polite"
         >
-          <p className="text-amber-400 font-medium">WebGL context lost. Restoring…</p>
+          <p className="text-amber-400/80 font-medium">WebGL context lost. Restoring...</p>
         </div>
       )}
     </div>

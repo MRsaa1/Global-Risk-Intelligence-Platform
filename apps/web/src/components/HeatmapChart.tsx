@@ -320,7 +320,7 @@ export default function HeatmapChart({
       ref={containerRef}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="relative w-full h-full glass rounded-xl p-4"
+      className="relative w-full h-full glass rounded-md p-4"
     >
       <svg ref={svgRef} width={width} height={height} className="overflow-visible" />
       
@@ -337,7 +337,7 @@ export default function HeatmapChart({
               top: tooltipData.y - 10,
               pointerEvents: 'none',
             }}
-            className="bg-[#1a1f2e] border border-white/10 rounded-lg px-3 py-2 shadow-xl z-50"
+            className="bg-[#18181b] border border-white/10 rounded-lg px-3 py-2 shadow-xl z-50"
           >
             <div className="text-xs space-y-1">
               <div className="flex items-center gap-2">

@@ -206,7 +206,7 @@ export default function CascadeFlowDiagram({
       .attr('width', w)
       .attr('height', h)
       .attr('viewBox', [0, 0, w, h])
-      .style('background', '#0a0a0f')
+      .style('background', '#09090b')
 
     const g = svg.append('g')
 
@@ -241,8 +241,8 @@ export default function CascadeFlowDiagram({
 
     // Labels
     g.append('g')
-      .attr('font', '11px "Space Grotesk", system-ui, sans-serif')
-      .attr('fill', '#e2e8f0')
+      .attr('font', '11px "JetBrains Mono", monospace')
+      .attr('fill', '#a1a1aa')
       .selectAll('text')
       .data(graph.nodes)
       .join('text')
@@ -264,23 +264,23 @@ export default function CascadeFlowDiagram({
 
   return (
     <div className="space-y-4">
-      <div className="glass rounded-2xl p-4">
+      <div className="glass rounded-md p-4">
         <div className="relative">
           <div
             ref={containerRef}
-            className="bg-[#0a0a0f] rounded-xl border border-white/10 overflow-hidden"
+            className="bg-[#09090b] rounded-md border border-zinc-700 overflow-hidden"
             style={{ width: '100%', height }}
           />
           {(buildFromContextMutation.isPending || simulateMutation.isPending) && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm rounded-xl" style={{ height }}>
+            <div className="absolute inset-0 flex items-center justify-center bg-zinc-950/80 rounded-md" style={{ height }}>
               <div className="flex flex-col items-center gap-3">
-                <div className="w-10 h-10 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
-                <span className="text-sm text-white/60">Building flow...</span>
+                <div className="w-10 h-10 border-2 border-zinc-500 border-t-transparent rounded-full animate-spin" />
+                <span className="text-sm text-zinc-400">Building flow...</span>
               </div>
             </div>
           )}
         </div>
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-4 text-xs text-white/50">
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-4 text-xs text-zinc-400">
           <div className="flex flex-wrap items-center gap-6">
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full bg-[#8a4a4a]" />
@@ -299,7 +299,7 @@ export default function CascadeFlowDiagram({
             type="button"
             onClick={() => buildFromContextMutation.mutate()}
             disabled={buildFromContextMutation.isPending || simulateMutation.isPending}
-            className="px-3 py-1.5 bg-purple-500/20 text-purple-300 rounded-lg hover:bg-purple-500/30 disabled:opacity-50 text-xs transition-colors"
+            className="px-3 py-1.5 bg-zinc-800 text-zinc-300 rounded-lg hover:bg-zinc-700 disabled:opacity-50 text-xs transition-colors"
           >
             Run Simulation
           </button>
@@ -307,34 +307,34 @@ export default function CascadeFlowDiagram({
 
         {sim && (
           <div className="mt-4 space-y-4">
-            <p className="text-white/40 text-[10px]">Flow: trigger → affected → containment (D3 Sankey).</p>
-            <div className="p-3 bg-white/5 rounded-lg border border-white/10">
-              <div className="text-white/60 text-[10px] uppercase tracking-wider mb-1.5">What it helps you understand</div>
-              <p className="text-white/70 text-xs leading-relaxed">
+            <p className="text-zinc-500 text-[10px]">Flow: trigger → affected → containment (D3 Sankey).</p>
+            <div className="p-3 bg-zinc-800 rounded-lg border border-zinc-700">
+              <div className="text-zinc-400 text-[10px] uppercase tracking-wider mb-1.5">What it helps you understand</div>
+              <p className="text-zinc-300 text-xs leading-relaxed">
                 Helps you see how the trigger propagates to affected nodes, which nodes bear the highest impact, and where containment stops the cascade. Use this to prioritize hardening and verification.
               </p>
             </div>
             <div className="grid grid-cols-4 gap-3">
-              <div className="bg-white/5 rounded-lg p-3 border border-white/10">
-                <div className="text-white/50 text-[10px] uppercase">Affected nodes</div>
-                <div className="text-white text-lg font-medium">{sim.affected_count}</div>
+              <div className="bg-zinc-800 rounded-lg p-3 border border-zinc-700">
+                <div className="text-zinc-400 text-[10px] uppercase">Affected nodes</div>
+                <div className="text-zinc-100 text-lg font-medium">{sim.affected_count}</div>
               </div>
-              <div className="bg-white/5 rounded-lg p-3 border border-white/10">
-                <div className="text-white/50 text-[10px] uppercase">Est. cascade loss</div>
+              <div className="bg-zinc-800 rounded-lg p-3 border border-zinc-700">
+                <div className="text-zinc-400 text-[10px] uppercase">Est. cascade loss</div>
                 <div className="text-amber-400 text-lg font-medium">{formatCurrency(sim.total_loss)}</div>
               </div>
-              <div className="bg-white/5 rounded-lg p-3 border border-white/10">
-                <div className="text-white/50 text-[10px] uppercase">Critical path</div>
+              <div className="bg-zinc-800 rounded-lg p-3 border border-zinc-700">
+                <div className="text-zinc-400 text-[10px] uppercase">Critical path</div>
                 <div className="text-red-400/90 text-lg font-medium">{sim.critical_nodes?.length ?? 0}</div>
               </div>
-              <div className="bg-white/5 rounded-lg p-3 border border-white/10">
-                <div className="text-white/50 text-[10px] uppercase">Containment points</div>
+              <div className="bg-zinc-800 rounded-lg p-3 border border-zinc-700">
+                <div className="text-zinc-400 text-[10px] uppercase">Containment points</div>
                 <div className="text-green-400/90 text-lg font-medium">{sim.containment_points?.length ?? 0}</div>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="bg-white/5 rounded-lg border border-white/10 overflow-hidden">
-                <div className="text-white/70 text-xs uppercase tracking-wider px-3 py-2 border-b border-white/10">Critical nodes</div>
+              <div className="bg-zinc-800 rounded-lg border border-zinc-700 overflow-hidden">
+                <div className="text-zinc-300 text-xs uppercase tracking-wider px-3 py-2 border-b border-zinc-700">Critical nodes</div>
                 <div className="max-h-32 overflow-y-auto">
                   {(sim.critical_nodes?.length ? sim.critical_nodes : vuln?.most_critical_nodes?.slice(0, 5).map((x) => x.node_id) ?? []).map(
                     (id) => {
@@ -342,9 +342,9 @@ export default function CascadeFlowDiagram({
                       const imp = sim?.node_impacts?.[id]
                       const crit = vuln?.most_critical_nodes?.find((m) => m.node_id === id)?.criticality
                       return (
-                        <div key={id} className="px-3 py-1.5 flex justify-between text-xs border-b border-white/5">
-                          <span className="text-white/80">{n?.name ?? id}</span>
-                          <span className="text-white/50">
+                        <div key={id} className="px-3 py-1.5 flex justify-between text-xs border-b border-zinc-800">
+                          <span className="text-zinc-300">{n?.name ?? id}</span>
+                          <span className="text-zinc-400">
                             {(imp != null ? `${(imp * 100).toFixed(0)}%` : crit != null ? `${(crit * 100).toFixed(0)}%` : '—')} · {n?.sector ?? '—'}
                           </span>
                         </div>
@@ -352,23 +352,23 @@ export default function CascadeFlowDiagram({
                     }
                   )}
                   {!sim.critical_nodes?.length && !vuln?.most_critical_nodes?.length && (
-                    <div className="px-3 py-2 text-white/40 text-xs">None identified</div>
+                    <div className="px-3 py-2 text-zinc-500 text-xs">None identified</div>
                   )}
                 </div>
               </div>
-              <div className="bg-white/5 rounded-lg border border-white/10 overflow-hidden">
-                <div className="text-white/70 text-xs uppercase tracking-wider px-3 py-2 border-b border-white/10">Containment points</div>
+              <div className="bg-zinc-800 rounded-lg border border-zinc-700 overflow-hidden">
+                <div className="text-zinc-300 text-xs uppercase tracking-wider px-3 py-2 border-b border-zinc-700">Containment points</div>
                 <div className="max-h-32 overflow-y-auto">
                   {(sim.containment_points ?? []).map((id) => {
                     const n = graphData.nodes.find((nn) => nn.id === id)
                     return (
-                      <div key={id} className="px-3 py-1.5 flex justify-between text-xs border-b border-white/5">
-                        <span className="text-white/80">{n?.name ?? id}</span>
-                        <span className="text-white/50">{n?.sector ?? '—'}</span>
+                      <div key={id} className="px-3 py-1.5 flex justify-between text-xs border-b border-zinc-800">
+                        <span className="text-zinc-300">{n?.name ?? id}</span>
+                        <span className="text-zinc-400">{n?.sector ?? '—'}</span>
                       </div>
                     )
                   })}
-                  {(sim.containment_points?.length ?? 0) === 0 && <div className="px-3 py-2 text-white/40 text-xs">None identified</div>}
+                  {(sim.containment_points?.length ?? 0) === 0 && <div className="px-3 py-2 text-zinc-500 text-xs">None identified</div>}
                 </div>
               </div>
             </div>

@@ -325,14 +325,14 @@ export default function GlobePanel({
   const timelineLabels = ['T0', 'T+1Y', 'T+3Y', 'T+5Y']
 
   return (
-    <div className="h-full flex flex-col relative bg-[#000510]">
+    <div className="h-full flex flex-col relative bg-[#09090b]">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-[#1a2535] bg-[#0a0f18]/80 backdrop-blur-sm z-20">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-[#27272a] bg-[#09090b]/80 z-20">
         <div className="flex items-center gap-2">
-          <svg className="w-4 h-4 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
+          <svg className="w-4 h-4 text-zinc-400" fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M4.083 9h1.946c.089-1.546.383-2.97.837-4.118A6.004 6.004 0 004.083 9zM10 2a8 8 0 100 16 8 8 0 000-16zm0 2c-.076 0-.232.032-.465.262-.238.234-.497.623-.737 1.182-.389.907-.673 2.142-.766 3.556h3.936c-.093-1.414-.377-2.649-.766-3.556-.24-.559-.5-.948-.737-1.182C10.232 4.032 10.076 4 10 4zm3.971 5c-.089-1.546-.383-2.97-.837-4.118A6.004 6.004 0 0115.917 9h-1.946zm-2.003 2H8.032c.093 1.414.377 2.649.766 3.556.24.559.5.948.737 1.182.233.23.389.262.465.262.076 0 .232-.032.465-.262.238-.234.498-.623.737-1.182.389-.907.673-2.142.766-3.556zm1.166 4.118c.454-1.147.748-2.572.837-4.118h1.946a6.004 6.004 0 01-2.783 4.118zm-6.268 0C6.412 13.97 6.118 12.546 6.03 11H4.083a6.004 6.004 0 002.783 4.118z" clipRule="evenodd" />
           </svg>
-          <span className="text-white font-medium text-sm">Global Risk Command Center</span>
+          <span className="text-zinc-100 font-medium text-sm">Global Risk Command Center</span>
         </div>
         
         <div className="flex gap-1">
@@ -342,8 +342,8 @@ export default function GlobePanel({
               onClick={() => onTabChange(tab.id)}
               className={`px-3 py-1 text-xs rounded transition-all ${
                 activeTab === tab.id
-                  ? 'bg-[#1a2a3a] text-amber-400'
-                  : 'text-gray-500 hover:text-gray-300'
+                  ? 'bg-[#27272a] text-zinc-400'
+                  : 'text-zinc-500 hover:text-zinc-300'
               }`}
             >
               {tab.label}
@@ -355,7 +355,7 @@ export default function GlobePanel({
       {/* Stats overlay */}
       <div className="absolute top-14 left-4 z-10 space-y-1.5">
         <StatCard label="Global Exposure:" value={`$${data.globalExposure}B`} />
-        <StatCard label="At Risk :" value={data.atRisk.toString() + "B"} valueColor="text-amber-500" />
+        <StatCard label="At Risk :" value={data.atRisk.toString() + "B"} valueColor="text-zinc-400" />
         <StatCard label="High Risk" value={data.highRisk.toString() + "B"} valueColor="text-red-500" />
         <StatCard label="Stress Scenarios:" value={`${data.activeScenarios} Active`} />
       </div>
@@ -368,7 +368,7 @@ export default function GlobePanel({
       </div>
 
       {/* Timeline */}
-      <div className="px-4 py-2.5 border-t border-[#1a2535] bg-[#0a0f18]/80 backdrop-blur-sm">
+      <div className="px-4 py-2.5 border-t border-[#27272a] bg-[#09090b]/80">
         <div className="flex items-center gap-3">
           <div className="flex gap-1">
             {timelineLabels.map((label, index) => (
@@ -377,8 +377,8 @@ export default function GlobePanel({
                 onClick={() => onTimelineChange(index)}
                 className={`px-3 py-1 text-xs rounded border transition-all ${
                   timelineValue === index
-                    ? 'bg-[#1a2a3a] border-amber-500/40 text-amber-400'
-                    : 'border-[#1a2535] text-gray-500 hover:text-white'
+                    ? 'bg-[#27272a] border-zinc-600 text-zinc-400'
+                    : 'border-[#27272a] text-zinc-500 hover:text-zinc-100'
                 }`}
               >
                 {label}
@@ -386,7 +386,7 @@ export default function GlobePanel({
             ))}
           </div>
           
-          <div className="flex-1 relative h-1 bg-[#1a2535] rounded-full mx-2">
+          <div className="flex-1 relative h-1 bg-[#27272a] rounded-full mx-2">
             <div 
               className="absolute h-full bg-gradient-to-r from-amber-500 via-amber-500 to-red-500 rounded-full"
               style={{ width: `${(timelineValue / 3) * 100}%` }}
@@ -397,8 +397,8 @@ export default function GlobePanel({
                 onClick={() => onTimelineChange(i)}
                 className={`absolute top-1/2 w-2.5 h-2.5 rounded-full cursor-pointer -translate-y-1/2 border-2 ${
                   i <= timelineValue 
-                    ? 'bg-amber-500 border-amber-300' 
-                    : 'bg-[#1a2535] border-[#2a3545]'
+                    ? 'bg-zinc-500 border-zinc-400' 
+                    : 'bg-[#27272a] border-[#3f3f46]'
                 } ${i === timelineValue ? 'w-3 h-3 bg-red-500 border-red-400' : ''}`}
                 style={{ left: `${(i / 3) * 100}%`, transform: 'translate(-50%, -50%)' }}
               />
@@ -410,10 +410,10 @@ export default function GlobePanel({
   )
 }
 
-function StatCard({ label, value, valueColor = 'text-white' }: { label: string; value: string; valueColor?: string }) {
+function StatCard({ label, value, valueColor = 'text-zinc-100' }: { label: string; value: string; valueColor?: string }) {
   return (
-    <div className="bg-[#0a0f18]/90 backdrop-blur-sm px-3 py-1.5 rounded border border-[#1a2535]/50">
-      <div className="text-gray-500 text-[10px]">{label}</div>
+    <div className="bg-[#09090b]/90 px-3 py-1.5 rounded border border-[#27272a]/50">
+      <div className="text-zinc-500 text-[10px]">{label}</div>
       <div className={`font-bold text-base ${valueColor}`}>{value}</div>
     </div>
   )

@@ -27,7 +27,7 @@ pkill -f "uvicorn src.main:app" 2>/dev/null || true
 sleep 2
 cd "$ROOT/apps/api"
 source .venv/bin/activate
-nohup uvicorn src.main:app --host 0.0.0.0 --port 9002 > /tmp/api.log 2>&1 &
+nohup uvicorn src.main:app --host 0.0.0.0 --port 9002 --no-access-log > /tmp/api.log 2>&1 &
 sleep 3
 echo ""
 echo "NIM (:8001): $(curl -sf http://localhost:8001/v1/health/ready 2>/dev/null | grep -q ready && echo ready || echo not ready)"

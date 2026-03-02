@@ -65,6 +65,22 @@
         "industry_codes": []
       },
       "risk_zones": ["Command Center", "Strategic Assets", "Communications Hub", "Supply Depot", "Training Facilities", "Support Infrastructure"]
+    },
+    "FINANCIAL_INSTITUTION_SRO": {
+      "display_name": "Financial Institution (SRO)",
+      "extends": "FINANCIAL",
+      "kg_labels": ["FINANCIAL_INSTITUTION", "Institution"],
+      "risk_zones": ["Trading Floor", "Counterparty Exposure", "Infrastructure Dependency"]
+    },
+    "MARKET_SRO": {
+      "display_name": "Financial Market",
+      "kg_labels": ["MARKET"],
+      "risk_zones": ["Liquidity", "Price Discovery", "Clearing"]
+    },
+    "SYSTEMIC_INDICATOR_SRO": {
+      "display_name": "Systemic Risk Indicator",
+      "kg_labels": ["SYSTEMIC_INDICATOR"],
+      "risk_zones": []
     }
   }
 }

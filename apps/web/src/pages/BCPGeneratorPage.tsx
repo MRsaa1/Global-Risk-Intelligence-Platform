@@ -10,8 +10,9 @@ import { Link, useNavigate, useLocation } from 'react-router-dom'
 import axios from 'axios'
 import { ArrowLeftIcon, PlayIcon, DocumentTextIcon, ClipboardDocumentListIcon } from '@heroicons/react/24/outline'
 import { FORTUNE_500, formatLocation } from '../data/fortune500'
-
-const API_BASE = '/api/v1'
+import SendToARINButton from '../components/SendToARINButton'
+import ARINVerdictBadge from '../components/ARINVerdictBadge'
+import { getApiV1Base } from '../config/env'
 
 // Sectors: same 12 as Stress Planner; backend keys match bcp_config (insurance, healthcare, financial, ...)
 const SECTOR_OPTIONS: { id: string; label: string; apiKey: string }[] = [
@@ -94,7 +95,7 @@ function BCPExportButtons({ content }: { content: string }) {
     setExportError(null)
     try {
       const res = await axios.post(
-        `${API_BASE}/bcp/export/pdf`,
+        `${getApiV1Base()}/bcp/export/pdf`,
         { content },
         { responseType: 'blob' }
       )
@@ -112,7 +113,7 @@ function BCPExportButtons({ content }: { content: string }) {
     setExportError(null)
     try {
       const res = await axios.post(
-        `${API_BASE}/bcp/export/word`,
+        `${getApiV1Base()}/bcp/export/word`,
         { content },
         { responseType: 'blob' }
       )
@@ -127,11 +128,29 @@ function BCPExportButtons({ content }: { content: string }) {
 
   return (
     <div className="flex flex-wrap items-center gap-2">
+      <SendToARINButton
+        sourceModule="bcp"
+        objectType="scenario"
+        objectId={`bcp-${Date.now()}`}
+        inputData={{ content_preview: content.slice(0, 500), length: content.length }}
+        exportEntityId="portfolio_global"
+        exportEntityType="portfolio"
+        exportAnalysisType="compliance_check"
+        exportData={{
+          risk_score: 50,
+          risk_level: 'MEDIUM',
+          summary: `BCP plan (${content.length} chars). Business continuity scenario.`,
+          recommendations: ['Review critical functions', 'Update response procedures'],
+          indicators: { bcp_length: content.length },
+        }}
+        size="sm"
+      />
+      <ARINVerdictBadge entityId="portfolio_global" compact />
       <button
         type="button"
         onClick={handleExportPdf}
         disabled={exportingPdf}
-        className="px-3 py-1.5 rounded-lg border border-white/20 text-white/80 text-sm hover:bg-white/5 disabled:opacity-50"
+        className="px-3 py-1.5 rounded-md border border-zinc-800/60 bg-zinc-900/50 text-zinc-200 text-sm font-sans hover:bg-zinc-800 disabled:opacity-50"
       >
         {exportingPdf ? 'Exporting…' : 'Export to PDF'}
       </button>
@@ -139,11 +158,11 @@ function BCPExportButtons({ content }: { content: string }) {
         type="button"
         onClick={handleExportWord}
         disabled={exportingWord}
-        className="px-3 py-1.5 rounded-lg border border-white/20 text-white/80 text-sm hover:bg-white/5 disabled:opacity-50"
+        className="px-3 py-1.5 rounded-md border border-zinc-800/60 bg-zinc-900/50 text-zinc-200 text-sm font-sans hover:bg-zinc-800 disabled:opacity-50"
       >
         {exportingWord ? 'Exporting…' : 'Export to Word'}
       </button>
-      {exportError && <span className="text-xs text-red-400">{exportError}</span>}
+      {exportError && <span className="text-xs text-red-400/80">{exportError}</span>}
     </div>
   )
 }
@@ -227,7 +246,7 @@ export default function BCPGeneratorPage() {
       const sectorKey = sectorOption?.apiKey ?? 'enterprise'
       const loc = buildLocationParts()
       const res = await axios.post<{ content: string; model?: string; tokens_used?: number }>(
-        `${API_BASE}/bcp/generate`,
+        `${getApiV1Base()}/bcp/generate`,
         {
           entity: {
             name: resolvedEntityName.trim(),
@@ -289,33 +308,47 @@ export default function BCPGeneratorPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0e17] text-white p-4 md:p-6">
-      <div className="max-w-6xl mx-auto">
+    <div className="min-h-full p-4 md:p-6 bg-zinc-950 text-zinc-100">
+      <div className="w-full max-w-[1920px] mx-auto">
         <div className="flex items-center gap-4 mb-6">
           <Link
             to="/command"
-            className="p-2 rounded-lg border border-white/10 text-white/70 hover:bg-white/5 hover:text-white"
+            className="p-2 rounded-md border border-zinc-800/60 text-zinc-500 hover:bg-zinc-800/80 hover:text-zinc-100"
           >
             <ArrowLeftIcon className="w-5 h-5" />
           </Link>
           <div className="flex items-center gap-2">
-            <ClipboardDocumentListIcon className="w-8 h-8 text-amber-400" />
-            <h1 className="text-xl font-semibold text-white">BCP Generator</h1>
+            <div className="p-2 rounded-md bg-zinc-900/80 border border-zinc-800/60">
+              <ClipboardDocumentListIcon className="w-6 h-6 text-zinc-400/80" />
+            </div>
+            <div>
+              <h1 className="text-xl font-display font-semibold text-zinc-100 tracking-tight">BCP Generator</h1>
+              <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mt-0.5">
+                Standards alignment: ISO 22301:2019, DORA Article 11
+              </p>
+            </div>
           </div>
+        </div>
+
+        {/* Gap X5: ISO 22301 and DORA Article 11 alignment */}
+        <div className="mb-6 rounded-md border border-zinc-800/60 bg-zinc-900/50 px-4 py-3 text-sm text-zinc-400/90 font-sans">
+          <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Standards alignment:</span>{' '}
+          ISO 22301:2019 (Business continuity management systems — BCMS). ICT business continuity aligned with{' '}
+          <span className="text-zinc-300">DORA Article 11</span> (ICT risk management framework). Plans support BCMS maturity assessment and regulatory expectations.
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Left: Form */}
           <div className="space-y-6">
-            <section className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
-              <h2 className="text-sm font-medium uppercase tracking-wider text-white/60 mb-3">1. Organization</h2>
+            <section className="rounded-md border border-zinc-800/60 bg-zinc-900/50 p-4">
+              <h2 className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-3">1. Organization</h2>
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs text-white/50 mb-1">Entity (Fortune 500 or custom)</label>
+                  <label className="block font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-1">Entity (Fortune 500 or custom)</label>
                   <select
                     value={fortuneId}
                     onChange={(e) => setFortuneId(e.target.value)}
-                    className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm text-white focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50"
+                    className="w-full rounded-md bg-zinc-900/80 border border-zinc-800/60 px-3 py-2 text-sm text-zinc-100 font-sans focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500"
                   >
                     <option value="">— Select entity —</option>
                     {FORTUNE_500.slice(0, 30).map((e) => (
@@ -325,22 +358,22 @@ export default function BCPGeneratorPage() {
                 </div>
                 {!fortuneId && (
                   <div>
-                    <label className="block text-xs text-white/50 mb-1">Or type custom entity name</label>
+                    <label className="block font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-1">Or type custom entity name</label>
                     <input
                       type="text"
                       value={entityCustom}
                       onChange={(e) => setEntityCustom(e.target.value)}
                       placeholder="Organization name"
-                      className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm text-white placeholder-white/30 focus:border-amber-500/50"
+                      className="w-full rounded-md bg-zinc-900/80 border border-zinc-800/60 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 font-sans focus:border-zinc-500"
                     />
                   </div>
                 )}
                 <div>
-                  <label className="block text-xs text-white/50 mb-1">Sector</label>
+                  <label className="block font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-1">Sector</label>
                   <select
                     value={sectorId}
                     onChange={(e) => setSectorId(e.target.value)}
-                    className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm text-white focus:border-amber-500/50"
+                    className="w-full rounded-md bg-zinc-900/80 border border-zinc-800/60 px-3 py-2 text-sm text-zinc-100 font-sans focus:border-zinc-500"
                   >
                     {SECTOR_OPTIONS.map((o) => (
                       <option key={o.id} value={o.id}>{o.label}</option>
@@ -348,22 +381,22 @@ export default function BCPGeneratorPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs text-white/50 mb-1">Location (city, country)</label>
+                  <label className="block font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-1">Location (city, country)</label>
                   <input
                     type="text"
                     value={locationStr}
                     onChange={(e) => setLocationStr(e.target.value)}
                     placeholder="e.g. Frankfurt, Germany"
-                    className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm text-white placeholder-white/30 focus:border-amber-500/50"
+                    className="w-full rounded-md bg-zinc-900/80 border border-zinc-800/60 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 font-sans focus:border-zinc-500"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs text-white/50 mb-1">Size</label>
+                    <label className="block font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-1">Size</label>
                     <select
                       value={size}
                       onChange={(e) => setSize(e.target.value as 'large' | 'medium' | 'small')}
-                      className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm text-white"
+                      className="w-full rounded-md bg-zinc-900/80 border border-zinc-800/60 px-3 py-2 text-sm text-zinc-100 font-sans"
                     >
                       <option value="small">Small (&lt;100)</option>
                       <option value="medium">Medium (100–999)</option>
@@ -371,59 +404,59 @@ export default function BCPGeneratorPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs text-white/50 mb-1">Employees</label>
+                    <label className="block font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-1">Employees</label>
                     <input
                       type="number"
                       value={employees}
                       onChange={(e) => setEmployees(e.target.value === '' ? '' : Number(e.target.value))}
                       placeholder="Optional"
                       min={0}
-                      className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm text-white placeholder-white/30"
+                      className="w-full rounded-md bg-zinc-900/80 border border-zinc-800/60 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 font-mono tabular-nums"
                     />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs text-white/50 mb-1">Subtype (e.g. hospital, bank)</label>
+                  <label className="block font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-1">Subtype (e.g. hospital, bank)</label>
                   <input
                     type="text"
                     value={subtype}
                     onChange={(e) => setSubtype(e.target.value)}
                     placeholder="Optional"
-                    className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm text-white placeholder-white/30"
+                    className="w-full rounded-md bg-zinc-900/80 border border-zinc-800/60 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 font-sans"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-white/50 mb-1">Critical functions (one per line, optional)</label>
+                  <label className="block font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-1">Critical functions (one per line, optional)</label>
                   <textarea
                     value={criticalFunctions}
                     onChange={(e) => setCriticalFunctions(e.target.value)}
                     placeholder="Claims processing&#10;Policy administration"
                     rows={2}
-                    className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm text-white placeholder-white/30 resize-y"
+                    className="w-full rounded-md bg-zinc-900/80 border border-zinc-800/60 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 font-sans resize-y"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-white/50 mb-1">Dependencies (one per line, optional)</label>
+                  <label className="block font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-1">Dependencies (one per line, optional)</label>
                   <textarea
                     value={dependencies}
                     onChange={(e) => setDependencies(e.target.value)}
                     placeholder="IT provider&#10;Reinsurance"
                     rows={2}
-                    className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm text-white placeholder-white/30 resize-y"
+                    className="w-full rounded-md bg-zinc-900/80 border border-zinc-800/60 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 font-sans resize-y"
                   />
                 </div>
               </div>
             </section>
 
-            <section className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
-              <h2 className="text-sm font-medium uppercase tracking-wider text-white/60 mb-3">2. Threat scenario</h2>
+            <section className="rounded-md border border-zinc-800/60 bg-zinc-900/50 p-4">
+              <h2 className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-3">2. Threat scenario</h2>
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs text-white/50 mb-1">Scenario type</label>
+                  <label className="block font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-1">Scenario type</label>
                   <select
                     value={scenarioType}
                     onChange={(e) => setScenarioType(e.target.value)}
-                    className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm text-white"
+                    className="w-full rounded-md bg-zinc-900/80 border border-zinc-800/60 px-3 py-2 text-sm text-zinc-100 font-sans"
                   >
                     {SCENARIO_TYPES.map((t) => (
                       <option key={t} value={t}>{t.replace('_', ' ')}</option>
@@ -431,48 +464,48 @@ export default function BCPGeneratorPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs text-white/50 mb-1">Severity: {(severity * 100).toFixed(0)}%</label>
+                  <label className="block font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-1">Severity: {(severity * 100).toFixed(0)}%</label>
                   <input
                     type="range"
                     min={0}
                     max={100}
                     value={severity * 100}
                     onChange={(e) => setSeverity(Number(e.target.value) / 100)}
-                    className="w-full h-2 rounded-lg appearance-none bg-white/10 accent-amber-500"
+                    className="w-full h-2 rounded-md appearance-none bg-zinc-800 accent-zinc-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-white/50 mb-1">Duration estimate</label>
+                  <label className="block font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-1">Duration estimate</label>
                   <input
                     type="text"
                     value={durationEstimate}
                     onChange={(e) => setDurationEstimate(e.target.value)}
                     placeholder="e.g. 2 weeks"
-                    className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm text-white placeholder-white/30"
+                    className="w-full rounded-md bg-zinc-900/80 border border-zinc-800/60 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 font-sans"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-white/50 mb-1">Specific threat (optional)</label>
+                  <label className="block font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-1">Specific threat (optional)</label>
                   <textarea
                     value={specificThreat}
                     onChange={(e) => setSpecificThreat(e.target.value)}
                     placeholder="Brief description of the threat"
                     rows={2}
-                    className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm text-white placeholder-white/30 resize-y"
+                    className="w-full rounded-md bg-zinc-900/80 border border-zinc-800/60 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 font-sans resize-y"
                   />
                 </div>
               </div>
             </section>
 
-            <section className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
-              <h2 className="text-sm font-medium uppercase tracking-wider text-white/60 mb-3">3. Jurisdiction</h2>
+            <section className="rounded-md border border-zinc-800/60 bg-zinc-900/50 p-4">
+              <h2 className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-3">3. Jurisdiction</h2>
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs text-white/50 mb-1">Primary</label>
+                  <label className="block font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-1">Primary</label>
                   <select
                     value={jurisdictionPrimary}
                     onChange={(e) => setJurisdictionPrimary(e.target.value)}
-                    className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm text-white"
+                    className="w-full rounded-md bg-zinc-900/80 border border-zinc-800/60 px-3 py-2 text-sm text-zinc-100 font-sans"
                   >
                     {JURISDICTION_OPTIONS.map((o) => (
                       <option key={o.value} value={o.value}>{o.label}</option>
@@ -480,32 +513,32 @@ export default function BCPGeneratorPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs text-white/50 mb-1">Secondary (comma-separated, optional)</label>
+                  <label className="block font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-1">Secondary (comma-separated, optional)</label>
                   <input
                     type="text"
                     value={jurisdictionSecondary}
                     onChange={(e) => setJurisdictionSecondary(e.target.value)}
                     placeholder="e.g. UK, Switzerland"
-                    className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm text-white placeholder-white/30"
+                    className="w-full rounded-md bg-zinc-900/80 border border-zinc-800/60 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 font-sans"
                   />
                 </div>
               </div>
             </section>
 
-            <section className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
-              <h2 className="text-sm font-medium uppercase tracking-wider text-white/60 mb-3">4. Existing capabilities</h2>
+            <section className="rounded-md border border-zinc-800/60 bg-zinc-900/50 p-4">
+              <h2 className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-3">4. Existing capabilities</h2>
               <div className="space-y-3">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={hasBcp}
                     onChange={(e) => setHasBcp(e.target.checked)}
-                    className="rounded border-white/20 bg-white/5 text-amber-500 focus:ring-amber-500/50"
+                    className="rounded border-zinc-600 bg-zinc-800 text-zinc-500 focus:ring-zinc-500"
                   />
-                  <span className="text-sm text-white/80">Has BCP</span>
+                  <span className="text-sm text-zinc-200 font-sans">Has BCP</span>
                 </label>
                 <div lang="en" className="grid grid-cols-3 gap-2">
-                  <label className="col-span-3 block text-xs text-white/50 mb-1">Last test date (DD.MM.YYYY)</label>
+                  <label className="col-span-3 block font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-1">Last test date (DD.MM.YYYY)</label>
                   <select
                     value={parseLastTestDate(lastTestDate)?.day ?? ''}
                     onChange={(e) => {
@@ -516,7 +549,7 @@ export default function BCPGeneratorPage() {
                       const month = p?.month ?? 1
                       setLastTestDate(buildIsoDate(v, month, year))
                     }}
-                    className="rounded-lg bg-white/5 border border-white/10 px-2 py-2 text-sm text-white"
+                    className="rounded-md bg-zinc-900/80 border border-zinc-800/60 px-2 py-2 text-sm text-zinc-100 font-sans"
                     title="Day"
                   >
                     <option value="">Day</option>
@@ -534,7 +567,7 @@ export default function BCPGeneratorPage() {
                       const day = p?.day ?? 1
                       setLastTestDate(buildIsoDate(day, v, year))
                     }}
-                    className="rounded-lg bg-white/5 border border-white/10 px-2 py-2 text-sm text-white"
+                    className="rounded-md bg-zinc-900/80 border border-zinc-800/60 px-2 py-2 text-sm text-zinc-100 font-sans"
                     title="Month"
                   >
                     <option value="">Month</option>
@@ -552,7 +585,7 @@ export default function BCPGeneratorPage() {
                       const day = p?.day ?? 1
                       setLastTestDate(buildIsoDate(day, month, v))
                     }}
-                    className="rounded-lg bg-white/5 border border-white/10 px-2 py-2 text-sm text-white"
+                    className="rounded-md bg-zinc-900/80 border border-zinc-800/60 px-2 py-2 text-sm text-zinc-100 font-sans"
                     title="Year"
                   >
                     <option value="">Year</option>
@@ -566,18 +599,18 @@ export default function BCPGeneratorPage() {
                     type="checkbox"
                     checked={backupSite}
                     onChange={(e) => setBackupSite(e.target.checked)}
-                    className="rounded border-white/20 bg-white/5 text-amber-500 focus:ring-amber-500/50"
+                    className="rounded border-zinc-600 bg-zinc-800 text-zinc-500 focus:ring-zinc-500"
                   />
-                  <span className="text-sm text-white/80">Backup site</span>
+                  <span className="text-sm text-zinc-200 font-sans">Backup site</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={remoteWorkReady}
                     onChange={(e) => setRemoteWorkReady(e.target.checked)}
-                    className="rounded border-white/20 bg-white/5 text-amber-500 focus:ring-amber-500/50"
+                    className="rounded border-zinc-600 bg-zinc-800 text-zinc-500 focus:ring-zinc-500"
                   />
-                  <span className="text-sm text-white/80">Remote work ready</span>
+                  <span className="text-sm text-zinc-200 font-sans">Remote work ready</span>
                 </label>
               </div>
             </section>
@@ -586,7 +619,7 @@ export default function BCPGeneratorPage() {
               <button
                 onClick={handleGenerate}
                 disabled={loading || !resolvedEntityName.trim()}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-500 text-black font-medium hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-zinc-100 text-zinc-900 font-medium hover:bg-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed font-sans"
               >
                 <PlayIcon className="w-5 h-5" />
                 {loading ? 'Generating…' : 'Generate BCP'}
@@ -594,7 +627,7 @@ export default function BCPGeneratorPage() {
               <button
                 type="button"
                 onClick={handleOpenStressPlanner}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-white/20 text-white/80 hover:bg-white/5"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-md border border-zinc-800/60 bg-zinc-900/50 text-zinc-200 hover:bg-zinc-800 font-sans"
               >
                 <DocumentTextIcon className="w-5 h-5" />
                 Run Stress Test for this setup
@@ -605,19 +638,19 @@ export default function BCPGeneratorPage() {
           {/* Right: Output */}
           <div className="space-y-4">
             {error && (
-              <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">
+              <div className="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">
                 {error}
               </div>
             )}
-            <section className="rounded-xl border border-white/10 bg-white/[0.02] p-4 min-h-[400px]">
-              <h2 className="text-sm font-medium uppercase tracking-wider text-white/60 mb-3">Generated BCP</h2>
+            <section className="rounded-md border border-zinc-800/60 bg-zinc-900/50 p-4 min-h-[400px]">
+              <h2 className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-3">Generated BCP</h2>
               {content == null ? (
-                <div className="text-white/40 text-sm py-8 text-center">
+                <div className="text-zinc-500 text-sm py-8 text-center font-sans">
                   Fill the form and click Generate BCP. The plan will appear here.
                 </div>
               ) : (
                 <div className="prose prose-invert prose-sm max-w-none">
-                  <pre className="whitespace-pre-wrap font-sans text-sm text-white/90 bg-transparent p-0 overflow-x-auto">
+                  <pre className="whitespace-pre-wrap font-sans text-sm text-zinc-100 bg-transparent p-0 overflow-x-auto">
                     {content}
                   </pre>
                 </div>

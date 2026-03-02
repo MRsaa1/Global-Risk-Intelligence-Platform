@@ -16,7 +16,6 @@ from functools import wraps
 import logging
 import asyncio
 import json
-import pickle
 import hashlib
 
 logger = logging.getLogger(__name__)
@@ -45,6 +44,7 @@ CACHE_TTL = {
     "user_preferences": 7 * 24 * 3600,  # 7 days
     "asset_data": 12 * 3600,            # 12 hours
     "climate_data": 24 * 3600,          # 24 hours
+    "active_incidents": 60,              # 1 minute (live incidents layer)
 }
 
 
@@ -207,7 +207,7 @@ class RedisCache:
                 data = await self._client.get(full_key)
                 if data is None:
                     return None
-                return pickle.loads(data)
+                return json.loads(data)
             except Exception as e:
                 logger.warning(f"Redis get error: {e}")
         
@@ -226,7 +226,7 @@ class RedisCache:
         
         if await self._ensure_connected():
             try:
-                data = pickle.dumps(value)
+                data = json.dumps(value, default=str)
                 await self._client.setex(full_key, ttl, data)
                 return
             except Exception as e:
@@ -358,18 +358,34 @@ def _get_redis_url() -> str:
     """Get Redis URL from settings."""
     try:
         from src.core.config import settings
-        return settings.redis_url
+        return (getattr(settings, "redis_url", "") or "").strip()
     except Exception:
-        return "redis://localhost:6379"
+        return ""
+
+
+def _is_redis_enabled() -> bool:
+    """True if Redis is enabled and URL is set."""
+    try:
+        from src.core.config import settings
+        if not getattr(settings, "enable_redis", True):
+            return False
+        url = (getattr(settings, "redis_url", "") or "").strip()
+        return bool(url)
+    except Exception:
+        return False
 
 
 async def get_cache() -> Union[RedisCache, InMemoryCache]:
-    """Get the main cache instance."""
+    """Get the main cache instance. Uses in-memory only when Redis is disabled or REDIS_URL is empty."""
     global _cache
     if _cache is None:
-        redis_url = _get_redis_url()
-        _cache = RedisCache(redis_url, default_ttl_seconds=3600, prefix="pfrp")
-        await _cache.connect()
+        if not _is_redis_enabled():
+            logger.info("Redis disabled (enable_redis=False or REDIS_URL empty); using in-memory cache only.")
+            _cache = InMemoryCache(default_ttl_seconds=3600)
+        else:
+            redis_url = _get_redis_url() or "redis://localhost:6379"
+            _cache = RedisCache(redis_url, default_ttl_seconds=3600, prefix="pfrp")
+            await _cache.connect()
     return _cache
 
 

@@ -16,8 +16,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
 from src.core.database import get_db, is_sqlite
+from src.core.security import get_current_user
 from src.core.storage import storage
 from src.models.asset import Asset, AssetStatus, AssetType, FinancialProductType, InsuranceProductType
+from src.models.user import User
 from src.layers.simulation.physics_engine import physics_engine
 from src.services.event_emitter import event_emitter
 from src.services.complex_asset_scoring import ComplexAssetScoringService
@@ -765,6 +767,7 @@ async def get_filter_options(
 async def create_asset(
     asset_data: AssetCreate,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Create a new physical asset.
@@ -1023,6 +1026,7 @@ async def export_asset_scene(
 async def delete_asset(
     asset_id: UUID,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Delete an asset."""
     result = await db.execute(select(Asset).where(Asset.id == str(asset_id)))
@@ -1098,6 +1102,7 @@ async def upload_bim_file(
     asset_id: UUID,
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Upload a BIM file (IFC format) for an asset.

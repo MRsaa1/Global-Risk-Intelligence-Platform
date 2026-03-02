@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from src.core.security import get_current_user_optional
+from src.core.security import get_current_user
 from src.models.user import User
 from src.services.bcp_config import (
     SECTOR_BCP_CONFIG,
@@ -121,7 +121,7 @@ def get_llm_service() -> NVIDIALLMService:
 @router.post("/generate", response_model=BCPGenerateResponse)
 async def generate_bcp(
     request: BCPGenerateRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
 ) -> BCPGenerateResponse:
     """
     Generate a Business Continuity Plan using NVIDIA LLM.
@@ -201,7 +201,7 @@ async def generate_bcp(
 
 @router.get("/config")
 async def get_bcp_config(
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """
     Return sector and scenario BCP config for the UI.
@@ -252,7 +252,7 @@ def _bcp_docx_response(data: bytes, filename: str) -> StreamingResponse:
 @router.post("/export/pdf")
 async def export_bcp_pdf(
     request: BCPExportRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
 ) -> StreamingResponse:
     """Export BCP content as PDF. Requires ReportLab."""
     if not HAS_PDF:
@@ -272,7 +272,7 @@ async def export_bcp_pdf(
 @router.post("/export/word")
 async def export_bcp_word(
     request: BCPExportRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
 ) -> StreamingResponse:
     """Export BCP content as Word (DOCX). Requires python-docx."""
     try:

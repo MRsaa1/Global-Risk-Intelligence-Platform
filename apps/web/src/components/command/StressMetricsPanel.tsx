@@ -73,34 +73,34 @@ export default function StressMetricsPanel({ stressTest, portfolio }: StressMetr
   const scenarioName = stressTest?.name || 'No Active Scenario'
 
   return (
-    <div className="h-full bg-black/80 backdrop-blur-xl border border-white/10 rounded-xl p-4 flex flex-col">
+    <div className="h-full bg-black/80 border border-zinc-800 rounded-md p-4 flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <ChartBarIcon className="w-5 h-5 text-amber-400" />
-          <h3 className="text-sm font-medium text-white">Stress Metrics</h3>
+          <ChartBarIcon className="w-5 h-5 text-zinc-400" />
+          <h3 className="text-sm font-medium text-zinc-100">Stress Metrics</h3>
         </div>
         {stressTest?.status === 'running' && (
-          <span className="flex items-center gap-1.5 text-xs text-amber-400">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+          <span className="flex items-center gap-1.5 text-xs text-zinc-400">
+            <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 animate-pulse" />
             Running
           </span>
         )}
       </div>
 
       {/* Scenario Info */}
-      <div className="mb-4 p-3 bg-white/5 rounded-lg border border-white/5">
-        <div className="text-[10px] text-white/40 uppercase tracking-wider mb-1">Active Scenario</div>
-        <div className="text-sm font-medium text-white truncate">{scenarioName}</div>
+      <div className="mb-4 p-3 bg-zinc-800 rounded-md border border-zinc-800">
+        <div className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-1">Active Scenario</div>
+        <div className="text-sm font-medium text-zinc-100 truncate">{scenarioName}</div>
         {stressTest && (
           <div className="flex items-center gap-3 mt-2">
             <div className="flex items-center gap-1">
-              <span className="text-[10px] text-white/40">Severity:</span>
-              <span className="text-xs text-red-400">{((stressTest.severity || 0.65) * 100).toFixed(0)}%</span>
+              <span className="text-[10px] text-zinc-500">Severity:</span>
+              <span className="text-xs text-red-400/80">{((stressTest.severity || 0.65) * 100).toFixed(0)}%</span>
             </div>
             <div className="flex items-center gap-1">
-              <span className="text-[10px] text-white/40">Prob:</span>
-              <span className="text-xs text-amber-400">{((stressTest.probability || 0.15) * 100).toFixed(0)}%</span>
+              <span className="text-[10px] text-zinc-500">Prob:</span>
+              <span className="text-xs text-zinc-300">{((stressTest.probability || 0.15) * 100).toFixed(0)}%</span>
             </div>
           </div>
         )}
@@ -110,54 +110,54 @@ export default function StressMetricsPanel({ stressTest, portfolio }: StressMetr
       <div className="flex-1 grid grid-cols-2 gap-3">
         {/* VaR 95% */}
         <motion.div 
-          className="p-3 bg-gradient-to-br from-red-500/10 to-transparent rounded-lg border border-red-500/20"
+          className="p-3 bg-gradient-to-br from-red-500/10 to-transparent rounded-md border border-red-500/20"
           initial={{ scale: 0.95 }}
           animate={{ scale: 1 }}
           transition={{ delay: 0.1 }}
         >
           <div className="flex items-center gap-1.5 mb-1">
-            <ExclamationTriangleIcon className="w-3.5 h-3.5 text-red-400" />
-            <span className="text-[10px] text-white/50 uppercase">VaR (95%)</span>
+            <ExclamationTriangleIcon className="w-3.5 h-3.5 text-red-400/80" />
+            <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">VaR (95%)</span>
           </div>
-          <div className="text-xl font-bold text-red-400">
+          <div className="text-xl font-bold text-red-400/80">
             {formatBillions(metrics.var_95)}
           </div>
-          <div className="text-[10px] text-white/40 mt-0.5">Value at Risk</div>
+          <div className="text-[10px] text-zinc-500 mt-0.5">Value at Risk</div>
         </motion.div>
 
         {/* CVaR 99% */}
         <motion.div 
-          className="p-3 bg-gradient-to-br from-orange-500/10 to-transparent rounded-lg border border-orange-500/20"
+          className="p-3 bg-gradient-to-br from-orange-500/10 to-transparent rounded-md border border-orange-500/20"
           initial={{ scale: 0.95 }}
           animate={{ scale: 1 }}
           transition={{ delay: 0.15 }}
         >
           <div className="flex items-center gap-1.5 mb-1">
-            <ExclamationTriangleIcon className="w-3.5 h-3.5 text-orange-400" />
-            <span className="text-[10px] text-white/50 uppercase">CVaR (99%)</span>
+            <ExclamationTriangleIcon className="w-3.5 h-3.5 text-orange-400/80" />
+            <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">CVaR (99%)</span>
           </div>
-          <div className="text-xl font-bold text-orange-400">
+          <div className="text-xl font-bold text-orange-400/80">
             {formatBillions(metrics.cvar_99)}
           </div>
-          <div className="text-[10px] text-white/40 mt-0.5">Conditional VaR</div>
+          <div className="text-[10px] text-zinc-500 mt-0.5">Conditional VaR</div>
         </motion.div>
 
         {/* Expected Loss */}
         <motion.div 
-          className="p-3 bg-gradient-to-br from-amber-500/10 to-transparent rounded-lg border border-amber-500/20"
+          className="p-3 bg-zinc-800 rounded-md border border-zinc-700"
           initial={{ scale: 0.95 }}
           animate={{ scale: 1 }}
           transition={{ delay: 0.2 }}
         >
           <div className="flex items-center gap-1.5 mb-1">
-            <BanknotesIcon className="w-3.5 h-3.5 text-amber-400" />
-            <span className="text-[10px] text-white/50 uppercase">Expected Loss</span>
+            <BanknotesIcon className="w-3.5 h-3.5 text-amber-400/80" />
+            <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Expected Loss</span>
           </div>
-          <div className="text-xl font-bold text-amber-400">
+          <div className="text-xl font-bold text-amber-400/80">
             {formatBillions(metrics.expected_loss)}
           </div>
           {/* Progress bar */}
-          <div className="mt-2 h-1 bg-white/10 rounded-full overflow-hidden">
+          <div className="mt-2 h-1 bg-zinc-700 rounded-full overflow-hidden">
             <motion.div 
               className="h-full bg-amber-500"
               initial={{ width: 0 }}
@@ -169,26 +169,26 @@ export default function StressMetricsPanel({ stressTest, portfolio }: StressMetr
 
         {/* Capital Impact */}
         <motion.div 
-          className="p-3 bg-gradient-to-br from-purple-500/10 to-transparent rounded-lg border border-purple-500/20"
+          className="p-3 bg-gradient-to-br from-zinc-700/30 to-transparent rounded-md border border-zinc-700"
           initial={{ scale: 0.95 }}
           animate={{ scale: 1 }}
           transition={{ delay: 0.25 }}
         >
           <div className="flex items-center gap-1.5 mb-1">
-            <ArrowTrendingDownIcon className="w-3.5 h-3.5 text-purple-400" />
-            <span className="text-[10px] text-white/50 uppercase">Capital Impact</span>
+            <ArrowTrendingDownIcon className="w-3.5 h-3.5 text-zinc-400" />
+            <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Capital Impact</span>
           </div>
-          <div className="text-xl font-bold text-purple-400">
+          <div className="text-xl font-bold text-zinc-400">
             {formatPercent(metrics.capital_impact)}
           </div>
-          <div className="text-[10px] text-white/40 mt-0.5">Capital Adequacy</div>
+          <div className="text-[10px] text-zinc-500 mt-0.5">Capital Adequacy</div>
         </motion.div>
       </div>
 
       {/* Footer */}
-      <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between text-[10px] text-white/40">
+      <div className="mt-3 pt-3 border-t border-zinc-800 flex items-center justify-between text-[10px] text-zinc-500">
         <span>{metrics.affected_assets} assets affected</span>
-        {isLoading && <span className="text-amber-400">Updating...</span>}
+        {isLoading && <span className="text-zinc-400">Updating...</span>}
       </div>
     </div>
   )

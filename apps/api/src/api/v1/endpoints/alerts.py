@@ -11,12 +11,16 @@ from typing import Optional, List
 from uuid import UUID, uuid4
 from enum import Enum
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException, Query
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, HTTPException, Query
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
 
+from src.core.security import get_current_user
 from src.layers.agents.sentinel import sentinel_agent, Alert, AlertSeverity, AlertType
 from src.core.config import settings
+from src.core.database import AsyncSessionLocal, get_db
+from src.models.user import User
 from src.services.event_emitter import event_emitter
 
 logger = structlog.get_logger()
@@ -38,6 +42,8 @@ class AlertResponse(BaseModel):
     created_at: str
     acknowledged: bool
     resolved: bool
+    source: Optional[str] = None  # e.g. SENTINEL, CIP_SENTINEL, SCSS_ADVISOR, SRO_SENTINEL
+    explanation: Optional[dict] = None  # what, confidence, why_now, sources
 
 
 class AlertSummary(BaseModel):
@@ -82,14 +88,15 @@ class AlertConnectionManager:
         self.active_connections: set[WebSocket] = set()
         self.connection_info: dict[WebSocket, dict] = {}
     
-    async def connect(self, websocket: WebSocket, filters: dict = None):
-        """Accept a new connection. Auto-start SENTINEL monitoring on first client."""
+    async def connect(self, websocket: WebSocket, filters: dict = None, user_id: Optional[str] = None):
+        """Accept a new connection. user_id from JWT token when provided (ACL-ready). Auto-start SENTINEL on first client."""
         await websocket.accept()
         was_empty = len(self.active_connections) == 0
         self.active_connections.add(websocket)
         self.connection_info[websocket] = {
             "connected_at": datetime.utcnow(),
             "filters": filters or {},
+            "user_id": user_id,
         }
         if was_empty:
             try:
@@ -99,7 +106,8 @@ class AlertConnectionManager:
                 logger.warning("Auto-start monitoring failed: %s", e)
         logger.info(
             "Alert WebSocket connected",
-            total=len(self.active_connections)
+            total=len(self.active_connections),
+            user_id=user_id is not None,
         )
     
     def disconnect(self, websocket: WebSocket):
@@ -112,17 +120,26 @@ class AlertConnectionManager:
         )
     
     async def broadcast_alert(self, alert: Alert):
-        """Broadcast alert to all connected clients."""
+        """Broadcast alert to all connected clients. On CRITICAL, optionally run one Overseer cycle and include remediation in payload."""
         if not self.active_connections:
             return
-        
+
+        proactive_actions: List[str] = []
+        if getattr(AlertSeverity, "CRITICAL", None) and alert.severity == AlertSeverity.CRITICAL:
+            proactive_actions = await _maybe_run_proactive_remediation()
+
         alert_data = _alert_to_response(alert)
         message = {
             "type": "alert",
             "timestamp": datetime.utcnow().isoformat(),
-            "data": alert_data.model_dump()
+            "data": alert_data.model_dump(),
         }
-        
+        if proactive_actions:
+            message["proactive_remediation"] = {
+                "ran": True,
+                "actions": proactive_actions,
+            }
+
         disconnected = []
         for websocket in self.active_connections:
             try:
@@ -161,6 +178,29 @@ class AlertConnectionManager:
 
 
 alert_manager = AlertConnectionManager()
+
+# Proactive remediation on critical alert: run at most once per cooldown
+PROACTIVE_REMEDIATION_COOLDOWN_SEC = 180  # 2–3 minutes
+_last_proactive_remediation_run: Optional[datetime] = None
+
+
+async def _maybe_run_proactive_remediation() -> List[str]:
+    """If cooldown elapsed, run one Overseer cycle and return auto_resolution_actions."""
+    global _last_proactive_remediation_run
+    now = datetime.utcnow()
+    if _last_proactive_remediation_run is not None:
+        if (now - _last_proactive_remediation_run).total_seconds() < PROACTIVE_REMEDIATION_COOLDOWN_SEC:
+            return []
+    try:
+        from src.services.oversee import get_oversee_service
+        svc = get_oversee_service()
+        await svc.run_cycle(use_llm=False, include_events=False)
+        _last_proactive_remediation_run = now
+        status = svc.get_status()
+        return status.get("auto_resolution_actions") or []
+    except Exception as e:
+        logger.warning("Proactive remediation on critical alert failed", error=str(e))
+        return []
 
 
 # ==================== BACKGROUND MONITORING ====================
@@ -207,8 +247,62 @@ async def _monitoring_loop():
             # Run SENTINEL monitoring
             alerts = await sentinel_agent.monitor(context)
             
-            # Broadcast new alerts
+            # Run CIP_SENTINEL (critical infrastructure module)
+            try:
+                async with AsyncSessionLocal() as db:
+                    cip_alerts = await _run_cip_sentinel(db)
+                    alerts.extend(cip_alerts)
+            except Exception as e:
+                logger.warning("CIP_SENTINEL cycle failed: %s", e)
+
+            # Run SCSS_ADVISOR (supply chain sovereignty module)
+            try:
+                async with AsyncSessionLocal() as db:
+                    scss_alerts = await _run_scss_advisor(db)
+                    alerts.extend(scss_alerts)
+            except Exception as e:
+                logger.warning("SCSS_ADVISOR cycle failed: %s", e)
+
+            # Run SRO_SENTINEL (systemic risk observatory module)
+            try:
+                async with AsyncSessionLocal() as db:
+                    sro_alerts = await _run_sro_sentinel(db)
+                    alerts.extend(sro_alerts)
+            except Exception as e:
+                logger.warning("SRO_SENTINEL cycle failed: %s", e)
+
+            # Run ASGI_SENTINEL (AI Safety & Governance module)
+            try:
+                async with AsyncSessionLocal() as db:
+                    asgi_alerts = await _run_asgi_sentinel(db)
+                    alerts.extend(asgi_alerts)
+                    # Configurable Early Warning triggers (alert_triggers table)
+                    trigger_alerts = await _evaluate_custom_triggers(db, context)
+                    alerts.extend(trigger_alerts)
+            except Exception as e:
+                logger.warning("ASGI_SENTINEL cycle failed: %s", e)
+            
+            # Register all alerts (dedup by source+type+title: update existing or add new)
+            to_register = []
             for alert in alerts:
+                dk = alert.dedup_key()
+                existing = sentinel_agent.get_alert_by_dedup_key(dk)
+                if existing and not existing.resolved:
+                    if alert.explanation and isinstance(alert.explanation, dict) and "confidence" in alert.explanation:
+                        if existing.explanation is None:
+                            existing.explanation = {}
+                        else:
+                            existing.explanation = dict(existing.explanation)
+                        existing.explanation["confidence"] = max(
+                            (existing.explanation.get("confidence") or 0),
+                            (alert.explanation.get("confidence") or 0),
+                        )
+                    continue
+                to_register.append(alert)
+                sentinel_agent.active_alerts[alert.id] = alert
+
+            # Broadcast only newly registered alerts
+            for alert in to_register:
                 await alert_manager.broadcast_alert(alert)
                 # Emit to main WebSocket for Recent Activity on Dashboard
                 await event_emitter.emit_alert_generated(
@@ -234,6 +328,90 @@ async def _monitoring_loop():
             logger.error("Monitoring error", error=str(e))
             # Wait longer on error (2x normal interval)
             await asyncio.sleep(settings.sentinel_check_interval_seconds * 2)
+
+
+async def _run_cip_sentinel(db) -> list:
+    """Run CIP_SENTINEL cycle; returns list of Alert."""
+    from src.modules.cip.agents import cip_sentinel
+    return await cip_sentinel.run_cycle(db)
+
+
+async def _run_scss_advisor(db) -> list:
+    """Run SCSS_ADVISOR cycle; returns list of Alert."""
+    from src.modules.scss.agents import scss_advisor
+    return await scss_advisor.run_cycle(db)
+
+
+async def _run_sro_sentinel(db) -> list:
+    """Run SRO_SENTINEL cycle; returns list of Alert."""
+    from src.modules.sro.agents import sro_sentinel
+    return await sro_sentinel.run_cycle(db)
+
+
+async def _run_asgi_sentinel(db) -> list:
+    """Run ASGI_SENTINEL cycle; returns list of Alert."""
+    from src.modules.asgi.agents import asgi_sentinel
+    return await asgi_sentinel.run_cycle(db)
+
+
+async def _evaluate_custom_triggers(db, context: dict) -> list:
+    """Evaluate enabled alert_triggers against context['metrics']; return list of Alert."""
+    from sqlalchemy import select
+    from src.models.alert_trigger import AlertTrigger
+    from src.layers.agents.sentinel import AlertSeverity, AlertType
+
+    result = await db.execute(
+        select(AlertTrigger).where(AlertTrigger.enabled.is_(True))
+    )
+    triggers = result.scalars().all()
+    metrics = context.get("metrics") or {}
+    alerts = []
+    for t in triggers:
+        value = metrics.get(t.metric_key)
+        if value is None:
+            continue
+        try:
+            val = float(value)
+        except (TypeError, ValueError):
+            continue
+        thresh = float(t.threshold_value)
+        op = (t.operator or "gt").strip().lower()
+        fired = False
+        if op == "gt":
+            fired = val > thresh
+        elif op == "gte":
+            fired = val >= thresh
+        elif op == "lt":
+            fired = val < thresh
+        elif op == "lte":
+            fired = val <= thresh
+        elif op == "eq":
+            fired = abs(val - thresh) < 1e-9
+        if not fired:
+            continue
+        try:
+            sev = AlertSeverity(t.severity) if t.severity in ("info", "warning", "high", "critical") else AlertSeverity.WARNING
+        except ValueError:
+            sev = AlertSeverity.WARNING
+        alert_type_str = t.alert_type or "custom_trigger"
+        try:
+            at = AlertType(alert_type_str)
+        except ValueError:
+            at = AlertType.CLIMATE_THRESHOLD
+        alert = Alert(
+            id=uuid4(),
+            alert_type=at,
+            severity=sev,
+            title=t.name,
+            message=f"Trigger '{t.name}': {t.metric_key} = {val} {op} {thresh}",
+            asset_ids=[],
+            exposure=0,
+            recommended_actions=[],
+            created_at=datetime.utcnow(),
+            source="EARLY_WARNING_TRIGGER",
+        )
+        alerts.append(alert)
+    return alerts
 
 
 async def _build_monitoring_context() -> dict:
@@ -328,6 +506,24 @@ async def _build_monitoring_context() -> dict:
             "exposure": random.uniform(5, 30) * 1_000_000,
         }
 
+    # 4. Metrics dict for configurable Early Warning triggers (alert_triggers)
+    assets = context.get("assets") or []
+    hotspots = context.get("geodata_hotspots") or []
+    max_climate = max((a.get("climate_risk_score") or 0) for a in assets) if assets else 0
+    max_physical = max((a.get("physical_risk_score") or 0) for a in assets) if assets else 0
+    total_exposure = sum((a.get("valuation") or 0) for a in assets)
+    critical_count = sum(1 for h in hotspots if (h.get("risk_score") or 0) >= 0.8)
+    high_count = sum(1 for h in hotspots if 0.6 <= (h.get("risk_score") or 0) < 0.8)
+    context["metrics"] = {
+        "max_climate_risk_score": max_climate,
+        "max_physical_risk_score": max_physical,
+        "total_exposure": total_exposure,
+        "critical_hotspots_count": critical_count,
+        "high_hotspots_count": high_count,
+        "assets_count": len(assets),
+        "hotspots_count": len(hotspots),
+    }
+
     return context
 
 
@@ -347,6 +543,8 @@ def _alert_to_response(alert: Alert) -> AlertResponse:
         created_at=alert.created_at.isoformat(),
         acknowledged=alert.acknowledged,
         resolved=alert.resolved,
+        source=getattr(alert, "source", None),
+        explanation=getattr(alert, "explanation", None),
     )
 
 
@@ -357,24 +555,37 @@ async def get_alerts(
     severity: Optional[str] = Query(None, description="Filter by severity"),
     unresolved_only: bool = Query(True, description="Only show unresolved alerts"),
     limit: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Get all alerts.
-    
+
     Returns alerts sorted by severity (critical first) and time.
+    Resolved state is persisted in DB (resolved_alert_keys) so it survives reload and multi-worker.
     """
+    from sqlalchemy import select
+    from src.models.resolved_alert_key import ResolvedAlertKey
+
     severity_filter = None
     if severity:
         try:
             severity_filter = AlertSeverity(severity)
         except ValueError:
             pass
-    
+
     alerts = sentinel_agent.get_active_alerts(severity=severity_filter)
-    
+
     if unresolved_only:
         alerts = [a for a in alerts if not a.resolved]
-    
+
+    # Exclude alerts whose dedup_key was resolved and persisted (survives reload / other workers)
+    try:
+        result = await db.execute(select(ResolvedAlertKey.dedup_key))
+        resolved_keys = {row[0] for row in result.fetchall()}
+        alerts = [a for a in alerts if a.dedup_key() not in resolved_keys]
+    except Exception as e:
+        logger.warning("Failed to load resolved_alert_keys, showing all", error=str(e))
+
     return [_alert_to_response(a) for a in alerts[:limit]]
 
 
@@ -402,7 +613,10 @@ async def get_alert_summary():
 
 
 @router.post("/acknowledge")
-async def acknowledge_alert(request: AcknowledgeRequest):
+async def acknowledge_alert(
+    request: AcknowledgeRequest,
+    current_user: User = Depends(get_current_user),
+):
     """Acknowledge an alert."""
     try:
         alert_id = UUID(request.alert_id)
@@ -418,29 +632,47 @@ async def acknowledge_alert(request: AcknowledgeRequest):
 
 
 @router.post("/resolve")
-async def resolve_alert(request: ResolveRequest):
-    """Resolve an alert."""
+async def resolve_alert(
+    request: ResolveRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Resolve an alert. Persists dedup_key in DB so the same logical alert stays resolved after reload."""
+    from src.models.resolved_alert_key import ResolvedAlertKey
+
     try:
         alert_id = UUID(request.alert_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid alert ID")
-    
+
     success = sentinel_agent.resolve_alert(alert_id)
-    
+
     if not success:
         raise HTTPException(status_code=404, detail="Alert not found")
-    
+
+    # Persist by dedup_key so the same alert (source:type:title) stays resolved after reload / other workers
+    try:
+        alert = sentinel_agent.active_alerts.get(alert_id)
+        if alert:
+            rec = ResolvedAlertKey(dedup_key=alert.dedup_key())
+            db.add(rec)
+    except Exception as e:
+        logger.warning("Failed to persist resolved_alert_key", error=str(e))
+
     logger.info(
         "Alert resolved",
         alert_id=request.alert_id,
         notes=request.resolution_notes
     )
-    
+
     return {"status": "resolved", "alert_id": request.alert_id}
 
 
 @router.post("/create", response_model=AlertResponse)
-async def create_manual_alert(request: CreateAlertRequest):
+async def create_manual_alert(
+    request: CreateAlertRequest,
+    current_user: User = Depends(get_current_user),
+):
     """
     Create a manual alert.
     
@@ -481,14 +713,18 @@ async def create_manual_alert(request: CreateAlertRequest):
 
 
 @router.post("/monitoring/start")
-async def start_monitoring_endpoint():
+async def start_monitoring_endpoint(
+    current_user: User = Depends(get_current_user),
+):
     """Start SENTINEL monitoring."""
     await start_monitoring()
     return {"status": "started", "message": "SENTINEL monitoring is now active"}
 
 
 @router.post("/monitoring/stop")
-async def stop_monitoring_endpoint():
+async def stop_monitoring_endpoint(
+    current_user: User = Depends(get_current_user),
+):
     """Stop SENTINEL monitoring."""
     await stop_monitoring()
     return {"status": "stopped", "message": "SENTINEL monitoring has been stopped"}
@@ -505,23 +741,164 @@ async def get_monitoring_status():
     }
 
 
+# ==================== CONFIGURABLE TRIGGERS (Early Warning) ====================
+
+class TriggerCreate(BaseModel):
+    name: str
+    metric_key: str
+    operator: str = Field(description="gt, lt, gte, lte, eq")
+    threshold_value: float
+    window_minutes: Optional[int] = None
+    alert_type: str = "custom_trigger"
+    severity: str = "warning"
+    enabled: bool = True
+
+
+class TriggerUpdate(BaseModel):
+    name: Optional[str] = None
+    metric_key: Optional[str] = None
+    operator: Optional[str] = None
+    threshold_value: Optional[float] = None
+    window_minutes: Optional[int] = None
+    alert_type: Optional[str] = None
+    severity: Optional[str] = None
+    enabled: Optional[bool] = None
+
+
+@router.get("/triggers", response_model=List[dict])
+async def list_triggers(
+    enabled_only: bool = False,
+    db: AsyncSession = Depends(get_db),
+):
+    """List Early Warning triggers (configurable metric thresholds)."""
+    from sqlalchemy import select
+    from src.models.alert_trigger import AlertTrigger
+    q = select(AlertTrigger).order_by(AlertTrigger.name)
+    if enabled_only:
+        q = q.where(AlertTrigger.enabled.is_(True))
+    result = await db.execute(q)
+    rows = result.scalars().all()
+    return [
+        {
+            "id": r.id,
+            "name": r.name,
+            "metric_key": r.metric_key,
+            "operator": r.operator,
+            "threshold_value": r.threshold_value,
+            "window_minutes": r.window_minutes,
+            "alert_type": r.alert_type,
+            "severity": r.severity,
+            "enabled": r.enabled,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+            "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+        }
+        for r in rows
+    ]
+
+
+@router.post("/triggers", response_model=dict)
+async def create_trigger(
+    body: TriggerCreate,
+    db: AsyncSession = Depends(get_db),
+):
+    """Create an Early Warning trigger."""
+    from uuid import uuid4
+    from src.models.alert_trigger import AlertTrigger
+    rec = AlertTrigger(
+        id=str(uuid4()),
+        name=body.name,
+        metric_key=body.metric_key,
+        operator=body.operator,
+        threshold_value=body.threshold_value,
+        window_minutes=body.window_minutes,
+        alert_type=body.alert_type,
+        severity=body.severity,
+        enabled=body.enabled,
+    )
+    db.add(rec)
+    await db.commit()
+    await db.refresh(rec)
+    return {
+        "id": rec.id,
+        "name": rec.name,
+        "metric_key": rec.metric_key,
+        "operator": rec.operator,
+        "threshold_value": rec.threshold_value,
+        "window_minutes": rec.window_minutes,
+        "alert_type": rec.alert_type,
+        "severity": rec.severity,
+        "enabled": rec.enabled,
+        "created_at": rec.created_at.isoformat() if rec.created_at else None,
+        "updated_at": rec.updated_at.isoformat() if rec.updated_at else None,
+    }
+
+
+@router.patch("/triggers/{trigger_id}", response_model=dict)
+async def update_trigger(
+    trigger_id: str,
+    body: TriggerUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    """Update an Early Warning trigger."""
+    from sqlalchemy import select
+    from src.models.alert_trigger import AlertTrigger
+    result = await db.execute(select(AlertTrigger).where(AlertTrigger.id == trigger_id))
+    rec = result.scalar_one_or_none()
+    if not rec:
+        raise HTTPException(status_code=404, detail="Trigger not found")
+    if body.name is not None:
+        rec.name = body.name
+    if body.metric_key is not None:
+        rec.metric_key = body.metric_key
+    if body.operator is not None:
+        rec.operator = body.operator
+    if body.threshold_value is not None:
+        rec.threshold_value = body.threshold_value
+    if body.window_minutes is not None:
+        rec.window_minutes = body.window_minutes
+    if body.alert_type is not None:
+        rec.alert_type = body.alert_type
+    if body.severity is not None:
+        rec.severity = body.severity
+    if body.enabled is not None:
+        rec.enabled = body.enabled
+    await db.commit()
+    await db.refresh(rec)
+    return {
+        "id": rec.id,
+        "name": rec.name,
+        "metric_key": rec.metric_key,
+        "operator": rec.operator,
+        "threshold_value": rec.threshold_value,
+        "window_minutes": rec.window_minutes,
+        "alert_type": rec.alert_type,
+        "severity": rec.severity,
+        "enabled": rec.enabled,
+        "created_at": rec.created_at.isoformat() if rec.created_at else None,
+        "updated_at": rec.updated_at.isoformat() if rec.updated_at else None,
+    }
+
+
 # ==================== WEBSOCKET ENDPOINT ====================
 
 @router.websocket("/ws")
 async def alerts_websocket(
     websocket: WebSocket,
     min_severity: Optional[str] = Query(None),
+    token: Optional[str] = Query(default=None, description="JWT token for authenticated connections"),
 ):
     """
     WebSocket endpoint for real-time alerts.
-    
+    Optional token: if provided, user_id is resolved and attached to the connection (ACL-ready).
+
     Query params:
     - min_severity: Minimum alert severity to receive (info, warning, high, critical)
-    
+    - token: Optional JWT for authenticated connection
+
     Messages sent:
     - {"type": "alert", "data": {...}} - New alert
     - {"type": "heartbeat", "timestamp": "..."} - Periodic heartbeat
-    
+
     Messages received:
     - {"action": "acknowledge", "alert_id": "..."} - Acknowledge alert
     - {"action": "resolve", "alert_id": "..."} - Resolve alert
@@ -531,7 +908,9 @@ async def alerts_websocket(
     if min_severity:
         filters["min_severity"] = min_severity
     
-    await alert_manager.connect(websocket, filters)
+    from src.core.security import resolve_user_id_from_token
+    user_id = resolve_user_id_from_token(token)
+    await alert_manager.connect(websocket, filters, user_id=user_id)
     
     # Start monitoring if not already running
     if not _is_monitoring:

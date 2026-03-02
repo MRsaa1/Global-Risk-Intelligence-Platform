@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quantum Forecasting</title>
+<style>
+body{margin:0;background:linear-gradient(135deg, rgba(10,14,23,0.95) 0%, #080808 100%);height:280px;overflow:hidden}
+#heroCanvas{display:block;width:100%;height:100%}
+</style>
+</head>
+<body>
+<canvas id="heroCanvas"></canvas>
+<script>
+(function(){
+  var c=document.getElementById('heroCanvas');if(!c)return;
+  var x=c.getContext('2d');
+  var dpr=window.devicePixelRatio||1;
+  var w,h,t=0;
+  function resize(){
+    var r=c.parentElement.getBoundingClientRect();
+    c.width=r.width*dpr;c.height=r.height*dpr;
+    x.setTransform(dpr,0,0,dpr,0,0);
+    w=r.width;h=r.height;
+  }
+  function vx(n){
+    if(n<0.32) return 0.5+0.38*Math.sin(n*Math.PI*5);
+    if(n<0.62){
+      var l=(n-0.32)/0.3;
+      if(l<0.15) return 0.5+0.12;
+      if(l<0.4) return 0.5-0.28;
+      if(l<0.7) return 0.5+0.18;
+      return 0.5-0.2;
+    }
+    return 0.5+0.22*Math.sin((n-0.62)*Math.PI*4);
+  }
+  function draw(){
+    t+=0.006;if(t>1)t=0;
+    x.clearRect(0,0,w,h);
+    var mx=w*0.07,my=h*0.22,gw=w-mx*2,gh=h-my*2;
+    x.strokeStyle='rgba(255,255,255,0.06)';
+    x.lineWidth=0.5;
+    for(var i=0;i<=5;i++){x.beginPath();x.moveTo(mx,my+gh*i/5);x.lineTo(mx+gw,my+gh*i/5);x.stroke();}
+    for(var j=0;j<=10;j++){x.beginPath();x.moveTo(mx+gw*j/10,my);x.lineTo(mx+gw*j/10,my+gh);x.stroke();}
+    var pts=[];
+    for(var xi=0;xi<=w;xi+=1.5){
+      var xn=(xi-mx)/gw;if(xn<0)xn=0;if(xn>1)xn=1;
+      var y=my+gh*(1-vx(xn));
+      pts.push({x:xi,y:y});
+    }
+    x.strokeStyle='#00dd77';
+    x.lineWidth=2.2;
+    x.shadowColor='#00ff88';
+    x.shadowBlur=12;
+    x.beginPath();x.moveTo(pts[0].x,pts[0].y);
+    for(var k=1;k<pts.length;k++)x.lineTo(pts[k].x,pts[k].y);
+    x.stroke();
+    x.shadowBlur=0;
+    var di=Math.floor(t*(pts.length-1));if(di>=pts.length)di=pts.length-1;
+    var dot=pts[di];
+    var gr=x.createRadialGradient(dot.x,dot.y,0,dot.x,dot.y,24);
+    gr.addColorStop(0,'rgba(0,255,136,0.85)');
+    gr.addColorStop(0.35,'rgba(0,255,136,0.25)');
+    gr.addColorStop(1,'rgba(0,255,136,0)');
+    x.fillStyle=gr;x.beginPath();x.arc(dot.x,dot.y,24,0,Math.PI*2);x.fill();
+    x.fillStyle='#00ff88';
+    x.shadowColor='#00ffaa';
+    x.shadowBlur=8;
+    x.beginPath();x.arc(dot.x,dot.y,4,0,Math.PI*2);x.fill();
+    x.shadowBlur=0;
+    x.fillStyle='rgba(255,255,255,0.55)';
+    x.font='500 12px "JetBrains Mono",monospace';
+    x.textAlign='center';
+    x.fillText('V(x)',w/2,my-10);
+    x.fillText('Quantum Forecasting',w/2,my+gh+22);
+    requestAnimationFrame(draw);
+  }
+  resize();window.addEventListener('resize',resize);
+  requestAnimationFrame(draw);
+})();
+</script>
+</body>
+</html>

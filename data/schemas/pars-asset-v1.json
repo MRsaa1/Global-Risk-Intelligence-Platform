@@ -1,55 +1,198 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://pars.standard.org/v1/asset.json",
-  "title": "PARS Asset",
-  "description": "Physical Asset Risk Schema - Layer 5 Protocol. Universal standard for physical-financial data exchange.",
+  "title": "PARS Asset v1.0",
+  "description": "Physical Asset Risk Schema (PARS) v1.0 - Layer 5 Protocol. Universal standard for physical-financial data exchange across systems. ISO 31000 / ISO 19650 / TCFD aligned.",
   "type": "object",
-  "required": ["asset"],
+  "required": ["pars_version", "asset"],
   "properties": {
+    "pars_version": {
+      "type": "string",
+      "const": "1.0",
+      "description": "PARS schema version"
+    },
+    "export_timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of export"
+    },
     "asset": {
       "type": "object",
-      "description": "Physical asset with full PARS representation",
       "required": ["identity"],
       "properties": {
         "identity": {
           "type": "object",
-          "description": "Asset identity and PARS ID",
+          "required": ["pars_id"],
           "properties": {
-            "pars_id": { "type": "string", "pattern": "^PARS-[A-Z]{2}-[A-Z]{2}-[A-Z0-9]+$", "description": "e.g. PARS-EU-ES-BCN-4782" },
+            "pars_id": {
+              "type": "string",
+              "pattern": "^PARS-[A-Z]{2}(-[A-Z0-9]+)*$",
+              "description": "Globally unique PARS identifier (e.g. PARS-EU-DE-MUC-A1B2C3D4)"
+            },
+            "name": { "type": "string", "maxLength": 255 },
+            "asset_type": {
+              "type": "string",
+              "enum": ["building", "bridge", "road", "port", "airport", "power_plant", "dam", "pipeline", "telecom_tower", "data_center", "industrial_facility", "residential", "commercial", "mixed_use", "land", "other"]
+            },
             "legal_entity_id": { "type": "string" },
-            "external_ids": { "type": "object", "additionalProperties": { "type": "string" } }
+            "external_ids": {
+              "type": "object",
+              "additionalProperties": { "type": "string" },
+              "description": "Platform ID, cadastral ref, BIM ID, etc."
+            }
           }
         },
         "physical": {
           "type": "object",
-          "description": "Geometry and condition",
           "properties": {
-            "geometry": { "type": "object" },
-            "condition": { "type": "object" }
+            "geometry": {
+              "type": "object",
+              "properties": {
+                "type": { "type": "string", "enum": ["Point", "Polygon", "MultiPolygon"] },
+                "coordinates": {
+                  "description": "GeoJSON coordinates [lng, lat] or polygon array"
+                }
+              }
+            },
+            "condition": {
+              "type": "object",
+              "properties": {
+                "year_built": { "type": "integer", "minimum": 1000, "maximum": 2100 },
+                "year_renovated": { "type": ["integer", "null"] },
+                "construction_type": { "type": "string" },
+                "structural_system": { "type": "string" },
+                "floor_count": { "type": "integer", "minimum": 0 },
+                "gross_area_sqm": { "type": "number", "minimum": 0 },
+                "condition_rating": {
+                  "type": "number", "minimum": 0, "maximum": 100,
+                  "description": "0-100 condition score"
+                }
+              }
+            },
+            "location": {
+              "type": "object",
+              "properties": {
+                "country_code": { "type": "string", "pattern": "^[A-Z]{2}$" },
+                "city": { "type": "string" },
+                "address": { "type": "string" },
+                "postal_code": { "type": "string" },
+                "elevation_m": { "type": "number" },
+                "timezone": { "type": "string" }
+              }
+            }
           }
         },
         "exposures": {
           "type": "object",
-          "description": "Climate and infrastructure exposures",
           "properties": {
-            "climate": { "type": "object" },
-            "infrastructure": { "type": "object" }
+            "climate": {
+              "type": "object",
+              "properties": {
+                "composite_score_0_100": { "type": "number", "minimum": 0, "maximum": 100 },
+                "flood_risk_0_100": { "type": "number", "minimum": 0, "maximum": 100 },
+                "wind_risk_0_100": { "type": "number", "minimum": 0, "maximum": 100 },
+                "heat_risk_0_100": { "type": "number", "minimum": 0, "maximum": 100 },
+                "wildfire_risk_0_100": { "type": "number", "minimum": 0, "maximum": 100 },
+                "sea_level_rise_risk_0_100": { "type": "number", "minimum": 0, "maximum": 100 },
+                "scenario": { "type": "string", "description": "e.g. SSP2-4.5, SSP5-8.5" },
+                "horizon_year": { "type": "integer" }
+              }
+            },
+            "risk_scores": {
+              "type": "object",
+              "properties": {
+                "physical_risk_0_100": { "type": "number", "minimum": 0, "maximum": 100 },
+                "transition_risk_0_100": { "type": "number", "minimum": 0, "maximum": 100 },
+                "network_risk_0_100": { "type": "number", "minimum": 0, "maximum": 100 },
+                "composite_risk_0_100": { "type": "number", "minimum": 0, "maximum": 100 }
+              }
+            },
+            "infrastructure": {
+              "type": "object",
+              "properties": {
+                "criticality_level": { "type": "string", "enum": ["low", "medium", "high", "critical"] },
+                "sector": { "type": "string" },
+                "dependencies": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "description": "PARS IDs of dependent assets"
+                }
+              }
+            }
           }
         },
         "financial": {
           "type": "object",
-          "description": "Valuation and risk metrics",
           "properties": {
-            "valuation": { "type": "object" },
-            "risk_metrics": { "type": "object" }
+            "valuation": {
+              "type": "object",
+              "properties": {
+                "market_value_usd": { "type": "number", "minimum": 0 },
+                "replacement_cost_usd": { "type": "number", "minimum": 0 },
+                "insured_value_usd": { "type": "number", "minimum": 0 },
+                "valuation_date": { "type": "string", "format": "date" },
+                "currency": { "type": "string", "pattern": "^[A-Z]{3}$" }
+              }
+            },
+            "risk_metrics": {
+              "type": "object",
+              "properties": {
+                "pd_1y": { "type": "number", "minimum": 0, "maximum": 1, "description": "1-year probability of default" },
+                "lgd": { "type": "number", "minimum": 0, "maximum": 1, "description": "Loss given default" },
+                "expected_loss_usd": { "type": "number", "minimum": 0 },
+                "var_95_usd": { "type": "number", "minimum": 0, "description": "95th percentile Value at Risk" },
+                "climate_var_usd": { "type": "number", "minimum": 0 }
+              }
+            },
+            "insurance": {
+              "type": "object",
+              "properties": {
+                "policy_type": { "type": "string" },
+                "coverage_usd": { "type": "number", "minimum": 0 },
+                "deductible_usd": { "type": "number", "minimum": 0 },
+                "premium_annual_usd": { "type": "number", "minimum": 0 }
+              }
+            }
           }
         },
         "provenance": {
           "type": "object",
-          "description": "Data sources and verifications",
           "properties": {
-            "data_sources": { "type": "array", "items": { "type": "object" } },
-            "verifications": { "type": "array", "items": { "type": "object" } }
+            "data_sources": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string" },
+                  "type": { "type": "string", "enum": ["sensor", "satellite", "survey", "model", "registry", "manual"] },
+                  "timestamp": { "type": "string", "format": "date-time" },
+                  "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+                }
+              }
+            },
+            "verifications": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "type": { "type": "string" },
+                  "hash": { "type": "string" },
+                  "verifier": { "type": "string" },
+                  "timestamp": { "type": "string", "format": "date-time" }
+                }
+              }
+            },
+            "audit_trail": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "action": { "type": "string" },
+                  "actor": { "type": "string" },
+                  "timestamp": { "type": "string", "format": "date-time" }
+                }
+              }
+            }
           }
         }
       }

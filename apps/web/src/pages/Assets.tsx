@@ -1,11 +1,15 @@
-import { useState, useMemo, useRef, useEffect, Fragment } from 'react'
+/**
+ * Assets — Manage physical assets and Digital Twins; 3D view and stress testing.
+ * Unified Corporate Style: zinc palette, section labels font-mono text-[10px]
+ * uppercase tracking-widest text-zinc-500, rounded-md only, no glass/blur. See Implementation Audit.
+ */
+import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
 import {
   PlusIcon,
   MagnifyingGlassIcon,
-  FunnelIcon,
   BuildingOffice2Icon,
   ArrowUpTrayIcon,
   ArrowDownTrayIcon,
@@ -16,52 +20,6 @@ import { assetsApi, seedApi, FinancialProductType } from '../lib/api'
 import { authService } from '../lib/auth'
 import EmptyState from '../components/EmptyState'
 import { VirtualList } from '../components/VirtualList'
-
-// Mock data (for development/demo purposes)
-const _mockAssets = [
-  {
-    id: '1',
-    pars_id: 'PARS-EU-DE-MUC-A1B2C3D4',
-    name: 'Munich Office Tower',
-    asset_type: 'commercial_office',
-    city: 'Munich',
-    country_code: 'DE',
-    gross_floor_area_m2: 45000,
-    current_valuation: 120000000,
-    climate_risk_score: 45,
-    physical_risk_score: 22,
-    network_risk_score: 68,
-    status: 'active',
-  },
-  {
-    id: '2',
-    pars_id: 'PARS-EU-DE-BER-E5F6G7H8',
-    name: 'Berlin Data Center',
-    asset_type: 'data_center',
-    city: 'Berlin',
-    country_code: 'DE',
-    gross_floor_area_m2: 12000,
-    current_valuation: 85000000,
-    climate_risk_score: 28,
-    physical_risk_score: 15,
-    network_risk_score: 82,
-    status: 'active',
-  },
-  {
-    id: '3',
-    pars_id: 'PARS-EU-DE-HAM-I9J0K1L2',
-    name: 'Hamburg Logistics Hub',
-    asset_type: 'logistics',
-    city: 'Hamburg',
-    country_code: 'DE',
-    gross_floor_area_m2: 75000,
-    current_valuation: 65000000,
-    climate_risk_score: 72,
-    physical_risk_score: 38,
-    network_risk_score: 45,
-    status: 'active',
-  },
-]
 
 function getRiskColor(score: number): string {
   if (score >= 70) return 'text-risk-high'
@@ -181,6 +139,19 @@ export default function Assets() {
     },
   })
 
+  // Refresh 3D models for existing twins (by asset type) — no re-seed
+  const refreshTwinModelsMutation = useMutation({
+    mutationFn: () => seedApi.refreshTwinModels(),
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ['assets'] })
+      const msg = data?.message || `Updated ${data?.updated ?? 0} digital twin(s) with building models. Open any asset to see the 3D view.`
+      alert(msg)
+    },
+    onError: (err: any) => {
+      alert(err?.response?.data?.detail || err?.message || 'Refresh failed.')
+    },
+  })
+
   const handleBulkImport = () => {
     fileInputRef.current?.click()
   }
@@ -227,20 +198,20 @@ export default function Assets() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+        className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4"
         onClick={() => setShowDataSourcesModal(false)}
       >
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           onClick={(e) => e.stopPropagation()}
-          className="bg-dark-card rounded-2xl border border-white/10 shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col"
+          className="bg-zinc-900 rounded-md border border-zinc-800 shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col"
         >
-          <div className="flex items-center justify-between p-6 border-b border-white/10 flex-shrink-0">
-            <h2 className="text-xl font-display font-bold text-white">Data sources for Assets & Digital Twins</h2>
+          <div className="flex items-center justify-between p-6 border-b border-zinc-800 flex-shrink-0">
+            <h2 className="text-xl font-display font-semibold text-zinc-100">Data sources for Assets & Digital Twins</h2>
             <button
               onClick={() => setShowDataSourcesModal(false)}
-              className="text-dark-muted hover:text-white transition-colors cursor-pointer p-1"
+              className="text-zinc-500 hover:text-zinc-100 transition-colors cursor-pointer p-1"
               aria-label="Close"
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -248,33 +219,33 @@ export default function Assets() {
               </svg>
             </button>
           </div>
-          <div className="p-6 overflow-y-auto space-y-5 text-sm">
+          <div className="p-6 overflow-y-auto space-y-5 text-sm font-sans">
             <section>
-              <h3 className="font-semibold text-white mb-2">Quick start</h3>
-              <ul className="text-dark-muted space-y-1 list-disc list-inside">
-                <li><strong className="text-white/90">Demo data:</strong> &quot;Load demo data&quot; on Assets (dev) or <code className="text-primary-400">POST /api/v1/seed/seed</code></li>
-                <li><strong className="text-white/90">CSV template:</strong> &quot;Download Template&quot; or <code className="text-primary-400">GET /api/v1/bulk/assets/template</code></li>
-                <li><strong className="text-white/90">Bulk import:</strong> &quot;Bulk Import&quot; → select CSV (UTF-8, up to 1000 rows, max 10 MB)</li>
+              <h3 className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-2">Quick start</h3>
+              <ul className="text-zinc-500 space-y-1 list-disc list-inside">
+                <li><strong className="text-zinc-100">Demo data:</strong> &quot;Load demo data&quot; on Assets (dev) or <code className="text-zinc-400">POST /api/v1/seed/seed</code></li>
+                <li><strong className="text-zinc-100">CSV template:</strong> &quot;Download Template&quot; or <code className="text-zinc-400">GET /api/v1/bulk/assets/template</code></li>
+                <li><strong className="text-zinc-100">Bulk import:</strong> &quot;Bulk Import&quot; → select CSV (UTF-8, up to 1000 rows, max 10 MB)</li>
               </ul>
             </section>
             <section>
-              <h3 className="font-semibold text-white mb-2">Important CSV columns</h3>
-              <p className="text-dark-muted mb-2">Required: <code className="text-primary-400">name</code>. For 3D & Digital Twins: <code className="text-primary-400">latitude</code>, <code className="text-primary-400">longitude</code>, <code className="text-primary-400">city</code>, <code className="text-primary-400">country_code</code>. Recommended: <code className="text-primary-400">asset_type</code>, <code className="text-primary-400">valuation</code>, <code className="text-primary-400">gross_floor_area_m2</code>, <code className="text-primary-400">year_built</code>.</p>
+              <h3 className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-2">Important CSV columns</h3>
+              <p className="text-zinc-500 mb-2">Required: <code className="text-zinc-400 font-mono text-xs">name</code>. For 3D & Digital Twins: <code className="text-zinc-400 font-mono text-xs">latitude</code>, <code className="text-zinc-400 font-mono text-xs">longitude</code>, <code className="text-zinc-400 font-mono text-xs">city</code>, <code className="text-zinc-400 font-mono text-xs">country_code</code>. Recommended: <code className="text-zinc-400 font-mono text-xs">asset_type</code>, <code className="text-zinc-400 font-mono text-xs">valuation</code>, <code className="text-zinc-400 font-mono text-xs">gross_floor_area_m2</code>, <code className="text-zinc-400 font-mono text-xs">year_built</code>.</p>
             </section>
             <section>
-              <h3 className="font-semibold text-white mb-2">Where to get data</h3>
-              <p className="text-dark-muted mb-2"><strong className="text-white/90">Open:</strong> OpenAddresses, OpenStreetMap, cadastral/geoportals, Urban Atlas (EU). <strong className="text-white/90">Commercial:</strong> CoStar, JLL, CBRE, Vexcel, Nearmap. <strong className="text-white/90">Your own:</strong> ERP, CMMS, BIM (IFC) via <code className="text-primary-400">POST /assets/&#123;id&#125;/upload-bim</code>.</p>
+              <h3 className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-2">Where to get data</h3>
+              <p className="text-zinc-500 mb-2"><strong className="text-zinc-100">Open:</strong> OpenAddresses, OpenStreetMap, cadastral/geoportals, Urban Atlas (EU). <strong className="text-zinc-100">Commercial:</strong> CoStar, JLL, CBRE, Vexcel, Nearmap. <strong className="text-zinc-100">Your own:</strong> ERP, CMMS, BIM (IFC) via <code className="text-zinc-400 font-mono text-xs">POST /assets/&#123;id&#125;/upload-bim</code>.</p>
             </section>
             <section>
-              <h3 className="font-semibold text-white mb-2">Premium 3D cities (Cesium)</h3>
-              <p className="text-dark-muted">New York, Sydney, San Francisco, Boston, Denver, Melbourne, Washington DC. Use exact <code className="text-primary-400">city</code> names for photogrammetry 3D; other cities use OSM Buildings with <code className="text-primary-400">latitude</code>/<code className="text-primary-400">longitude</code>.</p>
+              <h3 className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-2">Premium 3D cities (Cesium)</h3>
+              <p className="text-zinc-500">New York, Sydney, San Francisco, Boston, Denver, Melbourne, Washington DC. Use exact <code className="text-zinc-400 font-mono text-xs">city</code> names for photogrammetry 3D; other cities use OSM Buildings with <code className="text-zinc-400 font-mono text-xs">latitude</code>/<code className="text-zinc-400 font-mono text-xs">longitude</code>.</p>
             </section>
             <section>
-              <h3 className="font-semibold text-white mb-2">NVIDIA (Earth-2, Physics NeMo, LLM)</h3>
-              <p className="text-dark-muted">Need: <code className="text-primary-400">latitude</code>, <code className="text-primary-400">longitude</code>, <code className="text-primary-400">city</code>, <code className="text-primary-400">gross_floor_area_m2</code> or <code className="text-primary-400">valuation</code>, <code className="text-primary-400">asset_type</code>, <code className="text-primary-400">year_built</code>.</p>
+              <h3 className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-2">NVIDIA (Earth-2, Physics NeMo, LLM)</h3>
+              <p className="text-zinc-500">Need: <code className="text-zinc-400 font-mono text-xs">latitude</code>, <code className="text-zinc-400 font-mono text-xs">longitude</code>, <code className="text-zinc-400 font-mono text-xs">city</code>, <code className="text-zinc-400 font-mono text-xs">gross_floor_area_m2</code> or <code className="text-zinc-400 font-mono text-xs">valuation</code>, <code className="text-zinc-400 font-mono text-xs">asset_type</code>, <code className="text-zinc-400 font-mono text-xs">year_built</code>.</p>
             </section>
-            <p className="text-dark-muted pt-2 border-t border-white/10">
-              <strong className="text-amber-400/90">Full guide:</strong> <code className="text-primary-400">ASSET_DATA_SOURCES.md</code> in project root.
+            <p className="text-zinc-500 pt-2 border-t border-zinc-800">
+              <strong className="text-zinc-400">Full guide:</strong> <code className="text-zinc-400">ASSET_DATA_SOURCES.md</code> in project root.
             </p>
           </div>
         </motion.div>
@@ -300,7 +271,7 @@ export default function Assets() {
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.2 }}
-        className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+        className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60"
         style={{ 
           position: 'fixed', 
           top: 0, 
@@ -326,21 +297,14 @@ export default function Assets() {
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
               transition={{ duration: 0.2 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-dark-card rounded-2xl p-6 w-full max-w-md border border-white/10 mx-4 shadow-2xl"
-              style={{ 
-                position: 'relative', 
-                zIndex: 10000,
-                display: 'block'
-              }}
+              className="bg-zinc-900 rounded-md p-6 w-full max-w-md border border-zinc-800 mx-4 shadow-2xl"
+              style={{ position: 'relative', zIndex: 10000, display: 'block' }}
             >
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-display font-bold text-white">Add New Asset</h2>
+                <h2 className="text-xl font-display font-semibold text-zinc-100">Add New Asset</h2>
                 <button
-                  onClick={() => {
-                    setShowAddModal(false)
-                    resetForm()
-                  }}
-                  className="text-dark-muted hover:text-white transition-colors cursor-pointer"
+                  onClick={() => { setShowAddModal(false); resetForm() }}
+                  className="text-zinc-500 hover:text-zinc-100 transition-colors cursor-pointer"
                   aria-label="Close modal"
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -348,99 +312,99 @@ export default function Assets() {
                   </svg>
                 </button>
               </div>
-              <div className="space-y-4">
+              <div className="space-y-4 font-sans">
                 <div>
-                  <label className="block text-sm font-medium mb-2 text-white">Asset Name *</label>
+                  <label className="block font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-2">Asset Name *</label>
                   <input
                     type="text"
                     value={form.name}
                     onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                    className="w-full px-4 py-2 bg-dark-bg border border-white/10 rounded-xl text-white focus:outline-none focus:border-primary-500"
+                    className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-md text-zinc-100 focus:outline-none focus:border-zinc-600"
                     placeholder="Enter asset name"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2 text-white">City</label>
+                  <label className="block font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-2">City</label>
                   <input
                     type="text"
                     value={form.city}
                     onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
-                    className="w-full px-4 py-2 bg-dark-bg border border-white/10 rounded-xl text-white focus:outline-none focus:border-primary-500"
+                    className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-md text-zinc-100 focus:outline-none focus:border-zinc-600"
                     placeholder="Enter city"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-sm font-medium mb-2 text-white">Country</label>
+                    <label className="block font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-2">Country</label>
                     <input
                       type="text"
                       maxLength={2}
                       value={form.country_code}
                       onChange={(e) => setForm((f) => ({ ...f, country_code: e.target.value.toUpperCase().slice(0, 2) }))}
-                      className="w-full px-4 py-2 bg-dark-bg border border-white/10 rounded-xl text-white focus:outline-none focus:border-primary-500"
+                      className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-md text-zinc-100 focus:outline-none focus:border-zinc-600"
                       placeholder="DE"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-2 text-white">Type</label>
+                    <label className="block font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-2">Type</label>
                     <select
                       value={form.asset_type}
                       onChange={(e) => setForm((f) => ({ ...f, asset_type: e.target.value }))}
-                      className="w-full px-4 py-2 bg-dark-bg border border-white/10 rounded-xl text-white focus:outline-none focus:border-primary-500"
+                      className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-md text-zinc-100 focus:outline-none focus:border-zinc-600"
                     >
-                      <option value="commercial_office">Commercial Office</option>
-                      <option value="commercial_retail">Commercial Retail</option>
-                      <option value="industrial">Industrial</option>
-                      <option value="residential_multi">Residential Multi</option>
-                      <option value="logistics">Logistics</option>
-                      <option value="data_center">Data Center</option>
-                      <option value="other">Other</option>
+                      <option value="commercial_office" className="bg-zinc-900">Commercial Office</option>
+                      <option value="commercial_retail" className="bg-zinc-900">Commercial Retail</option>
+                      <option value="industrial" className="bg-zinc-900">Industrial</option>
+                      <option value="residential_multi" className="bg-zinc-900">Residential Multi</option>
+                      <option value="logistics" className="bg-zinc-900">Logistics</option>
+                      <option value="data_center" className="bg-zinc-900">Data Center</option>
+                      <option value="other" className="bg-zinc-900">Other</option>
                     </select>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-sm font-medium mb-2 text-white">Latitude</label>
+                    <label className="block font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-2">Latitude</label>
                     <input
                       type="number"
                       step="any"
                       value={form.latitude}
                       onChange={(e) => setForm((f) => ({ ...f, latitude: e.target.value }))}
-                      className="w-full px-4 py-2 bg-dark-bg border border-white/10 rounded-xl text-white focus:outline-none focus:border-primary-500"
+                      className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-md text-zinc-100 focus:outline-none focus:border-zinc-600"
                       placeholder="52.52"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-2 text-white">Longitude</label>
+                    <label className="block font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-2">Longitude</label>
                     <input
                       type="number"
                       step="any"
                       value={form.longitude}
                       onChange={(e) => setForm((f) => ({ ...f, longitude: e.target.value }))}
-                      className="w-full px-4 py-2 bg-dark-bg border border-white/10 rounded-xl text-white focus:outline-none focus:border-primary-500"
+                      className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-md text-zinc-100 focus:outline-none focus:border-zinc-600"
                       placeholder="13.405"
                     />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2 text-white">Valuation (EUR)</label>
+                  <label className="block font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-2">Valuation (EUR)</label>
                   <input
                     type="number"
                     min={0}
                     step="1000"
                     value={form.current_valuation}
                     onChange={(e) => setForm((f) => ({ ...f, current_valuation: e.target.value }))}
-                    className="w-full px-4 py-2 bg-dark-bg border border-white/10 rounded-xl text-white focus:outline-none focus:border-primary-500"
+                    className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-md text-zinc-100 focus:outline-none focus:border-zinc-600"
                     placeholder="Optional"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2 text-white">Description</label>
+                  <label className="block font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-2">Description</label>
                   <textarea
                     rows={2}
                     value={form.description}
                     onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                    className="w-full px-4 py-2 bg-dark-bg border border-white/10 rounded-xl text-white focus:outline-none focus:border-primary-500 resize-none"
+                    className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-md text-zinc-100 focus:outline-none focus:border-zinc-600 resize-none"
                     placeholder="Optional"
                   />
                 </div>
@@ -448,11 +412,8 @@ export default function Assets() {
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    onClick={() => {
-                      setShowAddModal(false)
-                      resetForm()
-                    }}
-                    className="flex-1 px-4 py-2 bg-dark-bg border border-white/10 text-white rounded-xl font-medium hover:bg-white/5 transition-colors cursor-pointer"
+                    onClick={() => { setShowAddModal(false); resetForm() }}
+                    className="flex-1 px-4 py-2 bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-md font-medium hover:bg-zinc-700 transition-colors cursor-pointer"
                   >
                     Cancel
                   </motion.button>
@@ -461,10 +422,7 @@ export default function Assets() {
                     whileTap={{ scale: 0.98 }}
                     disabled={createMutation.isPending || !form.name.trim()}
                     onClick={() => {
-                      if (!form.name.trim()) {
-                        alert('Asset name is required')
-                        return
-                      }
+                      if (!form.name.trim()) { alert('Asset name is required'); return }
                       const lat = form.latitude ? parseFloat(form.latitude) : undefined
                       const lon = form.longitude ? parseFloat(form.longitude) : undefined
                       const val = form.current_valuation ? parseFloat(form.current_valuation) : undefined
@@ -479,7 +437,7 @@ export default function Assets() {
                         description: form.description.trim() || undefined,
                       })
                     }}
-                    className="flex-1 px-4 py-2 bg-primary-500 text-white rounded-xl font-medium hover:bg-primary-600 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex-1 px-4 py-2 bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-md font-medium hover:bg-zinc-700 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {createMutation.isPending ? 'Creating...' : 'Create Asset'}
                   </motion.button>
@@ -494,10 +452,12 @@ export default function Assets() {
   if (isLoading) {
     return (
       <>
-        <div className="h-full flex items-center justify-center">
-          <div className="text-center">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-primary-500 to-accent-500 animate-pulse" />
-            <p className="text-dark-muted">Loading assets...</p>
+        <div className="min-h-full p-6 bg-zinc-950 flex items-center justify-center">
+          <div className="w-full max-w-[1920px] mx-auto text-center">
+            <div className="h-1 rounded-full bg-zinc-700 overflow-hidden mb-4 w-48 mx-auto">
+              <div className="h-full w-1/3 bg-zinc-500 animate-pulse" />
+            </div>
+            <p className="text-zinc-500 font-sans">Loading assets...</p>
           </div>
         </div>
         {renderModal()}
@@ -509,12 +469,12 @@ export default function Assets() {
   if (error) {
     return (
       <>
-        <div className="h-full flex items-center justify-center p-8">
-          <div className="text-center">
-            <p className="text-red-400 mb-4">Failed to load assets</p>
+        <div className="min-h-full p-6 bg-zinc-950 flex items-center justify-center">
+          <div className="w-full max-w-[1920px] mx-auto text-center">
+            <p className="text-red-400/80 mb-4 font-sans">Failed to load assets</p>
             <button
               onClick={() => window.location.reload()}
-              className="px-4 py-2 bg-primary-500 text-white rounded-xl"
+              className="px-4 py-2 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-100 font-sans hover:bg-zinc-700"
             >
               Retry
             </button>
@@ -529,78 +489,54 @@ export default function Assets() {
   if (filteredAssets.length === 0 && !search) {
     return (
       <>
-        <div className="h-full overflow-auto p-8">
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h1 className="text-2xl font-display font-bold">Assets</h1>
-              <p className="text-dark-muted mt-1 flex items-center gap-2 flex-wrap">
-                Manage your physical assets and their Digital Twins
-                <button type="button" onClick={() => setShowDataSourcesModal(true)} className="inline-flex items-center gap-1.5 text-white/40 hover:text-amber-400/90 transition-colors" title="Where to get data for Assets and Digital Twins (NVIDIA, Cesium 3D)">
-                  <InformationCircleIcon className="w-4 h-4 flex-shrink-0" />
-                  <span className="text-xs">Data sources</span>
-                </button>
-              </p>
+        <div className="min-h-full p-6 bg-zinc-950 pb-16">
+          <div className="w-full max-w-[1920px] mx-auto">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-zinc-800 rounded-md border border-zinc-700">
+                  <BuildingOffice2Icon className="w-8 h-8 text-zinc-400" />
+                </div>
+                <div>
+                  <h1 className="text-2xl font-display font-semibold text-zinc-100">Assets</h1>
+                  <p className="text-zinc-500 text-sm mt-1 font-sans flex items-center gap-2 flex-wrap">
+                    Manage your physical assets and their Digital Twins
+                    <button type="button" onClick={() => setShowDataSourcesModal(true)} className="inline-flex items-center gap-1.5 text-zinc-500 hover:text-zinc-400 transition-colors font-mono text-[10px] uppercase tracking-wider" title="Where to get data for Assets and Digital Twins (NVIDIA, Cesium 3D)">
+                      <InformationCircleIcon className="w-4 h-4 flex-shrink-0" />
+                      Data sources
+                    </button>
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={handleBulkImport} disabled={bulkImportMutation.isPending}
+                  className="flex items-center gap-2 px-4 py-2 bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-md font-medium text-sm font-sans disabled:opacity-50 hover:bg-zinc-700">
+                  <ArrowUpTrayIcon className="w-5 h-5" />
+                  {bulkImportMutation.isPending ? 'Importing...' : 'Bulk Import'}
+                </motion.button>
+                <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={handleDownloadTemplate}
+                  className="flex items-center gap-2 px-4 py-2 bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-md font-medium text-sm font-sans hover:bg-zinc-700">
+                  <ArrowDownTrayIcon className="w-5 h-5" />
+                  Download Template
+                </motion.button>
+                <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => seedMutation.mutate()} disabled={seedMutation.isPending}
+                  className="flex items-center gap-2 px-4 py-2 bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-md font-medium text-sm font-sans hover:bg-zinc-700 disabled:opacity-50">
+                  {seedMutation.isPending ? 'Loading...' : 'Load demo data'}
+                </motion.button>
+                <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={(e) => handleAddAsset(e)}
+                  className="flex items-center gap-2 px-4 py-2 bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-md font-medium text-sm font-sans hover:bg-zinc-700 cursor-pointer">
+                  <PlusIcon className="w-5 h-5" />
+                  Add Asset
+                </motion.button>
+              </div>
             </div>
-            <div className="flex gap-3">
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={handleBulkImport}
-                disabled={bulkImportMutation.isPending}
-                className="flex items-center gap-2 px-5 py-2.5 bg-primary-500 text-white rounded-xl font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary-600 transition-colors"
-              >
-                <ArrowUpTrayIcon className="w-5 h-5" />
-                {bulkImportMutation.isPending ? 'Importing...' : 'Bulk Import'}
-              </motion.button>
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={handleDownloadTemplate}
-                className="flex items-center gap-2 px-5 py-2.5 bg-dark-card border border-primary-500/30 text-white rounded-xl font-medium text-sm hover:bg-primary-500/10 hover:border-primary-500/50 transition-colors"
-              >
-                <ArrowDownTrayIcon className="w-5 h-5" />
-                Download Template
-              </motion.button>
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={(e) => handleAddAsset(e)}
-                className="flex items-center gap-2 px-5 py-2.5 bg-primary-500 text-white rounded-xl font-medium text-sm hover:bg-primary-600 transition-colors cursor-pointer"
-              >
-                <PlusIcon className="w-5 h-5" />
-                Add Asset
-              </motion.button>
-            </div>
+            <input ref={fileInputRef} type="file" accept=".csv" onChange={handleFileChange} className="hidden" />
+            <EmptyState
+              icon={BuildingOffice2Icon}
+              title="No assets yet"
+              description="Load demo data (button above) to add 100+ sample buildings (Munich, Berlin, Madrid, New York, etc.), then open any asset for real 3D view and stress testing. Or add manually, Bulk Import, or use Data sources for CSV."
+              action={{ label: "Add Your First Asset", onClick: handleAddAsset }}
+            />
           </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv"
-            onChange={handleFileChange}
-            className="hidden"
-          />
-          <EmptyState
-            icon={BuildingOffice2Icon}
-            title="No assets yet"
-            description="Load demo data (button below) to add 100+ sample buildings (Munich, Berlin, Madrid, New York, etc.), then open any asset for real 3D view and stress testing. Or add manually, Bulk Import, or use Data sources for CSV."
-            action={{
-              label: "Add Your First Asset",
-              onClick: handleAddAsset,
-            }}
-          />
-          {import.meta.env.DEV && authService.getToken() && (
-            <div className="flex justify-center mt-4">
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => seedMutation.mutate()}
-                disabled={seedMutation.isPending}
-                className="px-4 py-2 bg-white/5 border border-white/20 text-white/70 rounded-xl text-sm hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
-              >
-                {seedMutation.isPending ? 'Loading...' : 'Load demo data'}
-              </motion.button>
-            </div>
-          )}
         </div>
         {renderModal()}
         {renderDataSourcesModal()}
@@ -609,140 +545,158 @@ export default function Assets() {
   }
 
   return (
-    <div className="h-full overflow-auto p-8">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-display font-bold">Assets</h1>
-          <p className="text-dark-muted mt-1 flex items-center gap-2 flex-wrap">
-            Manage your physical assets and their Digital Twins. Open any asset for 3D view and stress testing.
-            <button type="button" onClick={() => setShowDataSourcesModal(true)} className="inline-flex items-center gap-1.5 text-white/40 hover:text-amber-400/90 transition-colors" title="Where to get data for Assets and Digital Twins (NVIDIA, Cesium 3D)">
-              <InformationCircleIcon className="w-4 h-4 flex-shrink-0" />
-              <span className="text-xs">Data sources</span>
-            </button>
-          </p>
-        </div>
-        <div className="flex gap-3">
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={handleBulkImport}
-            disabled={bulkImportMutation.isPending}
-            className="flex items-center gap-2 px-5 py-2.5 bg-primary-500 text-white rounded-xl font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary-600 transition-colors"
-          >
-            <ArrowUpTrayIcon className="w-5 h-5" />
-            {bulkImportMutation.isPending ? 'Importing...' : 'Bulk Import'}
-          </motion.button>
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={handleDownloadTemplate}
-            className="flex items-center gap-2 px-5 py-2.5 bg-dark-card border border-primary-500/30 text-white rounded-xl font-medium text-sm hover:bg-primary-500/10 hover:border-primary-500/50 transition-colors"
-          >
-            <ArrowDownTrayIcon className="w-5 h-5" />
-            Download Template
-          </motion.button>
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => seedMutation.mutate()}
-            disabled={seedMutation.isPending}
-            className="flex items-center gap-2 px-5 py-2.5 bg-amber-500/20 border border-amber-500/40 text-amber-200 rounded-xl font-medium text-sm hover:bg-amber-500/30 transition-colors disabled:opacity-50"
-            title="Add 100+ sample buildings (Munich, Berlin, Madrid, NY…) for 3D view and stress testing"
-          >
-            {seedMutation.isPending ? 'Loading...' : 'Load demo data'}
-          </motion.button>
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
+    <div className="min-h-full p-6 bg-zinc-950 pb-16">
+      <div className="w-full max-w-[1920px] mx-auto">
+        {/* Header — Unified Corporate Style */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-zinc-800 rounded-md border border-zinc-700">
+              <BuildingOffice2Icon className="w-8 h-8 text-zinc-400" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-display font-semibold text-zinc-100">Assets</h1>
+              <p className="text-zinc-500 text-sm mt-1 font-sans flex items-center gap-2 flex-wrap">
+                Manage your physical assets and their Digital Twins. Open any asset for 3D view and stress testing.
+                <button type="button" onClick={() => setShowDataSourcesModal(true)} className="inline-flex items-center gap-1.5 text-zinc-500 hover:text-zinc-400 transition-colors font-mono text-[10px] uppercase tracking-wider" title="Where to get data for Assets and Digital Twins (NVIDIA, Cesium 3D)">
+                  <InformationCircleIcon className="w-4 h-4 flex-shrink-0" />
+                  Data sources
+                </button>
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={handleBulkImport}
+              disabled={bulkImportMutation.isPending}
+              className="flex items-center gap-2 px-4 py-2 bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-md font-medium text-sm font-sans disabled:opacity-50 disabled:cursor-not-allowed hover:bg-zinc-700 transition-colors"
+            >
+              <ArrowUpTrayIcon className="w-5 h-5" />
+              {bulkImportMutation.isPending ? 'Importing...' : 'Bulk Import'}
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={handleDownloadTemplate}
+              className="flex items-center gap-2 px-4 py-2 bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-md font-medium text-sm font-sans hover:bg-zinc-700 transition-colors"
+            >
+              <ArrowDownTrayIcon className="w-5 h-5" />
+              Download Template
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => seedMutation.mutate()}
+              disabled={seedMutation.isPending}
+              className="flex items-center gap-2 px-4 py-2 bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-md font-medium text-sm font-sans hover:bg-zinc-700 transition-colors disabled:opacity-50"
+              title="Add 100+ sample buildings (Munich, Berlin, Madrid, NY…) for 3D view and stress testing"
+            >
+              {seedMutation.isPending ? 'Loading...' : 'Load demo data'}
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => refreshTwinModelsMutation.mutate()}
+              disabled={refreshTwinModelsMutation.isPending}
+              className="flex items-center gap-2 px-4 py-2 bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-md font-medium text-sm font-sans hover:bg-zinc-700 transition-colors disabled:opacity-50"
+              title="Update existing Digital Twins with new 3D building models (no re-seed)"
+            >
+              {refreshTwinModelsMutation.isPending ? 'Updating...' : 'Refresh 3D models'}
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
               onClick={(e) => handleAddAsset(e)}
-            className="flex items-center gap-2 px-5 py-2.5 bg-primary-500 text-white rounded-xl font-medium text-sm hover:bg-primary-600 transition-colors cursor-pointer"
-          >
-            <PlusIcon className="w-5 h-5" />
-            Add Asset
-          </motion.button>
+              className="flex items-center gap-2 px-4 py-2 bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-md font-medium text-sm font-sans hover:bg-zinc-700 transition-colors cursor-pointer"
+            >
+              <PlusIcon className="w-5 h-5" />
+              Add Asset
+            </motion.button>
+          </div>
         </div>
-      </div>
 
-      {/* Hidden file input */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".csv"
-        onChange={handleFileChange}
-        className="hidden"
-      />
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".csv"
+          onChange={handleFileChange}
+          className="hidden"
+        />
 
-      {/* Filters: Country, City, Type, Search, Financial product */}
-      <div className="flex flex-wrap gap-3 mb-6 items-center">
-        <div className="flex-1 min-w-[200px] relative">
-          <MagnifyingGlassIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-muted" />
-          <input
-            type="text"
-            placeholder="Search assets..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-12 pr-4 py-3 bg-dark-card border border-dark-border rounded-xl text-white placeholder-dark-muted focus:outline-none focus:border-primary-500"
-          />
+        {/* Filters — corp: bg-zinc-900, section labels */}
+        <div className="rounded-md p-4 border border-zinc-800 bg-zinc-900 mb-6 flex flex-wrap items-center gap-4">
+          <div className="flex-1 min-w-[200px] relative">
+            <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
+            <input
+              type="text"
+              placeholder="Search assets..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 bg-zinc-800 border border-zinc-700 rounded-md text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-zinc-600 font-sans"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Country:</span>
+            <select
+              value={countryCode}
+              onChange={(e) => setCountryCode(e.target.value)}
+              className="px-3 py-1.5 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-100 text-sm font-sans min-w-[140px] focus:outline-none focus:border-zinc-600"
+              aria-label="Filter by country"
+            >
+              <option value="">All countries</option>
+              {(filterOptions?.countries ?? []).map((c) => (
+                <option key={c} value={c} className="bg-zinc-900">{c}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">City:</span>
+            <select
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+              className="px-3 py-1.5 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-100 text-sm font-sans min-w-[140px] focus:outline-none focus:border-zinc-600"
+              aria-label="Filter by city"
+            >
+              <option value="">All cities</option>
+              {(filterOptions?.cities ?? []).map((c) => (
+                <option key={c} value={c} className="bg-zinc-900">{c}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Type:</span>
+            <select
+              value={assetType}
+              onChange={(e) => setAssetType(e.target.value)}
+              className="px-3 py-1.5 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-100 text-sm font-sans min-w-[160px] focus:outline-none focus:border-zinc-600"
+              aria-label="Filter by asset type"
+            >
+              <option value="">All types</option>
+              {(filterOptions?.asset_types ?? []).map((t) => (
+                <option key={t} value={t} className="bg-zinc-900">{t.replace(/_/g, ' ')}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Product:</span>
+            <select
+              value={financialProduct}
+              onChange={(e) => setFinancialProduct(e.target.value as FinancialProductType | '')}
+              className="px-3 py-1.5 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-100 text-sm font-sans min-w-[140px] focus:outline-none focus:border-zinc-600"
+              aria-label="Filter by financial product"
+            >
+              <option value="">All products</option>
+              <option value="mortgage" className="bg-zinc-900">Mortgage</option>
+              <option value="property_insurance" className="bg-zinc-900">Property insurance</option>
+              <option value="project_finance" className="bg-zinc-900">Project finance</option>
+              <option value="infra_bond" className="bg-zinc-900">Infra bond</option>
+              <option value="credit_facility" className="bg-zinc-900">Credit facility</option>
+              <option value="lease" className="bg-zinc-900">Lease</option>
+              <option value="other" className="bg-zinc-900">Other</option>
+            </select>
+          </div>
         </div>
-        <div className="flex items-center gap-2 px-4 py-3 bg-dark-card border border-dark-border rounded-xl text-dark-muted min-w-[140px]">
-          <FunnelIcon className="w-5 h-5 flex-shrink-0" />
-          <select
-            value={countryCode}
-            onChange={(e) => setCountryCode(e.target.value)}
-            className="bg-transparent outline-none text-white/80 text-sm flex-1"
-            aria-label="Filter by country"
-          >
-            <option value="">All countries</option>
-            {(filterOptions?.countries ?? []).map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
-        </div>
-        <div className="flex items-center gap-2 px-4 py-3 bg-dark-card border border-dark-border rounded-xl text-dark-muted min-w-[140px]">
-          <select
-            value={city}
-            onChange={(e) => setCity(e.target.value)}
-            className="bg-transparent outline-none text-white/80 text-sm flex-1"
-            aria-label="Filter by city"
-          >
-            <option value="">All cities</option>
-            {(filterOptions?.cities ?? []).map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
-        </div>
-        <div className="flex items-center gap-2 px-4 py-3 bg-dark-card border border-dark-border rounded-xl text-dark-muted min-w-[160px]">
-          <select
-            value={assetType}
-            onChange={(e) => setAssetType(e.target.value)}
-            className="bg-transparent outline-none text-white/80 text-sm flex-1"
-            aria-label="Filter by asset type"
-          >
-            <option value="">All types</option>
-            {(filterOptions?.asset_types ?? []).map((t) => (
-              <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>
-            ))}
-          </select>
-        </div>
-        <div className="flex items-center gap-2 px-4 py-3 bg-dark-card border border-dark-border rounded-xl text-dark-muted min-w-[140px]">
-          <select
-            value={financialProduct}
-            onChange={(e) => setFinancialProduct(e.target.value as FinancialProductType | '')}
-            className="bg-transparent outline-none text-white/80 text-sm flex-1"
-            aria-label="Filter by financial product"
-          >
-            <option value="">All products</option>
-            <option value="mortgage">Mortgage</option>
-            <option value="property_insurance">Property insurance</option>
-            <option value="project_finance">Project finance</option>
-            <option value="infra_bond">Infra bond</option>
-            <option value="credit_facility">Credit facility</option>
-            <option value="lease">Lease</option>
-            <option value="other">Other</option>
-          </select>
-        </div>
-      </div>
 
       {/* Asset List - Use VirtualList for large lists */}
       {filteredAssets.length > 50 ? (
@@ -761,57 +715,50 @@ export default function Assets() {
           renderItem={(asset) => (
             <Link
               to={`/assets/${asset.id}`}
-              className="block glass rounded-2xl p-6 hover:glow-primary transition-all group mb-6"
+              className="block rounded-md p-6 border border-zinc-700 bg-zinc-900 hover:border-zinc-600 transition-all group mb-6"
             >
-              {/* Header */}
               <div className="flex items-start gap-4 mb-4">
-                <div className="p-3 bg-primary-500/20 rounded-xl">
-                  <BuildingOffice2Icon className="w-6 h-6 text-primary-400" />
+                <div className="p-3 bg-zinc-800 rounded-md border border-zinc-700">
+                  <BuildingOffice2Icon className="w-6 h-6 text-zinc-400" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold truncate group-hover:text-primary-400 transition-colors">
+                  <h3 className="font-display font-semibold text-zinc-100 truncate group-hover:text-zinc-300 transition-colors">
                     {asset.name}
                   </h3>
-                  <p className="text-sm text-dark-muted">
+                  <p className="font-mono text-[10px] uppercase tracking-wider text-zinc-500 mt-0.5">
                     {asset.city}, {asset.country_code}
                   </p>
                 </div>
               </div>
-
-              {/* PARS ID */}
               <div className="mb-4">
-                <p className="text-xs font-mono text-dark-muted">{asset.pars_id}</p>
+                <p className="font-mono text-[10px] uppercase tracking-wider text-zinc-500">{asset.pars_id}</p>
               </div>
-
-              {/* Stats */}
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
-                  <p className="text-xs text-dark-muted">Valuation</p>
-                  <p className="text-lg font-semibold">{formatCurrency(asset.current_valuation || 0)}</p>
+                  <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Valuation</p>
+                  <p className="text-lg font-semibold font-mono tabular-nums text-zinc-100 mt-0.5">{formatCurrency(asset.current_valuation || 0)}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-dark-muted">Area</p>
-                  <p className="text-lg font-semibold">{((asset.gross_floor_area_m2 || 0) / 1000).toFixed(1)}K m²</p>
+                  <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Area</p>
+                  <p className="text-lg font-semibold font-mono tabular-nums text-zinc-100 mt-0.5">{((asset.gross_floor_area_m2 || 0) / 1000).toFixed(1)}K m²</p>
                 </div>
               </div>
-
-              {/* Risk Scores */}
               <div className="flex gap-4">
-                <div className="flex-1 text-center p-2 bg-dark-bg rounded-lg">
-                  <p className="text-xs text-dark-muted">Climate</p>
-                  <p className={`font-semibold ${getRiskColor(asset.climate_risk_score || 0)}`}>
+                <div className="flex-1 text-center p-2 bg-zinc-800 border border-zinc-700/60 rounded-md">
+                  <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Climate</p>
+                  <p className={`font-semibold font-mono mt-0.5 ${getRiskColor(asset.climate_risk_score || 0)}`}>
                     {asset.climate_risk_score || 0}
                   </p>
                 </div>
-                <div className="flex-1 text-center p-2 bg-dark-bg rounded-lg">
-                  <p className="text-xs text-dark-muted">Physical</p>
-                  <p className={`font-semibold ${getRiskColor(asset.physical_risk_score || 0)}`}>
+                <div className="flex-1 text-center p-2 bg-zinc-800 border border-zinc-700/60 rounded-md">
+                  <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Physical</p>
+                  <p className={`font-semibold font-mono mt-0.5 ${getRiskColor(asset.physical_risk_score || 0)}`}>
                     {asset.physical_risk_score || 0}
                   </p>
                 </div>
-                <div className="flex-1 text-center p-2 bg-dark-bg rounded-lg">
-                  <p className="text-xs text-dark-muted">Network</p>
-                  <p className={`font-semibold ${getRiskColor(asset.network_risk_score || 0)}`}>
+                <div className="flex-1 text-center p-2 bg-zinc-800 border border-zinc-700/60 rounded-md">
+                  <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Network</p>
+                  <p className={`font-semibold font-mono mt-0.5 ${getRiskColor(asset.network_risk_score || 0)}`}>
                     {asset.network_risk_score || 0}
                   </p>
                 </div>
@@ -826,61 +773,54 @@ export default function Assets() {
               key={asset.id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
+              transition={{ delay: index * 0.05 }}
             >
               <Link
                 to={`/assets/${asset.id}`}
-                className="block glass rounded-2xl p-6 hover:glow-primary transition-all group"
+                className="block rounded-md p-6 border border-zinc-700 bg-zinc-900 hover:border-zinc-600 transition-all group"
               >
-                {/* Header */}
                 <div className="flex items-start gap-4 mb-4">
-                  <div className="p-3 bg-primary-500/20 rounded-xl">
-                    <BuildingOffice2Icon className="w-6 h-6 text-primary-400" />
+                  <div className="p-3 bg-zinc-800 rounded-md border border-zinc-700">
+                    <BuildingOffice2Icon className="w-6 h-6 text-zinc-400" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold truncate group-hover:text-primary-400 transition-colors">
+                    <h3 className="font-display font-semibold text-zinc-100 truncate group-hover:text-zinc-300 transition-colors">
                       {asset.name}
                     </h3>
-                    <p className="text-sm text-dark-muted">
+                    <p className="font-mono text-[10px] uppercase tracking-wider text-zinc-500 mt-0.5">
                       {asset.city}, {asset.country_code}
                     </p>
                   </div>
                 </div>
-
-                {/* PARS ID */}
                 <div className="mb-4">
-                  <p className="text-xs font-mono text-dark-muted">{asset.pars_id}</p>
+                  <p className="font-mono text-[10px] uppercase tracking-wider text-zinc-500">{asset.pars_id}</p>
                 </div>
-
-                {/* Stats */}
                 <div className="grid grid-cols-2 gap-4 mb-4">
                   <div>
-                    <p className="text-xs text-dark-muted">Valuation</p>
-                    <p className="text-lg font-semibold">{formatCurrency(asset.current_valuation || 0)}</p>
+                    <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Valuation</p>
+                    <p className="text-lg font-semibold font-mono tabular-nums text-zinc-100 mt-0.5">{formatCurrency(asset.current_valuation || 0)}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-dark-muted">Area</p>
-                    <p className="text-lg font-semibold">{((asset.gross_floor_area_m2 || 0) / 1000).toFixed(1)}K m²</p>
+                    <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Area</p>
+                    <p className="text-lg font-semibold font-mono tabular-nums text-zinc-100 mt-0.5">{((asset.gross_floor_area_m2 || 0) / 1000).toFixed(1)}K m²</p>
                   </div>
                 </div>
-
-                {/* Risk Scores */}
                 <div className="flex gap-4">
-                  <div className="flex-1 text-center p-2 bg-dark-bg rounded-lg">
-                    <p className="text-xs text-dark-muted">Climate</p>
-                    <p className={`font-semibold ${getRiskColor(asset.climate_risk_score || 0)}`}>
+                  <div className="flex-1 text-center p-2 bg-zinc-800 border border-zinc-700/60 rounded-md">
+                    <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Climate</p>
+                    <p className={`font-semibold font-mono mt-0.5 ${getRiskColor(asset.climate_risk_score || 0)}`}>
                       {asset.climate_risk_score || 0}
                     </p>
                   </div>
-                  <div className="flex-1 text-center p-2 bg-dark-bg rounded-lg">
-                    <p className="text-xs text-dark-muted">Physical</p>
-                    <p className={`font-semibold ${getRiskColor(asset.physical_risk_score || 0)}`}>
+                  <div className="flex-1 text-center p-2 bg-zinc-800 border border-zinc-700/60 rounded-md">
+                    <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Physical</p>
+                    <p className={`font-semibold font-mono mt-0.5 ${getRiskColor(asset.physical_risk_score || 0)}`}>
                       {asset.physical_risk_score || 0}
                     </p>
                   </div>
-                  <div className="flex-1 text-center p-2 bg-dark-bg rounded-lg">
-                    <p className="text-xs text-dark-muted">Network</p>
-                    <p className={`font-semibold ${getRiskColor(asset.network_risk_score || 0)}`}>
+                  <div className="flex-1 text-center p-2 bg-zinc-800 border border-zinc-700/60 rounded-md">
+                    <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Network</p>
+                    <p className={`font-semibold font-mono mt-0.5 ${getRiskColor(asset.network_risk_score || 0)}`}>
                       {asset.network_risk_score || 0}
                     </p>
                   </div>
@@ -891,14 +831,14 @@ export default function Assets() {
         </div>
       )}
 
-      {/* Add Asset Modal - Rendered via Portal to document.body */}
-      {renderModal()}
-      {renderDataSourcesModal()}
-      
-      {/* Alternative: Direct render (for debugging) - uncomment if Portal doesn't work */}
-      {showAddModal && (
+        {/* Add Asset Modal - Rendered via Portal to document.body */}
+        {renderModal()}
+        {renderDataSourcesModal()}
+
+        {/* Alternative: Direct render (for debugging) */}
+        {showAddModal && (
         <div 
-          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60"
           style={{ 
             position: 'fixed', 
             top: 0, 
@@ -914,58 +854,35 @@ export default function Assets() {
           }}
         >
           <div
-            className="bg-dark-card rounded-2xl p-6 w-full max-w-md border border-white/10 mx-4 shadow-2xl"
+            className="bg-zinc-900 rounded-md p-6 w-full max-w-md border border-zinc-800 mx-4 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-display font-bold text-white">Add New Asset (Direct Render)</h2>
-              <button
-                onClick={() => setShowAddModal(false)}
-                className="text-dark-muted hover:text-white transition-colors cursor-pointer"
-              >
+              <h2 className="text-xl font-display font-semibold text-zinc-100">Add New Asset (Direct Render)</h2>
+              <button onClick={() => setShowAddModal(false)} className="text-zinc-500 hover:text-zinc-100 transition-colors cursor-pointer">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
-            <div className="space-y-4">
+            <div className="space-y-4 font-sans">
               <div>
-                <label className="block text-sm font-medium mb-2 text-white">Asset Name</label>
-                <input
-                  type="text"
-                  className="w-full px-4 py-2 bg-dark-bg border border-white/10 rounded-xl text-white focus:outline-none focus:border-primary-500"
-                  placeholder="Enter asset name"
-                />
+                <label className="block font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-2">Asset Name</label>
+                <input type="text" className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-md text-zinc-100 focus:outline-none focus:border-zinc-600" placeholder="Enter asset name" />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-2 text-white">City</label>
-                <input
-                  type="text"
-                  className="w-full px-4 py-2 bg-dark-bg border border-white/10 rounded-xl text-white focus:outline-none focus:border-primary-500"
-                  placeholder="Enter city"
-                />
+                <label className="block font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-2">City</label>
+                <input type="text" className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-md text-zinc-100 focus:outline-none focus:border-zinc-600" placeholder="Enter city" />
               </div>
               <div className="flex gap-3 pt-4">
-                <button
-                  onClick={() => setShowAddModal(false)}
-                  className="flex-1 px-4 py-2 bg-dark-bg border border-white/10 text-white rounded-xl font-medium hover:bg-white/5 transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => {
-                    alert('Asset creation will be implemented')
-                    setShowAddModal(false)
-                  }}
-                  className="flex-1 px-4 py-2 bg-primary-500 text-white rounded-xl font-medium hover:bg-primary-600 transition-colors cursor-pointer"
-                >
-                  Create Asset
-                </button>
+                <button onClick={() => setShowAddModal(false)} className="flex-1 px-4 py-2 bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-md font-medium hover:bg-zinc-700 cursor-pointer">Cancel</button>
+                <button onClick={() => { alert('Asset creation will be implemented'); setShowAddModal(false) }} className="flex-1 px-4 py-2 bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-md font-medium hover:bg-zinc-700 cursor-pointer">Create Asset</button>
               </div>
             </div>
           </div>
         </div>
       )}
+      </div>
     </div>
   )
 }

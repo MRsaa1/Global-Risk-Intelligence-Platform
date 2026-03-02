@@ -225,7 +225,7 @@ function RadarMesh({
             <mesh position={[x, 0.3, z]} rotation={[-Math.PI / 2, 0, 0]}>
               <planeGeometry args={[1.2, 0.5]} />
               <meshBasicMaterial 
-                color="#0a0f18" 
+                color="#09090b" 
                 transparent 
                 opacity={0.98}
                 side={THREE.DoubleSide}
@@ -320,7 +320,7 @@ export default function RadarChart3D({
         <h3 className="text-white/80 text-sm font-medium mb-3">{title}</h3>
       )}
       
-      <div className="w-full h-full bg-[#0a0f18] rounded-lg overflow-hidden">
+      <div className="w-full h-full bg-zinc-950 rounded-md overflow-hidden">
         <Canvas camera={{ position: [6, 4, 6], fov: 55 }}>
           <PerspectiveCamera makeDefault position={[6, 4, 6]} fov={55} />
           

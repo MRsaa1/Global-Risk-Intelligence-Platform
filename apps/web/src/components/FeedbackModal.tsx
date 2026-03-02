@@ -28,7 +28,7 @@ export default function FeedbackModal({ isOpen, onClose, onSubmit }: FeedbackMod
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50"
+            className="fixed inset-0 bg-black/80 z-50"
             onClick={onClose}
           />
           <motion.div
@@ -38,19 +38,19 @@ export default function FeedbackModal({ isOpen, onClose, onSubmit }: FeedbackMod
             className="fixed inset-0 z-50 flex items-center justify-center p-8"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="glass rounded-2xl p-6 max-w-lg w-full">
+            <div className="glass rounded-md p-6 max-w-lg w-full">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-accent-500/20 rounded-lg">
-                    <ChatBubbleLeftRightIcon className="w-6 h-6 text-accent-400" />
+                  <div className="p-2 bg-zinc-700 rounded-lg">
+                    <ChatBubbleLeftRightIcon className="w-6 h-6 text-zinc-400" />
                   </div>
                   <h2 className="text-xl font-display font-bold">Send Feedback</h2>
                 </div>
                 <button
                   onClick={onClose}
-                  className="p-2 hover:bg-dark-bg rounded-lg transition-colors"
+                  className="p-2 hover:bg-zinc-950 rounded-lg transition-colors"
                 >
-                  <XMarkIcon className="w-5 h-5 text-dark-muted" />
+                  <XMarkIcon className="w-5 h-5 text-zinc-500" />
                 </button>
               </div>
 
@@ -60,7 +60,7 @@ export default function FeedbackModal({ isOpen, onClose, onSubmit }: FeedbackMod
                   <select
                     value={type}
                     onChange={(e) => setType(e.target.value)}
-                    className="w-full px-4 py-2 bg-dark-bg border border-dark-border rounded-xl text-white focus:outline-none focus:border-primary-500"
+                    className="w-full px-4 py-2 bg-zinc-950 border border-zinc-800 rounded-md text-zinc-100 focus:outline-none focus:border-zinc-500"
                   >
                     <option value="bug">Bug Report</option>
                     <option value="feature">Feature Request</option>
@@ -76,7 +76,7 @@ export default function FeedbackModal({ isOpen, onClose, onSubmit }: FeedbackMod
                     onChange={(e) => setMessage(e.target.value)}
                     required
                     rows={5}
-                    className="w-full px-4 py-2 bg-dark-bg border border-dark-border rounded-xl text-white focus:outline-none focus:border-primary-500 resize-none"
+                    className="w-full px-4 py-2 bg-zinc-950 border border-zinc-800 rounded-md text-zinc-100 focus:outline-none focus:border-zinc-500 resize-none"
                     placeholder="Describe your feedback..."
                   />
                 </div>
@@ -99,13 +99,13 @@ export default function FeedbackModal({ isOpen, onClose, onSubmit }: FeedbackMod
                   <button
                     type="button"
                     onClick={onClose}
-                    className="flex-1 px-4 py-2 bg-dark-card border border-dark-border rounded-xl font-medium hover:bg-dark-bg transition-colors"
+                    className="flex-1 px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-md font-medium hover:bg-zinc-950 transition-colors"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 px-4 py-2 bg-primary-500 text-white rounded-xl font-medium hover:bg-primary-600 transition-colors"
+                    className="flex-1 px-4 py-2 bg-zinc-600 text-zinc-100 rounded-md font-medium hover:bg-zinc-500 transition-colors"
                   >
                     Submit
                   </button>

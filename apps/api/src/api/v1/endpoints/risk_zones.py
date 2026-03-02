@@ -6,11 +6,16 @@ Provides endpoints for:
 - Causal relationships
 - Cascade effects
 - Real-time updates via ANALYST agent
+- Hidden concentration metrics (Herfindahl by supplier/region/technology)
 """
 from datetime import datetime
 from typing import List, Optional
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.core.database import get_db
+from src.services.concentration_service import get_concentration_for_assets
 
 router = APIRouter()
 
@@ -679,3 +684,19 @@ async def get_zone_analysis(zone_id: str):
         cascade_potential=round(float(cascade_potential), 2),
         consequences=consequences,
     )
+
+
+@router.get("/concentration")
+async def get_concentration(
+    asset_ids: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Hidden concentration metrics for portfolio or selected assets.
+
+    Returns Herfindahl index and single-source/single-region/single-technology flags
+    from SCSS suppliers and supply routes. Use in risk reports and Command Center.
+    """
+    ids = [x.strip() for x in (asset_ids or "").split(",") if x.strip()] or None
+    result = await get_concentration_for_assets(asset_ids=ids, db_session=db)
+    return result

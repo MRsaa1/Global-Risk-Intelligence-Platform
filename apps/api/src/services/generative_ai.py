@@ -20,6 +20,45 @@ from src.services.nvidia_llm import LLMModel, llm_service
 
 logger = logging.getLogger(__name__)
 
+# Keys that hold monetary amounts (exposure/loss in billions or raw); format as €X.XB / €XXM for LLM
+_MONETARY_KEYS = frozenset({
+    "totalExposure", "expectedLoss", "total_exposure", "expected_loss", "estimated_loss",
+    "exposure", "loss", "at_risk", "value",
+})
+
+
+def _format_currency_billions(value: float, currency: str = "EUR") -> str:
+    """Format a monetary value as €X.XB or €XXM. Accepts value in billions or raw (>= 1e6)."""
+    if not isinstance(value, (int, float)):
+        return str(value)
+    if value >= 1e9:
+        value_b = value / 1e9
+    elif value >= 1e6:
+        value_b = value / 1e9
+    else:
+        value_b = value  # assume already in billions
+    symbol = "€" if currency == "EUR" else "$"
+    if value_b >= 1:
+        return f"{symbol}{value_b:.1f}B"
+    if value_b >= 0.001:
+        return f"{symbol}{value_b * 1000:.0f}M"
+    return f"{symbol}{value_b:.2f}B"
+
+
+def _format_zone_data_for_display(zone_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Build a copy of zone_data with monetary fields formatted as €X.XB / €XXM for LLM context."""
+    out: Dict[str, Any] = {}
+    for k, v in zone_data.items():
+        key_lower = k.lower()
+        if isinstance(v, dict):
+            out[k] = _format_zone_data_for_display(v)
+        elif key_lower in {s.lower() for s in _MONETARY_KEYS} and isinstance(v, (int, float)):
+            out[k] = _format_currency_billions(float(v), "EUR")
+        else:
+            out[k] = v
+    return out
+
+
 SYSTEM_RISK = (
     "You are an expert in physical-financial risk, climate scenarios, and regulatory disclosure. "
     "Answer in clear, concise prose. Use neutral tone. Cite specifics when given."
@@ -33,16 +72,18 @@ async def explain_zone(
     """
     Explain why a zone is at risk or answer a specific question about it.
     E.g. "Why is this zone in the flood risk area?" or custom question.
+    Monetary values in the context are pre-formatted as €X.XB / €XXM; use these exact formats when citing amounts.
     """
     q = question or "Why is this zone at risk? What are the main factors?"
-    ctx = _format_dict(zone_data)
-    prompt = f"""Given this risk zone data:
+    display_data = _format_zone_data_for_display(zone_data)
+    ctx = _format_dict(display_data)
+    prompt = f"""Given this risk zone data (monetary amounts are already in display form, e.g. €3.5B, €12.5B):
 
 {ctx}
 
 Question: {q}
 
-Provide a short, coherent answer (2–4 sentences). Focus on causes and implications."""
+Provide a short, coherent answer (2–4 sentences). Focus on causes and implications. When citing monetary amounts, use the exact formats given above (e.g. €3.5B, €12.5B)."""
     try:
         r = await llm_service.generate(
             prompt=prompt,

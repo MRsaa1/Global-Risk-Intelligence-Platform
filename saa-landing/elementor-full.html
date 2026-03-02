@@ -6,7 +6,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://saa-alliance.com">
 <link rel="preload" as="image" href="https://saa-alliance.com/wp-content/uploads/2026/01/nvidia-inception-program-badge-rgb-1c-blk-for-screen.png" fetchpriority="low">
-<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap">
 
 <!-- Мгновенный чёрный фон чтобы избежать мерцания -->
 <style>
@@ -14,6 +14,8 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
 .elementor-section, .elementor-container, .elementor-column, 
 .elementor-widget-wrap, .elementor-widget, .elementor-widget-container {
   background: #000 !important;
+  margin: 0 !important;
+  padding: 0 !important;
 }
 </style>
 
@@ -49,10 +51,10 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
   --border-subtle: rgba(255, 255, 255, 0.06);
   --border-light: rgba(255, 255, 255, 0.1);
   
-  /* Typography Scale - Premium Fonts */
-  --font-sans: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-display: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: 'JetBrains Mono', 'SF Mono', 'Consolas', monospace;
+  /* Typography — corporate: JetBrains Mono only (match wp-pages) */
+  --font-sans: 'JetBrains Mono', monospace;
+  --font-display: 'JetBrains Mono', monospace;
+  --font-mono: 'JetBrains Mono', monospace;
   --text-xs: 11px;
   --text-sm: 12px;
   --text-base: 14px;
@@ -62,8 +64,6 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
   --text-3xl: 32px;
   --text-4xl: 40px;
   
-  /* Font Features */
-  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   font-optical-sizing: auto;
   
   /* Spacing Scale */
@@ -93,7 +93,19 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
   font-weight: 400;
-  letter-spacing: -0.01em;
+  letter-spacing: 0.02em;
+}
+
+/* Force corporate font everywhere (override theme/Elementor); exclude logo SVG */
+.saa-landing,
+.saa-landing * {
+  font-family: 'JetBrains Mono', monospace !important;
+}
+.saa-landing .welcome-logo-img svg,
+.saa-landing .welcome-logo-img svg *,
+.saa-landing .header-logo-img svg,
+.saa-landing .header-logo-img svg * {
+  font-family: Georgia, 'Times New Roman', serif !important;
 }
 
 .saa-landing::before {
@@ -158,126 +170,45 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
 }
 
 .saa-landing .loading-content {
-  text-align: center;
-  width: 280px;
-}
-
-.saa-landing .loading-logo {
   position: relative;
-  width: 100px;
-  height: 100px;
-  margin: 0 auto 40px;
+  width: 100%;
+  height: 100%;
 }
 
-.saa-landing .logo-rings {
+.saa-landing .path-integral-canvas {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
-.saa-landing .ring {
-  position: absolute;
-  border-radius: 50%;
-  border: 1px solid var(--accent-primary);
-  opacity: 0.3;
-}
-
-.saa-landing .ring-1 {
-  inset: 0;
-  animation: saa-ring-pulse 2s ease-out infinite;
-}
-
-.saa-landing .ring-2 {
-  inset: -10px;
-  animation: saa-ring-pulse 2s ease-out infinite 0.3s;
-}
-
-.saa-landing .ring-3 {
-  inset: -20px;
-  animation: saa-ring-pulse 2s ease-out infinite 0.6s;
-}
-
-@keyframes saa-ring-pulse {
-  0% { transform: scale(0.8); opacity: 0.6; }
-  100% { transform: scale(1.2); opacity: 0; }
-}
-
-.saa-landing .logo-core {
+.saa-landing .loading-saa-overlay {
   position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.saa-landing .loading-saa-text {
   font-family: var(--font-mono);
-  font-size: 24px;
-  font-weight: 600;
-  color: var(--accent-primary);
-  text-shadow: 0 0 20px var(--accent-primary-glow);
+  font-size: 42px;
+  font-weight: 700;
+  letter-spacing: 12px;
+  color: rgba(201,169,98,0.85);
+  text-shadow: 0 0 30px rgba(201,169,98,0.4), 0 0 60px rgba(201,169,98,0.15);
 }
 
-.saa-landing .loading-bar {
-  height: 2px;
-  background: var(--border-subtle);
-  border-radius: 1px;
-  overflow: hidden;
-  margin-bottom: 16px;
-}
-
-.saa-landing .loading-bar-fill {
-  height: 100%;
-  width: 0%;
-  background: var(--accent-primary);
-  box-shadow: 0 0 10px var(--accent-primary);
-  transition: width 0.2s ease;
-  position: relative;
-  overflow: hidden;
-  /* CSS-only fallback progress (in case JS never starts) */
-  animation: loadingProgress 3s ease-in-out forwards;
-  animation-delay: 0.5s;
-}
-
-.saa-landing .loading-bar-fill::after {
-  content: '';
+.saa-landing .loading-bottom {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
-  animation: loading-shimmer 1.5s infinite;
-}
-
-@keyframes loading-shimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
-}
-
-/* CSS fallback animation for loading bar - runs once, then stops */
-@keyframes loadingProgress {
-  0% {
-    width: 0%;
-  }
-  50% {
-    width: 50%;
-  }
-  100% {
-    width: 100%;
-  }
-}
-
-/* Disable CSS animation when JS is working */
-.saa-landing .loading-bar-fill.js-active {
-  animation: none !important;
-}
-
-/* Also disable when inline style is set */
-.saa-landing .loading-bar-fill[style*="width"] {
-  animation: none !important;
-}
-
-/* Ensure loading bar is visible even if JS hasn't started */
-.saa-landing .loading-bar-fill {
-  min-width: 0%;
-  max-width: 100%;
+  bottom: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  z-index: 2;
 }
 
 .saa-landing .loading-text {
@@ -318,6 +249,7 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
    ============================================ */
 
 .saa-landing .welcome-screen {
+  position: relative;
   display: flex;
   flex-direction: column;
   opacity: 0;
@@ -339,7 +271,7 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
 .saa-landing .welcome-header-inner {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 16px 24px;
+  padding: 7px 20px 7px 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -349,39 +281,73 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
 .saa-landing .welcome-header-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .saa-landing .welcome-logo-mark {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 30px;
+  height: 30px;
   border: 1px solid var(--accent-primary);
-  border-radius: 8px;
+  border-radius: 6px;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--accent-primary);
 }
 
 .saa-landing .welcome-logo-text {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   color: var(--text-primary);
+}
+
+.saa-landing .welcome-logo-link {
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+  transition: opacity 0.2s ease;
+}
+.saa-landing .welcome-logo-link:hover {
+  opacity: 0.85;
+}
+.saa-landing .welcome-logo-img {
+  height: 40px;
+  width: auto;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.saa-landing .welcome-logo-img svg {
+  height: 40px;
+  width: auto;
+  display: block;
+  vertical-align: top;
+}
+.saa-landing .header-logo-img {
+  height: 36px;
+  width: auto;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.saa-landing .header-logo-img svg {
+  height: 36px;
+  width: auto;
+  display: block;
+  vertical-align: top;
 }
 
 .saa-landing .welcome-header-nav {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
 }
 
 .saa-landing .welcome-nav-link {
-  padding: 8px 10px;
+  padding: 5px 9px;
   font-size: 13px;
   color: var(--text-secondary);
   text-decoration: none;
@@ -399,7 +365,7 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
 }
 
 .saa-landing .welcome-nav-btn {
-  padding: 8px 14px;
+  padding: 5px 12px;
   font-size: 13px;
   font-weight: 500;
   text-decoration: none;
@@ -436,11 +402,21 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  text-align: center;
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 40px;
   position: relative;
+  overflow: visible;
+  min-height: 0;
+  padding: 24vh 40px 10vh;
+}
+.saa-landing .welcome-content-inner {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  width: 100%;
+  max-width: 1200px;
+  gap: 4px;
   background: linear-gradient(135deg, rgba(201, 169, 98, 0.02) 0%, transparent 50%, rgba(201, 169, 98, 0.01) 100%);
   border-radius: 20px;
   will-change: transform;
@@ -448,7 +424,7 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
   font-family: var(--font-sans);
   font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   font-optical-sizing: auto;
-  letter-spacing: -0.01em;
+  letter-spacing: 0.02em;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -458,7 +434,7 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
   font-family: var(--font-display);
   font-size: 32px;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.02em;
   line-height: 1.2;
   color: var(--text-primary);
   margin-bottom: 12px;
@@ -469,9 +445,9 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
   font-family: var(--font-sans);
   font-size: 16px;
   color: var(--text-secondary);
-  margin-bottom: 24px;
+  margin-bottom: 20px;
   font-weight: 400;
-  letter-spacing: -0.01em;
+  letter-spacing: 0.02em;
   font-feature-settings: inherit;
 }
 
@@ -484,7 +460,7 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
   font-family: var(--font-mono);
   font-size: 13px;
   color: var(--accent-primary);
-  margin-bottom: 40px;
+  margin-bottom: 32px;
   letter-spacing: 1px;
   opacity: 0.9;
 }
@@ -501,7 +477,7 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
   color: var(--accent-primary);
   line-height: 1;
   font-family: var(--font-sans);
-  letter-spacing: -0.02em;
+  letter-spacing: 0.02em;
 }
 
 .saa-landing .metric-suffix {
@@ -582,12 +558,12 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
   flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 32px;
+  gap: 20px;
   width: 100%;
-  max-width: 900px;
-  margin-bottom: 40px;
+  max-width: 1000px;
+  margin-bottom: 32px;
   padding: 0 20px;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
 }
 
 .saa-landing .welcome-benefit-item {
@@ -646,7 +622,7 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
   color: var(--accent-primary);
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  margin-bottom: 60px;
+  margin-bottom: 36px;
   position: relative;
   overflow: hidden;
 }
@@ -724,7 +700,7 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
   align-items: center;
   justify-content: center;
   gap: 8px;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
 }
 
 .saa-landing .trusted-logo {
@@ -745,6 +721,26 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
   border-color: var(--accent-primary);
 }
 
+.saa-landing .program-participants {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.saa-landing .program-pill {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: rgba(201, 169, 98, 0.04);
+}
+
 @media (max-width: 768px) {
   .saa-landing .trusted-logos {
     flex-wrap: wrap;
@@ -759,14 +755,40 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
 
 .saa-landing .welcome-footer {
   display: none;
-  flex-direction: row;
-  flex-wrap: wrap;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 20px;
-  padding-top: 20px;
-  margin-top: 40px;
+  gap: 10px;
+  padding: 12px 16px 14px;
   border-top: 1px solid var(--border-subtle);
+  background: rgba(10, 9, 8, 0.92);
+  z-index: 2;
+  min-height: 0;
+  flex-shrink: 0;
+}
+.saa-landing .welcome-footer-legal-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+  white-space: nowrap;
+  font-family: var(--font-sans);
+  font-size: 11px;
+}
+.saa-landing .welcome-footer-legal-row .welcome-footer-copy {
+  flex-shrink: 0;
+}
+.saa-landing .welcome-footer-legal-row .welcome-legal-sep,
+.saa-landing .welcome-footer-legal-row .legal-link {
+  font-size: inherit;
+  font-family: inherit;
 }
 
 .saa-landing .welcome-screen.visible .welcome-footer {
@@ -780,8 +802,9 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
 }
 
 .saa-landing .welcome-footer-copy {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-muted);
+  font-family: var(--font-sans);
 }
 
 .saa-landing .welcome-legal {
@@ -794,7 +817,7 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
 
 .saa-landing .welcome-legal-sep {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .saa-landing .nvidia-inception-badge img {
@@ -809,7 +832,8 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
 }
 
 .saa-landing .welcome-legal a,
-.saa-landing .welcome-legal .legal-link {
+.saa-landing .welcome-legal .legal-link,
+.saa-landing .welcome-footer-legal-row .legal-link {
   color: var(--text-muted);
   text-decoration: none;
   transition: color 0.2s ease;
@@ -822,13 +846,125 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
 }
 
 .saa-landing .welcome-legal a:hover,
-.saa-landing .welcome-legal .legal-link:hover {
+.saa-landing .welcome-legal .legal-link:hover,
+.saa-landing .welcome-footer-legal-row .legal-link:hover {
   color: var(--text-secondary);
 }
 
 .saa-landing .welcome-legal span {
   color: var(--text-muted);
   opacity: 0.5;
+}
+
+/* Wireframe Globe Canvas (full background atmosphere, always square) */
+.saa-landing .particles-canvas {
+  position: absolute;
+  top: 79%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 0;
+  pointer-events: none;
+}
+.saa-landing .welcome-content > *:not(.particles-canvas) {
+  position: relative;
+  z-index: 1;
+}
+
+/* Button under SAA: same 1200px grid as header, padding-left 12px so button aligns with SAA logo box */
+.saa-landing .welcome-content-top {
+  position: absolute;
+  top: calc(46px + 3vh);
+  left: 50%;
+  margin-left: -600px;
+  width: 1200px;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding-left: 12px;
+  padding-right: 20px;
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  z-index: 2;
+  pointer-events: none;
+}
+.saa-landing .welcome-content-top-inner {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  pointer-events: auto;
+}
+
+.saa-landing .welcome-footer-badges {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-width: 0;
+}
+.saa-landing .welcome-footer-badges > * {
+  flex-shrink: 0;
+}
+.saa-landing .program-pill {
+  display: inline-block;
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 4px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.saa-landing .welcome-footer-badges .nvidia-inception-badge {
+  flex-shrink: 0;
+}
+
+/* AI Status Ticker */
+.saa-landing .ai-status-ticker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--accent-primary);
+  opacity: 0.5;
+  margin-bottom: 32px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding: 0 8px;
+}
+.saa-landing .ai-status-ticker::-webkit-scrollbar { display: none; }
+
+.saa-landing .ticker-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-green);
+  flex-shrink: 0;
+  animation: saa-ticker-pulse 2s ease-in-out infinite;
+  box-shadow: 0 0 6px rgba(34,197,94,0.5);
+}
+@keyframes saa-ticker-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 6px rgba(34,197,94,0.5); }
+  50% { opacity: 0.4; box-shadow: 0 0 2px rgba(34,197,94,0.2); }
+}
+.saa-landing .ticker-text { white-space: nowrap; }
+.saa-landing .ticker-sep {
+  color: var(--text-muted);
+  opacity: 0.3;
+  flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+  .saa-landing .ai-status-ticker {
+    justify-content: flex-start;
+  }
 }
 
 /* ============================================
@@ -1264,7 +1400,7 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
   padding: 20px;
   background: var(--bg-elevated);
   font-family: var(--font-sans);
-  letter-spacing: -0.01em;
+  letter-spacing: 0.02em;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   border: 1px solid var(--border-subtle);
@@ -1311,7 +1447,7 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
   font-weight: 600;
   color: var(--text-primary);
   margin: 0;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.02em;
   line-height: 1.3;
 }
 
@@ -1559,7 +1695,7 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
   text-align: center;
   margin-bottom: 12px;
   font-family: var(--font-sans);
-  letter-spacing: -0.02em;
+  letter-spacing: 0.02em;
   line-height: 1.3;
 }
 
@@ -1716,7 +1852,7 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
   text-align: center;
   margin-bottom: 12px;
   font-family: var(--font-sans);
-  letter-spacing: -0.02em;
+  letter-spacing: 0.02em;
   line-height: 1.3;
 }
 
@@ -1801,7 +1937,7 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
   font-weight: 600;
   color: var(--text-primary);
   margin-bottom: 4px;
-  letter-spacing: -0.01em;
+  letter-spacing: 0.02em;
 }
 
 .saa-landing .testimonial-role {
@@ -2030,7 +2166,7 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
   border: 1px solid var(--border-subtle);
   border-radius: 16px;
   font-family: var(--font-sans);
-  letter-spacing: -0.01em;
+  letter-spacing: 0.02em;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -2276,7 +2412,7 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
   color: var(--text-primary);
   margin-bottom: 24px;
   font-family: var(--font-sans);
-  letter-spacing: -0.02em;
+  letter-spacing: 0.02em;
   line-height: 1.3;
 }
 
@@ -2565,7 +2701,7 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
   font-family: var(--font-sans);
   font-size: 24px;
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.02em;
   line-height: 1.3;
   color: var(--text-primary);
   margin-bottom: 12px;
@@ -2642,7 +2778,7 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
   font-weight: 600;
   margin-bottom: 20px;
   color: var(--text-primary);
-  letter-spacing: -0.02em;
+  letter-spacing: 0.02em;
   line-height: 1.3;
 }
 
@@ -2922,7 +3058,7 @@ html, body, .elementor, .elementor-inner, .elementor-section-wrap,
   
   .saa-landing .welcome-title {
     font-size: 22px;
-    letter-spacing: -0.01em;
+    letter-spacing: 0.02em;
   }
   
   .saa-landing .services-panel {
@@ -3354,32 +3490,26 @@ html {
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
 <div class="saa-landing" style="background:#000;min-height:100vh;">
   <!-- LOADING SCREEN -->
   <div id="saaLoadingScreen" class="screen loading-screen" style="background:#000; display: flex !important;" role="status" aria-label="Loading application">
     <div class="loading-content">
-      <div class="loading-logo" aria-hidden="true">
-        <div class="logo-rings">
-          <div class="ring ring-1"></div>
-          <div class="ring ring-2"></div>
-          <div class="ring ring-3"></div>
+      <canvas class="path-integral-canvas" id="saaPathIntegralCanvas" aria-hidden="true"></canvas>
+
+      <div class="loading-saa-overlay" aria-hidden="true">
+        <span class="loading-saa-text">SAA</span>
+      </div>
+
+      <div class="loading-bottom">
+        <div class="loading-text" id="saaLoadingText" aria-live="polite" aria-atomic="true">CALCULATING TRAJECTORIES</div>
+        <div class="loading-modules" aria-label="Loading modules status">
+          <span class="module" id="saaMod1" aria-label="API module">API</span>
+          <span class="module" id="saaMod2" aria-label="Models module">MODELS</span>
+          <span class="module" id="saaMod3" aria-label="Data module">DATA</span>
+          <span class="module" id="saaMod4" aria-label="Ready status">READY</span>
         </div>
-        <div class="logo-core">SAA</div>
-      </div>
-      
-      <div class="loading-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Loading progress">
-        <div class="loading-bar-fill" id="saaLoadingBarFill"></div>
-      </div>
-      
-      <div class="loading-text" id="saaLoadingText" aria-live="polite" aria-atomic="true">INITIALIZING SYSTEMS</div>
-      
-      <div class="loading-modules" aria-label="Loading modules status">
-        <span class="module" id="saaMod1" aria-label="API module">API</span>
-        <span class="module" id="saaMod2" aria-label="Models module">MODELS</span>
-        <span class="module" id="saaMod3" aria-label="Data module">DATA</span>
-        <span class="module" id="saaMod4" aria-label="Ready status">READY</span>
       </div>
     </div>
   </div>
@@ -3389,8 +3519,9 @@ html {
     <header class="welcome-header">
       <div class="welcome-header-inner">
         <div class="welcome-header-left">
-          <div class="welcome-logo-mark">SAA</div>
-          <span class="welcome-logo-text">Scientific Analytics Alliance</span>
+          <a href="/" class="welcome-logo-link" aria-label="Scientific Analytics Alliance — на главную">
+            <span class="welcome-logo-img" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 200" role="img" aria-label="Scientific Analytics Alliance"><defs><radialGradient id="saa-g1-globe" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#b8962e" stop-opacity="0.2"/><stop offset="100%" stop-color="#b8962e" stop-opacity="0"/></radialGradient><filter id="saa-g1-glow"><feGaussianBlur stdDeviation="2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><rect width="1500" height="200" fill="#080808"/><circle cx="100" cy="100" r="72" fill="url(#saa-g1-globe)"/><circle cx="100" cy="100" r="70" fill="none" stroke="#b8962e" stroke-width="0.9" opacity="0.45"/><ellipse cx="100" cy="100" rx="70" ry="15" fill="none" stroke="#b8962e" stroke-width="0.6" opacity="0.28"/><ellipse cx="100" cy="100" rx="61" ry="37" fill="none" stroke="#b8962e" stroke-width="0.6" opacity="0.22"/><ellipse cx="100" cy="100" rx="42" ry="54" fill="none" stroke="#b8962e" stroke-width="0.6" opacity="0.22"/><ellipse cx="100" cy="100" rx="17" ry="67" fill="none" stroke="#b8962e" stroke-width="0.6" opacity="0.22"/><path d="M100,30 Q174,100 100,170" fill="none" stroke="#b8962e" stroke-width="0.6" opacity="0.22"/><path d="M100,30 Q26,100 100,170" fill="none" stroke="#b8962e" stroke-width="0.6" opacity="0.22"/><circle cx="100" cy="38" r="4" fill="#b8962e" filter="url(#saa-g1-glow)"/><circle cx="148" cy="62" r="3" fill="#b8962e" opacity="0.88"/><circle cx="160" cy="108" r="3.5" fill="#b8962e" filter="url(#saa-g1-glow)"/><circle cx="136" cy="150" r="3" fill="#b8962e" opacity="0.85"/><circle cx="64" cy="150" r="3" fill="#b8962e" opacity="0.85"/><circle cx="40" cy="108" r="3.5" fill="#b8962e" filter="url(#saa-g1-glow)"/><circle cx="52" cy="62" r="3" fill="#b8962e" opacity="0.88"/><circle cx="100" cy="100" r="5" fill="#b8962e" filter="url(#saa-g1-glow)"/><g opacity="0.5"><line x1="100" y1="38" x2="148" y2="62" stroke="#b8962e" stroke-width="1.1"/><line x1="148" y1="62" x2="160" y2="108" stroke="#b8962e" stroke-width="1.1"/><line x1="160" y1="108" x2="136" y2="150" stroke="#b8962e" stroke-width="1.1"/><line x1="136" y1="150" x2="64" y2="150" stroke="#b8962e" stroke-width="1.1"/><line x1="64" y1="150" x2="40" y2="108" stroke="#b8962e" stroke-width="1.1"/><line x1="40" y1="108" x2="52" y2="62" stroke="#b8962e" stroke-width="1.1"/><line x1="52" y1="62" x2="100" y2="38" stroke="#b8962e" stroke-width="1.1"/></g><g opacity="0.45"><line x1="100" y1="38" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/><line x1="148" y1="62" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/><line x1="160" y1="108" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/><line x1="136" y1="150" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/><line x1="64" y1="150" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/><line x1="40" y1="108" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/><line x1="52" y1="62" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/></g><g opacity="0.2"><line x1="100" y1="38" x2="160" y2="108" stroke="#b8962e" stroke-width="0.7"/><line x1="148" y1="62" x2="136" y2="150" stroke="#b8962e" stroke-width="0.7"/><line x1="160" y1="108" x2="64" y2="150" stroke="#b8962e" stroke-width="0.7"/><line x1="136" y1="150" x2="40" y2="108" stroke="#b8962e" stroke-width="0.7"/><line x1="64" y1="150" x2="52" y2="62" stroke="#b8962e" stroke-width="0.7"/><line x1="40" y1="108" x2="100" y2="38" stroke="#b8962e" stroke-width="0.7"/></g><line x1="196" y1="30" x2="196" y2="170" stroke="#b8962e" stroke-width="0.8" opacity="0.35"/><text x="375" y="88" font-family="Georgia,serif" font-size="93" font-weight="700" fill="#f0ece0" text-anchor="middle" letter-spacing="10">SAA</text><line x1="210" y1="108" x2="540" y2="108" stroke="#b8962e" stroke-width="1.6"/><text x="375" y="152" font-family="Georgia,serif" font-size="39" font-weight="400" fill="#b8962e" text-anchor="middle" letter-spacing="10">ALLIANCE</text><line x1="556" y1="30" x2="556" y2="170" stroke="#b8962e" stroke-width="0.8" opacity="0.35"/><text x="1028" y="75" font-family="Georgia,serif" font-size="52" fill="#f0ece0" opacity="0.85" text-anchor="middle" letter-spacing="1">SCIENTIFIC ANALYTICS ALLIANCE</text><line x1="580" y1="100" x2="1476" y2="100" stroke="#b8962e" stroke-width="0.7" opacity="0.4"/><text x="1028" y="140" font-family="Georgia,serif" font-size="44" fill="#b8962e" opacity="0.75" text-anchor="middle" letter-spacing="1">AI-Powered Research &amp; Risk Intelligence</text></svg></span>
+          </a>
         </div>
         <nav class="welcome-header-nav" role="navigation" aria-label="Main navigation">
           <button type="button" class="welcome-nav-link" onclick="window.location.href='/about/';" data-track="nav_click" data-track-nav="about">About</button>
@@ -3404,104 +3535,77 @@ html {
       </div>
     </header>
 
+    <div class="welcome-content-top" aria-label="Enter platform">
+      <div class="welcome-content-top-inner">
+        <button class="welcome-btn" onclick="window.saaGoToServices();" aria-label="Enter Platform" data-track="cta_click" data-track-cta="enter_platform">
+          <span>Enter Platform</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M5 12h14M12 5l7 7-7 7"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
     <div class="welcome-content">
-      <h1 class="welcome-title">SCIENTIFIC ANALYTICS ALLIANCE</h1>
-      <p class="welcome-tagline">Premium Research & Wealth Intelligence</p>
-      <div class="welcome-metrics">
-        <div class="metric-item">
-          <span class="metric-value" data-target="7">0</span>
-          <span class="metric-label">Enterprise Platforms</span>
+      <canvas class="particles-canvas" id="saaParticlesCanvas" aria-hidden="true"></canvas>
+      <div class="welcome-content-inner">
+        <h1 class="welcome-title">SCIENTIFIC ANALYTICS ALLIANCE</h1>
+        <p class="welcome-tagline">AI-Powered Research & Risk Intelligence</p>
+        <div class="welcome-metrics">
+          <div class="metric-item">
+            <span class="metric-value" data-target="8">0</span>
+            <span class="metric-label">Enterprise Platforms</span>
+          </div>
+          <div class="metric-divider">•</div>
+          <div class="metric-item">
+            <span class="metric-value" data-target="500">0</span>
+            <span class="metric-suffix">T+</span>
+            <span class="metric-label">Assets Under Analysis</span>
+          </div>
+          <div class="metric-divider">•</div>
+          <div class="metric-item">
+            <span class="metric-value" data-target="50">0</span>
+            <span class="metric-suffix">+</span>
+            <span class="metric-label">Institutions</span>
+          </div>
         </div>
-        <div class="metric-divider">•</div>
-        <div class="metric-item">
-          <span class="metric-value" data-target="300">0</span>
-          <span class="metric-suffix">T+</span>
-          <span class="metric-label">Assets Under Analysis</span>
-        </div>
-        <div class="metric-divider">•</div>
-        <div class="metric-item">
-          <span class="metric-value" data-target="50">0</span>
-          <span class="metric-suffix">+</span>
-          <span class="metric-label">Institutions</span>
+        <div class="ai-status-ticker" aria-label="AI services status">
+          <span class="ticker-dot"></span>
+          <span class="ticker-text">NVIDIA LLM: active</span>
+          <span class="ticker-sep">|</span>
+          <span class="ticker-text">Earth-2 NIM: ready</span>
+          <span class="ticker-sep">|</span>
+          <span class="ticker-text">16 NVIDIA services configured</span>
+          <span class="ticker-sep">|</span>
+          <span class="ticker-text">NeMo Guardrails: enabled</span>
         </div>
       </div>
-      
-      <div class="welcome-benefits">
-        <div class="welcome-benefit-item">
-          <div class="welcome-benefit-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
-            </svg>
-          </div>
-          <div class="welcome-benefit-text">Enterprise-Grade Analytics</div>
-        </div>
-        <div class="welcome-benefit-item">
-          <div class="welcome-benefit-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M13 10V3L4 14h7v7l9-11h-7z"/>
-            </svg>
-          </div>
-          <div class="welcome-benefit-text">NVIDIA AI Powered</div>
-        </div>
-        <div class="welcome-benefit-item">
-          <div class="welcome-benefit-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-            </svg>
-          </div>
-          <div class="welcome-benefit-text">Regulatory Compliance</div>
-        </div>
-        <div class="welcome-benefit-item">
-          <div class="welcome-benefit-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/>
-              <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
-              <line x1="12" y1="22.08" x2="12" y2="12"/>
-            </svg>
-          </div>
-          <div class="welcome-benefit-text">Real-Time Intelligence</div>
-        </div>
-      </div>
-      
-      <button class="welcome-btn" onclick="window.saaGoToServices();" aria-label="Enter Platform" data-track="cta_click" data-track-cta="enter_platform">
-        <span>Enter Platform</span>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path d="M5 12h14M12 5l7 7-7 7"/>
-        </svg>
-      </button>
-      
-      <div class="trusted-by-section" aria-label="Trusted by leading institutions">
-        <p class="trusted-label">Trusted by institutional investors worldwide</p>
-        <div class="trusted-logos">
-          <span class="trusted-logo">Global Banks</span>
-          <span class="trusted-logo">Hedge Funds</span>
-          <span class="trusted-logo">Asset Managers</span>
-          <span class="trusted-logo">Insurance</span>
-          <span class="trusted-logo">Governments</span>
-        </div>
-      </div>
-      
-      <div class="welcome-footer">
-        <span class="welcome-footer-copy">© 2025 Scientific Analytics Alliance • Premium Research & Wealth Intelligence</span>
-        <div class="welcome-legal">
-          <button type="button" class="legal-link" onclick="window.location.href='/privacy-policy/';">Privacy Policy</button>
-          <span class="welcome-legal-sep">•</span>
-          <button type="button" class="legal-link" onclick="window.location.href='/terms/';">Terms of Use</button>
-        </div>
+    </div>
+
+    <footer class="welcome-footer">
+      <div class="welcome-footer-badges">
         <a href="https://www.nvidia.com/en-us/startups/" target="_blank" rel="noopener" class="nvidia-inception-badge" aria-label="NVIDIA Inception Program">
           <img src="https://saa-alliance.com/wp-content/uploads/2026/01/nvidia-inception-program-badge-rgb-1c-blk-for-screen.png" alt="NVIDIA Inception Program Member" loading="lazy" decoding="async">
         </a>
+        <span class="program-pill">Participant, Google for Startups</span>
+        <span class="program-pill">Participant, AWS Activate</span>
       </div>
-    </div>
+      <div class="welcome-footer-legal-row">
+        <span class="welcome-footer-copy">© 2026 Scientific Analytics Alliance Inc. • AI-Powered Research & Risk Intelligence</span>
+        <span class="welcome-legal-sep">•</span>
+        <button type="button" class="legal-link" onclick="window.location.href='/privacy-policy/';">Privacy Policy</button>
+        <span class="welcome-legal-sep">•</span>
+        <button type="button" class="legal-link" onclick="window.location.href='/terms/';">Terms of Use</button>
+      </div>
+    </footer>
   </div>
 
   <!-- SERVICES SCREEN -->
   <div id="saaServicesScreen" class="screen services-screen" style="display: none;">
     <header class="header" role="banner">
       <div class="header-left">
-        <div class="header-logo" onclick="window.saaGoToWelcome();" role="button" aria-label="Go to home page" tabindex="0">
-          <div class="logo-mark" aria-hidden="true">SAA</div>
-          <span class="logo-text">Scientific Analytics Alliance</span>
+        <div class="header-logo" onclick="window.saaGoToWelcome();" role="button" aria-label="На главную" tabindex="0">
+          <span class="header-logo-img" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 200" role="img" aria-label="Scientific Analytics Alliance"><defs><radialGradient id="saa-g2-globe" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#b8962e" stop-opacity="0.2"/><stop offset="100%" stop-color="#b8962e" stop-opacity="0"/></radialGradient><filter id="saa-g2-glow"><feGaussianBlur stdDeviation="2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><rect width="1500" height="200" fill="#080808"/><circle cx="100" cy="100" r="72" fill="url(#saa-g2-globe)"/><circle cx="100" cy="100" r="70" fill="none" stroke="#b8962e" stroke-width="0.9" opacity="0.45"/><ellipse cx="100" cy="100" rx="70" ry="15" fill="none" stroke="#b8962e" stroke-width="0.6" opacity="0.28"/><ellipse cx="100" cy="100" rx="61" ry="37" fill="none" stroke="#b8962e" stroke-width="0.6" opacity="0.22"/><ellipse cx="100" cy="100" rx="42" ry="54" fill="none" stroke="#b8962e" stroke-width="0.6" opacity="0.22"/><ellipse cx="100" cy="100" rx="17" ry="67" fill="none" stroke="#b8962e" stroke-width="0.6" opacity="0.22"/><path d="M100,30 Q174,100 100,170" fill="none" stroke="#b8962e" stroke-width="0.6" opacity="0.22"/><path d="M100,30 Q26,100 100,170" fill="none" stroke="#b8962e" stroke-width="0.6" opacity="0.22"/><circle cx="100" cy="38" r="4" fill="#b8962e" filter="url(#saa-g2-glow)"/><circle cx="148" cy="62" r="3" fill="#b8962e" opacity="0.88"/><circle cx="160" cy="108" r="3.5" fill="#b8962e" filter="url(#saa-g2-glow)"/><circle cx="136" cy="150" r="3" fill="#b8962e" opacity="0.85"/><circle cx="64" cy="150" r="3" fill="#b8962e" opacity="0.85"/><circle cx="40" cy="108" r="3.5" fill="#b8962e" filter="url(#saa-g2-glow)"/><circle cx="52" cy="62" r="3" fill="#b8962e" opacity="0.88"/><circle cx="100" cy="100" r="5" fill="#b8962e" filter="url(#saa-g2-glow)"/><g opacity="0.5"><line x1="100" y1="38" x2="148" y2="62" stroke="#b8962e" stroke-width="1.1"/><line x1="148" y1="62" x2="160" y2="108" stroke="#b8962e" stroke-width="1.1"/><line x1="160" y1="108" x2="136" y2="150" stroke="#b8962e" stroke-width="1.1"/><line x1="136" y1="150" x2="64" y2="150" stroke="#b8962e" stroke-width="1.1"/><line x1="64" y1="150" x2="40" y2="108" stroke="#b8962e" stroke-width="1.1"/><line x1="40" y1="108" x2="52" y2="62" stroke="#b8962e" stroke-width="1.1"/><line x1="52" y1="62" x2="100" y2="38" stroke="#b8962e" stroke-width="1.1"/></g><g opacity="0.45"><line x1="100" y1="38" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/><line x1="148" y1="62" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/><line x1="160" y1="108" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/><line x1="136" y1="150" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/><line x1="64" y1="150" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/><line x1="40" y1="108" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/><line x1="52" y1="62" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/></g><g opacity="0.2"><line x1="100" y1="38" x2="160" y2="108" stroke="#b8962e" stroke-width="0.7"/><line x1="148" y1="62" x2="136" y2="150" stroke="#b8962e" stroke-width="0.7"/><line x1="160" y1="108" x2="64" y2="150" stroke="#b8962e" stroke-width="0.7"/><line x1="136" y1="150" x2="40" y2="108" stroke="#b8962e" stroke-width="0.7"/><line x1="64" y1="150" x2="52" y2="62" stroke="#b8962e" stroke-width="0.7"/><line x1="40" y1="108" x2="100" y2="38" stroke="#b8962e" stroke-width="0.7"/></g><line x1="196" y1="30" x2="196" y2="170" stroke="#b8962e" stroke-width="0.8" opacity="0.35"/><text x="375" y="88" font-family="Georgia,serif" font-size="93" font-weight="700" fill="#f0ece0" text-anchor="middle" letter-spacing="10">SAA</text><line x1="210" y1="108" x2="540" y2="108" stroke="#b8962e" stroke-width="1.6"/><text x="375" y="152" font-family="Georgia,serif" font-size="39" font-weight="400" fill="#b8962e" text-anchor="middle" letter-spacing="10">ALLIANCE</text><line x1="556" y1="30" x2="556" y2="170" stroke="#b8962e" stroke-width="0.8" opacity="0.35"/><text x="1028" y="75" font-family="Georgia,serif" font-size="52" fill="#f0ece0" opacity="0.85" text-anchor="middle" letter-spacing="1">SCIENTIFIC ANALYTICS ALLIANCE</text><line x1="580" y1="100" x2="1476" y2="100" stroke="#b8962e" stroke-width="0.7" opacity="0.4"/><text x="1028" y="140" font-family="Georgia,serif" font-size="44" fill="#b8962e" opacity="0.75" text-anchor="middle" letter-spacing="1">AI-Powered Research &amp; Risk Intelligence</text></svg></span>
         </div>
       </div>
       <nav class="header-right" role="navigation" aria-label="Services navigation">
@@ -3870,7 +3974,7 @@ html {
 
     <footer class="footer" role="contentinfo">
       <div class="footer-content">
-        <span class="footer-copyright">© 2025 Scientific Analytics Alliance • Premium Research & Wealth Intelligence</span>
+        <span class="footer-copyright">© 2026 Scientific Analytics Alliance Inc. • AI-Powered Research & Risk Intelligence</span>
         <div class="footer-legal">
           <button type="button" class="legal-link" onclick="window.location.href='/privacy-policy/';">Privacy Policy</button>
           <span>•</span>
@@ -3991,11 +4095,17 @@ html {
         <p><strong>Integration & Data Flow:</strong></p>
         <p>Platforms are designed to work independently or as an integrated ecosystem. Data flows between services enable cross-platform risk aggregation, unified portfolio views, and comprehensive analytics. Physical-Financial Risk Platform serves as the foundation for physical asset modeling, while ARIN provides autonomous monitoring across all asset classes. Risk Analyzer aggregates outputs from Investment Dashboard, Digital Assets, and Physical-Financial platforms for unified risk reporting.</p>
         
-        <p><strong>NVIDIA AI Stack:</strong></p>
+        <p><strong>NVIDIA AI Stack (16 services):</strong></p>
         <ul>
-          <li>NVIDIA Earth-2: Climate simulations and weather forecasting</li>
-          <li>NVIDIA PhysicsNeMo: Physics-informed AI for simulations</li>
-          <li>NVIDIA LLM: AI agents and natural language processing</li>
+          <li>NVIDIA LLM (Cloud API): Llama 3.1 70B/8B, Mixtral — AI agents (SENTINEL, ANALYST, ADVISOR, REPORTER), executive summaries, disclosure drafts, AI-Q chat</li>
+          <li>NVIDIA AI Orchestration: Multi-model consensus for stress tests (fast + deep + summary)</li>
+          <li>Earth-2 FourCastNet NIM: Weather forecasting (local GPU container)</li>
+          <li>Earth-2 CorrDiff NIM: High-resolution climate downscaling</li>
+          <li>NVIDIA PhysicsNeMo: Physics-informed simulations (flood, structural, thermal, fire)</li>
+          <li>NeMo Retriever: RAG pipeline, AI-Q citations (embed + rerank)</li>
+          <li>NeMo Guardrails: Safety and compliance checks for agent output</li>
+          <li>NeMo Agent Toolkit, Curator, Data Designer, Evaluator</li>
+          <li>Optional: NVIDIA Riva (TTS/STT), Dynamo, Triton, RAPIDS (cuDF/cuGraph/CuPy), FLUX NIM</li>
           <li>NVIDIA Inception Program: Member and technology partner</li>
         </ul>
       </div>
@@ -4896,9 +5006,8 @@ html {
   };
 
   let saaCurrentServiceId = null;
-  const loadingMessages = ['INITIALIZING SYSTEMS', 'CONNECTING APIs', 'LOADING MODELS', 'SYNCING DATA', 'READY'];
-  
-  // Use window object for flags to persist across script reloads
+  const loadingMessages = ['CALCULATING TRAJECTORIES', 'CONVERGING PATHS', 'MAPPING RISK LANDSCAPE', 'COLLAPSING PROBABILITIES', 'READY'];
+
   if (!window.saaLoadingState) {
     window.saaLoadingState = {
       progress: 0,
@@ -4906,75 +5015,184 @@ html {
       initPageCalled: false,
       startInitializationCalled: false,
       attachInitializationCalled: false,
-      loadingComplete: false
+      loadingComplete: false,
+      piInitialized: false
     };
   }
-  
+
   const state = window.saaLoadingState;
   let progress = state.progress;
 
+  function initPathIntegral() {
+    var cvs = document.getElementById('saaPathIntegralCanvas');
+    if (!cvs) return;
+    var ctx = cvs.getContext('2d');
+    var dpr = window.devicePixelRatio || 1;
+
+    function resize() {
+      var par = cvs.parentElement;
+      if (!par) return;
+      var r = par.getBoundingClientRect();
+      cvs.width = r.width * dpr;
+      cvs.height = r.height * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    var N = 200, CLUSTERS = 5, RISK_CL = 2;
+    var threads = [];
+    for (var i = 0; i < N; i++) {
+      var cl = Math.floor(Math.random() * CLUSTERS);
+      threads.push({
+        y0: Math.random(),
+        clY: (cl + 0.5) / CLUSTERS * 0.6 + 0.2,
+        amp: 0.03 + Math.random() * 0.12,
+        freq: 1.5 + Math.random() * 3,
+        ph: Math.random() * Math.PI * 2,
+        spd: 0.4 + Math.random() * 0.8,
+        cl: cl,
+        risk: cl === RISK_CL,
+        bA: 0.06 + Math.random() * 0.18,
+        lw: 0.4 + Math.random() * 0.8
+      });
+    }
+
+    var t0 = performance.now();
+    var visualProgress = 0;
+
+    function draw() {
+      var now = performance.now();
+      var t = (now - t0) / 1000;
+      var par = cvs.parentElement;
+      if (!par) { requestAnimationFrame(draw); return; }
+      var rect = par.getBoundingClientRect();
+      var w = rect.width, h = rect.height;
+      if (w < 1 || h < 1) { requestAnimationFrame(draw); return; }
+
+      ctx.clearRect(0, 0, w, h);
+
+      var target = Math.min(state.progress / 100, 1);
+      visualProgress += (target - visualProgress) * 0.025;
+      if (Math.abs(target - visualProgress) < 0.0005) visualProgress = target;
+      var p = visualProgress;
+
+      var spread, gather, thin, collapse;
+      if (p < 0.3) {
+        var f = p / 0.3;
+        spread = 1 - f * 0.2;
+        gather = f * 0.2;
+        thin = 0;
+        collapse = 0;
+      } else if (p < 0.7) {
+        var f = (p - 0.3) / 0.4;
+        spread = 0.8 - f * 0.65;
+        gather = 0.2 + f * 0.8;
+        thin = f * 0.7;
+        collapse = 0;
+      } else if (p < 0.95) {
+        var f = (p - 0.7) / 0.25;
+        spread = 0.15 - f * 0.12;
+        gather = 1;
+        thin = 0.7 + f * 0.25;
+        collapse = 0;
+      } else {
+        var f = Math.min((p - 0.95) / 0.05, 1);
+        spread = 0.03;
+        gather = 1;
+        thin = 0.95;
+        collapse = f;
+      }
+
+      var survivorStride = Math.max(1, Math.round(1 / (1 - thin * 0.85)));
+
+      for (var i = 0; i < N; i++) {
+        var th = threads[i];
+        var alpha = th.bA;
+
+        if (thin > 0.1 && (i % survivorStride) !== 0) {
+          alpha *= (1 - thin);
+        } else if (thin > 0.5) {
+          alpha = Math.min(alpha * (1 + thin), 0.8);
+        }
+        if (alpha < 0.005) continue;
+
+        var baseY = th.y0 + (th.clY - th.y0) * gather;
+        var finalY = baseY + (0.5 - baseY) * collapse;
+
+        ctx.beginPath();
+        var steps = 80;
+        for (var s = 0; s <= steps; s++) {
+          var sx = (s / steps) * w;
+          var xn = s / steps;
+          var wave = Math.sin(xn * th.freq * Math.PI * 2 + t * th.spd + th.ph) * th.amp * h * spread;
+          var jitter = spread > 0.3 ? Math.sin(t * 4 + i * 0.7 + s * 0.4) * spread * 1.5 : 0;
+          var sy = finalY * h + wave + jitter;
+          if (s === 0) ctx.moveTo(sx, sy);
+          else ctx.lineTo(sx, sy);
+        }
+
+        if (th.risk && gather > 0.4) {
+          var pulse = (Math.sin(t * 3) + 1) / 2;
+          var r = Math.round(201 + 38 * pulse);
+          var g = Math.round(169 - 101 * pulse);
+          var b = Math.round(98 - 30 * pulse);
+          ctx.strokeStyle = 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+        } else {
+          ctx.strokeStyle = 'rgba(201,169,98,' + alpha + ')';
+        }
+        ctx.lineWidth = th.lw * (1 + thin * 0.5);
+        ctx.stroke();
+      }
+
+      if (collapse > 0.3) {
+        var ga = (collapse - 0.3) / 0.7 * 0.5;
+        var grd = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w * 0.15);
+        grd.addColorStop(0, 'rgba(201,169,98,' + ga + ')');
+        grd.addColorStop(1, 'rgba(201,169,98,0)');
+        ctx.fillStyle = grd;
+        ctx.fillRect(0, 0, w, h);
+      }
+
+      requestAnimationFrame(draw);
+    }
+
+    requestAnimationFrame(draw);
+  }
+
   function updateLoading() {
-    // Skip if loading already complete
-    if (state.loadingComplete) {
-      console.log('Loading complete, skipping updateLoading');
-      return;
-    }
-    
-    // Prevent multiple simultaneous calls
-    if (state.updateLoadingRunning) {
-      console.log('updateLoading already running, skipping');
-      return;
-    }
-    
-    console.log('updateLoading called, progress:', progress);
+    if (state.loadingComplete) return;
+    if (state.updateLoadingRunning) return;
     state.updateLoadingRunning = true;
-    
+
     try {
-      const fill = document.getElementById('saaLoadingBarFill');
-      const text = document.getElementById('saaLoadingText');
-      const modules = ['saaMod1', 'saaMod2', 'saaMod3', 'saaMod4'];
-      
-      if (!fill || !text) {
-        console.error('Loading elements not found', { fill: !!fill, text: !!text });
-        // Fallback: go directly to welcome screen
+      var text = document.getElementById('saaLoadingText');
+      var modules = ['saaMod1', 'saaMod2', 'saaMod3', 'saaMod4'];
+
+      if (!text) {
         setTimeout(saaGoToWelcomeScreen, 1000);
         return;
       }
-      
-      // Ensure CSS animation is disabled when JS is running
-      if (fill) {
-        fill.classList.add('js-active');
-        fill.style.animation = 'none';
+
+      if (!state.piInitialized) {
+        state.piInitialized = true;
+        initPathIntegral();
       }
-      
-      // Immediately start updating progress - no blocking checks
-      // Sync progress from global state
+
       progress = state.progress;
-      
+
       if (progress < 100) {
-        // Increment progress
-        progress += Math.random() * 12 + 3;
+        progress += Math.random() * 3.5 + 1.5;
         if (progress > 100) progress = 100;
-        
-        // Update global state
         state.progress = progress;
-        
-        // Update progress bar immediately
-        fill.style.width = progress + '%';
-        fill.style.animation = 'none'; // Disable CSS animation when JS updates
-        console.log('Progress updated to:', progress + '%');
-        
-        // Update message
-        const msgIndex = Math.min(Math.floor(progress / 25), loadingMessages.length - 1);
-        if (text) {
-          text.textContent = loadingMessages[msgIndex];
-        }
-        
-        // Update module indicators
-        modules.forEach((id, i) => {
-          const el = document.getElementById(id);
+
+        var msgIndex = Math.min(Math.floor(progress / 25), loadingMessages.length - 1);
+        text.textContent = loadingMessages[msgIndex];
+
+        modules.forEach(function(id, i) {
+          var el = document.getElementById(id);
           if (el) {
-            const threshold = (i + 1) * 25;
+            var threshold = (i + 1) * 25;
             if (progress >= threshold) {
               el.classList.remove('active');
               el.classList.add('complete');
@@ -4983,28 +5201,22 @@ html {
             }
           }
         });
-        
-        // Continue animation or finish
+
         if (progress < 100) {
-          state.progress = progress; // Update global state
-          state.updateLoadingRunning = false; // Allow next call
-          setTimeout(updateLoading, 150 + Math.random() * 200);
+          state.updateLoadingRunning = false;
+          setTimeout(updateLoading, 250 + Math.random() * 300);
         } else {
-          console.log('Loading complete, transitioning to welcome screen');
           state.progress = 100;
           state.updateLoadingRunning = false;
-          setTimeout(saaGoToWelcomeScreen, 500);
+          setTimeout(saaGoToWelcomeScreen, 1500);
         }
       } else {
-        // Progress already at 100, go to welcome screen
-        console.log('Progress already 100%, going to welcome screen');
         state.updateLoadingRunning = false;
-        setTimeout(saaGoToWelcomeScreen, 500);
+        setTimeout(saaGoToWelcomeScreen, 1000);
       }
     } catch (error) {
       console.error('Error in updateLoading:', error);
       state.updateLoadingRunning = false;
-      // Fallback: go directly to welcome screen
       setTimeout(saaGoToWelcomeScreen, 1000);
     }
   }
@@ -5745,18 +5957,12 @@ html {
       state.progress = 0;
       state.updateLoadingRunning = false;
       
-      // Initialize loading bar
-      const fill = document.getElementById('saaLoadingBarFill');
-      const text = document.getElementById('saaLoadingText');
-      if (fill) {
-        // Disable CSS animation immediately when JS starts
-        fill.classList.add('js-active');
-        fill.style.width = '0%';
-        fill.style.animation = 'none';
-      }
+      // Initialize loading text
+      var text = document.getElementById('saaLoadingText');
       if (text) {
-        text.textContent = 'INITIALIZING SYSTEMS';
+        text.textContent = 'CALCULATING TRAJECTORIES';
       }
+      state.piInitialized = false;
       
       // Start loading animation immediately - no delays
       console.log('Starting updateLoading immediately');
@@ -5780,14 +5986,14 @@ html {
         }
       }, 1000);
       
-      // Aggressive fallback 2: if loading screen still visible after 3 seconds, force transition
+      // Fallback: if loading screen still visible after 12 seconds, force transition
       setTimeout(function() {
         const loading = document.getElementById('saaLoadingScreen');
         if (loading && loading.style.display !== 'none' && loading.style.display !== '') {
-          console.warn('Loading timeout (3s) - forcing transition to welcome screen');
+          console.warn('Loading timeout (12s) - forcing transition to welcome screen');
           saaGoToWelcomeScreen();
         }
-      }, 3000);
+      }, 12000);
       
       // Initialize other features (outside main try-catch to not block loading)
       if (typeof initAnimatedMetrics === 'function') {
@@ -5888,13 +6094,13 @@ html {
         console.log('3s check: loading already complete');
         return;
       }
-      console.log('3-second fallback check');
+      console.log('12-second fallback check');
       const loadingScreen = document.getElementById('saaLoadingScreen');
       if (loadingScreen && loadingScreen.style.display !== 'none') {
-        console.warn('Force transition after 3s timeout');
+        console.warn('Force transition after 12s timeout');
         saaGoToWelcomeScreen();
       }
-    }, 3000);
+    }, 12000);
   }
   
   // Start initialization
@@ -6049,6 +6255,1194 @@ html {
 })();
 </script>
 
+<!-- Wireframe Globe Animation (welcome hero background) -->
+<script>
+(function() {
+  'use strict';
+
+  var canvas = document.getElementById('saaParticlesCanvas');
+  if (!canvas) return;
+  var ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  var animId = null;
+  var started = false;
+  var angle = 0;
+  var lastFrameTime = 0;
+  var GOLD = { r: 201, g: 169, b: 98 };
+  var ROTATION_SPEED_PER_MS = 0.0000705;
+
+  var particles = [];
+  var PARTICLE_COUNT = 0;
+
+  var flashes = [];
+  var ghostPositions = [];
+  var lastBurstAt = 0;
+  var BURST_INTERVAL = 7000;
+  var FLASH_DURATION = 1400;
+  var HOLD_DURATION = 400;
+
+  var satellites = [];
+  var SAT_MAX = 2;
+  var SAT_SPAWN_INTERVAL = 5000;
+  var SAT_LIFETIME = 14000;
+  var SAT_FADE_IN = 1500;
+  var SAT_FADE_OUT = 2000;
+  var SAT_TRAIL_POINTS = 28;
+  var lastSatSpawn = 0;
+
+  // --- Triple Morph State Machine ---
+  var morphMode = 'globe';
+  var modeStart = 0;
+  var morphT = 0;
+  var globeVis = 1, blochVis = 0, qcubeVis = 0, voxelVis = 0;
+  var MODE_DUR = {
+    globe: 25000, to_bloch: 2000, bloch: 12000, to_qcube: 2500,
+    qcube: 10000, to_voxel: 2000, voxel: 8000, to_globe: 2500
+  };
+  var MODE_NEXT = {
+    globe: 'to_bloch', to_bloch: 'bloch', bloch: 'to_qcube', to_qcube: 'qcube',
+    qcube: 'to_voxel', to_voxel: 'voxel', voxel: 'to_globe', to_globe: 'globe'
+  };
+
+  // --- Bloch Sphere ---
+  var stateTheta = Math.PI / 4;
+  var statePhi = 0;
+  var gateAnim = null;
+  var lastGateTrigger = 0;
+  var GATE_INTERVAL = 4500;
+  var GATE_ANIM_DURATION = 1800;
+  var gateLabel = '';
+  var gateLabelAlpha = 0;
+  var GATE_NAMES = ['H', 'X', 'Z', 'T', 'S', 'Y', 'CNOT'];
+  var gateIndex = 0;
+  var stateTrail = [];
+  var TRAIL_MAX = 28;
+  var collapseParticles = [];
+
+  // --- Q-Cube ---
+  var QCUBE_LABELS = ['|000\u27E9','|001\u27E9','|010\u27E9','|011\u27E9','|100\u27E9','|101\u27E9','|110\u27E9','|111\u27E9'];
+  var QCUBE_VERTICES = [
+    [-1,-1,-1],[-1,-1,1],[-1,1,-1],[-1,1,1],
+    [1,-1,-1],[1,-1,1],[1,1,-1],[1,1,1]
+  ];
+  var QCUBE_EDGES = [[0,1],[0,2],[0,4],[1,3],[1,5],[2,3],[2,6],[3,7],[4,5],[4,6],[5,7],[6,7]];
+  var qcubeProbTarget = 0;
+  var lastQcubeProbShift = 0;
+
+  var CITIES = [
+    'New York', 'London', 'Tokyo', 'Frankfurt', 'Singapore',
+    'Hong Kong', 'Sydney', 'Dubai', 'Mumbai', 'Shanghai',
+    'Zurich', 'Toronto', 'Seoul', 'S\u00e3o Paulo', 'Paris',
+    'Amsterdam', 'Chicago', 'Los Angeles', 'Berlin', 'Istanbul',
+    'Jakarta', 'Bangkok', 'Riyadh', 'Lagos', 'Nairobi'
+  ];
+  var EVENTS = [
+    'Rhine Flood', 'Pandemic X', 'EU Liquidity Crisis',
+    'Cyber Attack', 'Taiwan Strait', 'Arctic Melt',
+    'Energy Shock', 'Rate Spike +300bp', 'Supply Chain Break',
+    'Sovereign Default', 'Wildfire Cascade', 'Port Blockade',
+    'Banking Contagion', 'Climate Tipping', 'Debt Spiral',
+    'Grid Failure', 'Earthquake M7+', 'Trade War',
+    'AI Flash Crash', 'Insurance Exodus'
+  ];
+  var eventIndex = 0;
+
+  function easeInOutQuad(t) {
+    return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+  }
+  function easeInOutSine(t) {
+    return -(Math.cos(Math.PI * t) - 1) / 2;
+  }
+  function easeInOutCubic(t) {
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  }
+  var smoothTheta = Math.PI / 4, smoothPhi = 0;
+  var SMOOTH_FACTOR = 0.04;
+
+  // --- Particle Generation ---
+  function generateParticles() {
+    particles = [];
+    var latSteps = 16, lonSteps = 32;
+    for (var lat = 1; lat < latSteps; lat++) {
+      var phi = (Math.PI * lat) / latSteps;
+      for (var lon = 0; lon < lonSteps; lon++) {
+        addParticle(phi, (2 * Math.PI * lon) / lonSteps, 1.0);
+      }
+    }
+    var merSteps = 12, merPts = 22;
+    for (var m = 0; m < merSteps; m++) {
+      var th = (2 * Math.PI * m) / merSteps;
+      for (var p = 1; p < merPts; p++) {
+        addParticle((Math.PI * p) / merPts, th, 0.8);
+      }
+    }
+    for (var r = 0; r < 100; r++) {
+      addParticle(Math.acos(2 * Math.random() - 1), Math.random() * 2 * Math.PI, Math.random() * 0.6 + 0.3);
+    }
+    PARTICLE_COUNT = particles.length;
+  }
+
+  function addParticle(phi, theta, size) {
+    var gx = Math.sin(phi) * Math.cos(theta);
+    var gy = Math.cos(phi);
+    var gz = Math.sin(phi) * Math.sin(theta);
+    var vi = particles.length % 8;
+    var v = QCUBE_VERTICES[vi];
+    var sp = 0.15;
+    particles.push({
+      phi: phi, theta: theta, size: size,
+      gx: gx, gy: gy, gz: gz,
+      qx: v[0] * 0.55 + (Math.random() - 0.5) * sp,
+      qy: v[1] * 0.55 + (Math.random() - 0.5) * sp,
+      qz: v[2] * 0.55 + (Math.random() - 0.5) * sp,
+      qvi: vi,
+      vx: (Math.random() - 0.5) * 1.6,
+      vy: (Math.random() - 0.5) * 1.6,
+      vz: (Math.random() - 0.5) * 1.6
+    });
+  }
+
+  // --- Projection ---
+  function project(phi, theta, radius, cx, cy, rotY) {
+    var x = Math.sin(phi) * Math.cos(theta + rotY);
+    var y = Math.cos(phi);
+    var z = Math.sin(phi) * Math.sin(theta + rotY);
+    var scale = 1 / (1 + z * 0.15);
+    return { x: cx + x * radius * scale, y: cy - y * radius * scale, z: z, scale: scale };
+  }
+
+  function projectUnit(ux, uy, uz, radius, cx, cy, rotY) {
+    var cosR = Math.cos(rotY), sinR = Math.sin(rotY);
+    var rx = ux * cosR - uz * sinR;
+    var rz = ux * sinR + uz * cosR;
+    var scale = 1 / (1 + rz * 0.15);
+    return { x: cx + rx * radius * scale, y: cy - uy * radius * scale, z: rz, scale: scale };
+  }
+
+  function projectTilted(ux, uy, uz, radius, cx, cy, rotY, tiltX) {
+    var cosR = Math.cos(rotY), sinR = Math.sin(rotY);
+    var rx = ux * cosR - uz * sinR;
+    var rz = ux * sinR + uz * cosR;
+    var cosT = Math.cos(tiltX), sinT = Math.sin(tiltX);
+    var ry = uy * cosT - rz * sinT;
+    var rz2 = uy * sinT + rz * cosT;
+    var scale = 1 / (1 + rz2 * 0.15);
+    return { x: cx + rx * radius * scale, y: cy - ry * radius * scale, z: rz2, scale: scale };
+  }
+
+  function getParticleXYZ(p) {
+    var e = easeInOutQuad(morphT);
+    switch(morphMode) {
+      case 'globe': case 'to_bloch': case 'bloch':
+        return { x: p.gx, y: p.gy, z: p.gz };
+      case 'to_qcube':
+        return { x: p.gx + (p.qx - p.gx) * e, y: p.gy + (p.qy - p.gy) * e, z: p.gz + (p.qz - p.gz) * e };
+      case 'qcube':
+        return { x: p.qx, y: p.qy, z: p.qz };
+      case 'to_voxel':
+        return { x: p.qx + (p.vx - p.qx) * e, y: p.qy + (p.vy - p.qy) * e, z: p.qz + (p.vz - p.qz) * e };
+      case 'voxel':
+        return { x: p.vx, y: p.vy, z: p.vz };
+      case 'to_globe':
+        return { x: p.vx + (p.gx - p.vx) * e, y: p.vy + (p.gy - p.vy) * e, z: p.vz + (p.gz - p.vz) * e };
+      default: return { x: p.gx, y: p.gy, z: p.gz };
+    }
+  }
+
+  function voxelDensity(x, y, z, now) {
+    var fx = Math.cos(now * 0.0005) * 0.5;
+    var fy = Math.sin(now * 0.0007) * 0.3;
+    var fz = Math.sin(now * 0.0003) * 0.4;
+    var dx = x - fx, dy = y - fy, dz = z - fz;
+    var dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    var wave = Math.sin(dist * 4 - now * 0.002) * 0.5 + 0.5;
+    var gaussian = Math.exp(-dist * dist * 2);
+    return gaussian * 0.7 + wave * 0.3;
+  }
+
+  function resize() {
+    var parent = canvas.parentElement;
+    if (!parent) return false;
+    var pw = parent.offsetWidth;
+    var ph = parent.offsetHeight;
+    if (pw < 1 || ph < 1) return false;
+    var size = Math.max(pw, ph) * 1.1;
+    canvas.width = size;
+    canvas.height = size;
+    canvas.style.width = size + 'px';
+    canvas.style.height = size + 'px';
+    return true;
+  }
+
+  // --- Mode State Machine ---
+  function updateMode(now) {
+    if (modeStart === 0) modeStart = now;
+    var elapsed = now - modeStart;
+    var dur = MODE_DUR[morphMode];
+    morphT = (morphMode.indexOf('to_') === 0) ? Math.min(1, elapsed / dur) : 0;
+    var t = easeInOutQuad(morphT);
+    switch(morphMode) {
+      case 'globe':
+        globeVis = 1; blochVis = 0; qcubeVis = 0; voxelVis = 0; break;
+      case 'to_bloch':
+        globeVis = 1 - t; blochVis = t; qcubeVis = 0; voxelVis = 0; break;
+      case 'bloch':
+        globeVis = 0; blochVis = 1; qcubeVis = 0; voxelVis = 0; break;
+      case 'to_qcube':
+        globeVis = 0; blochVis = 1 - t; qcubeVis = t; voxelVis = 0; break;
+      case 'qcube':
+        globeVis = 0; blochVis = 0; qcubeVis = 1; voxelVis = 0; break;
+      case 'to_voxel':
+        globeVis = 0; blochVis = 0; qcubeVis = 1 - t; voxelVis = t; break;
+      case 'voxel':
+        globeVis = 0; blochVis = 0; qcubeVis = 0; voxelVis = 1; break;
+      case 'to_globe':
+        globeVis = t; blochVis = 0; qcubeVis = 0; voxelVis = 1 - t; break;
+    }
+    if (elapsed >= dur) {
+      var next = MODE_NEXT[morphMode];
+      morphMode = next;
+      modeStart = now;
+      morphT = 0;
+      if (next === 'bloch') {
+        lastGateTrigger = now;
+        stateTheta = Math.PI / 4; statePhi = 0;
+        smoothTheta = Math.PI / 4; smoothPhi = 0;
+        gateIndex = 0; gateAnim = null; gateLabel = ''; gateLabelAlpha = 0;
+        stateTrail = []; collapseParticles = [];
+      } else if (next === 'qcube') {
+        lastQcubeProbShift = now;
+        qcubeProbTarget = Math.floor(Math.random() * 8);
+        for (var qi = 0; qi < 8; qi++) {
+          qcubeProbs[qi] = qi === qcubeProbTarget ? 1 : 0.08 + Math.random() * 0.12;
+          qcubeProbSmooth[qi] = qcubeProbs[qi];
+        }
+        qcubeEnergyPhase = 0;
+      } else if (next === 'globe') {
+        stateTrail = []; collapseParticles = [];
+      }
+    }
+  }
+
+  // --- Bloch Vector Logic ---
+  function updateBlochVector(now, dt) {
+    if (blochVis < 0.01) return;
+    var targetTheta, targetPhi;
+    if (!gateAnim) {
+      targetPhi = statePhi + 0.00025 * dt;
+      targetTheta = Math.PI * 0.5 + Math.sin(now * 0.00012) * Math.PI * 0.32
+                     + Math.sin(now * 0.00031) * Math.PI * 0.08;
+      targetTheta = Math.max(Math.PI * 0.12, Math.min(Math.PI * 0.88, targetTheta));
+      statePhi = targetPhi;
+      stateTheta += (targetTheta - stateTheta) * SMOOTH_FACTOR;
+    }
+    smoothTheta += (stateTheta - smoothTheta) * SMOOTH_FACTOR;
+    smoothPhi += (statePhi - smoothPhi) * SMOOTH_FACTOR;
+
+    if (!gateAnim && now - lastGateTrigger >= GATE_INTERVAL) {
+      lastGateTrigger = now;
+      stateTrail.push({ theta: smoothTheta, phi: smoothPhi, a: 1.0 });
+      if (stateTrail.length > TRAIL_MAX) stateTrail.shift();
+      var gn = GATE_NAMES[gateIndex % GATE_NAMES.length];
+      gateIndex++;
+      var eT = stateTheta, eP = statePhi;
+      switch (gn) {
+        case 'X': eT = Math.PI - stateTheta; break;
+        case 'Z': eP = statePhi + Math.PI; break;
+        case 'H': eT = Math.PI / 2; eP = 0; break;
+        case 'T': eP = statePhi + Math.PI / 4; break;
+        case 'S': eP = statePhi + Math.PI / 2; break;
+        case 'Y': eT = Math.PI - stateTheta; eP = statePhi + Math.PI; break;
+        case 'CNOT': eT = Math.PI - stateTheta; eP = statePhi + Math.PI / 2; break;
+      }
+      gateAnim = { sT: stateTheta, sP: statePhi, eT: eT, eP: eP, t0: now, dur: GATE_ANIM_DURATION, name: gn };
+      gateLabel = gn; gateLabelAlpha = 1;
+    }
+    if (gateAnim) {
+      var gp = (now - gateAnim.t0) / gateAnim.dur;
+      if (gp >= 1) {
+        stateTheta = gateAnim.eT; statePhi = gateAnim.eP;
+        smoothTheta = stateTheta; smoothPhi = statePhi;
+        stateTrail.push({ theta: stateTheta, phi: statePhi, a: 1.0 });
+        if (stateTrail.length > TRAIL_MAX) stateTrail.shift();
+        gateAnim = null;
+      } else {
+        var ease = easeInOutCubic(gp);
+        stateTheta = gateAnim.sT + (gateAnim.eT - gateAnim.sT) * ease;
+        statePhi = gateAnim.sP + (gateAnim.eP - gateAnim.sP) * ease;
+        smoothTheta = stateTheta; smoothPhi = statePhi;
+      }
+    }
+    if (gateLabelAlpha > 0 && !gateAnim) {
+      gateLabelAlpha -= dt * 0.0015;
+      if (gateLabelAlpha < 0) gateLabelAlpha = 0;
+    }
+    for (var i = 0; i < stateTrail.length; i++) stateTrail[i].a -= dt * 0.00035;
+    while (stateTrail.length > 0 && stateTrail[0].a <= 0) stateTrail.shift();
+  }
+
+  // --- Enhanced Bloch Sphere Rendering ---
+  function drawBlochElements(cx, cy, radius, alpha, now) {
+    if (alpha < 0.01) return;
+    var gs = 'rgba(' + GOLD.r + ',' + GOLD.g + ',' + GOLD.b + ',';
+    var axLen = radius * 1.18;
+    ctx.save();
+
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    var zT = project(0.001, 0, axLen, cx, cy, angle);
+    var zB = project(Math.PI - 0.001, 0, axLen, cx, cy, angle);
+    ctx.strokeStyle = gs + (alpha * 0.55) + ')';
+    ctx.beginPath(); ctx.moveTo(zT.x, zT.y); ctx.lineTo(zB.x, zB.y); ctx.stroke();
+
+    var xP = project(Math.PI / 2, 0, axLen, cx, cy, angle);
+    var xN = project(Math.PI / 2, Math.PI, axLen, cx, cy, angle);
+    ctx.strokeStyle = gs + (alpha * 0.45) + ')';
+    ctx.beginPath(); ctx.moveTo(xP.x, xP.y); ctx.lineTo(xN.x, xN.y); ctx.stroke();
+
+    var yP = project(Math.PI / 2, Math.PI / 2, axLen, cx, cy, angle);
+    var yN = project(Math.PI / 2, 3 * Math.PI / 2, axLen, cx, cy, angle);
+    ctx.strokeStyle = gs + (alpha * 0.45) + ')';
+    ctx.beginPath(); ctx.moveTo(yP.x, yP.y); ctx.lineTo(yN.x, yN.y); ctx.stroke();
+    ctx.setLineDash([]);
+
+    var lSz = Math.max(9, Math.round(radius * 0.055));
+    ctx.font = '500 ' + lSz + 'px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    var lOff = radius * 1.28;
+    var lz0 = project(0.001, 0, lOff, cx, cy, angle);
+    var lz1 = project(Math.PI - 0.001, 0, lOff, cx, cy, angle);
+    var lxP = project(Math.PI / 2, 0, lOff, cx, cy, angle);
+    var lxN = project(Math.PI / 2, Math.PI, lOff, cx, cy, angle);
+    var lyP = project(Math.PI / 2, Math.PI / 2, lOff, cx, cy, angle);
+    var lyN = project(Math.PI / 2, 3 * Math.PI / 2, lOff, cx, cy, angle);
+    ctx.fillStyle = gs + (alpha * 0.85) + ')';
+    ctx.fillText('|0\u27E9', lz0.x, lz0.y);
+    ctx.fillText('|1\u27E9', lz1.x, lz1.y);
+    ctx.fillStyle = gs + (alpha * 0.7) + ')';
+    ctx.fillText('|+\u27E9', lxP.x, lxP.y);
+    ctx.fillText('|\u2212\u27E9', lxN.x, lxN.y);
+    ctx.fillText('|+i\u27E9', lyP.x, lyP.y);
+    ctx.fillText('|\u2212i\u27E9', lyN.x, lyN.y);
+
+    // Equator
+    ctx.strokeStyle = gs + (alpha * 0.22) + ')';
+    ctx.lineWidth = 0.8;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    var eqN = 64;
+    for (var eq = 0; eq <= eqN; eq++) {
+      var ep = project(Math.PI / 2, (2 * Math.PI * eq) / eqN, radius, cx, cy, angle);
+      if (eq === 0) ctx.moveTo(ep.x, ep.y); else ctx.lineTo(ep.x, ep.y);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Probability ring at current theta
+    var sT = smoothTheta, sP = smoothPhi;
+    var ringPulse = 0.7 + 0.3 * Math.sin(now * 0.0015);
+    ctx.strokeStyle = gs + (alpha * 0.13 * ringPulse) + ')';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (var rq = 0; rq <= eqN; rq++) {
+      var rp = project(sT, (2 * Math.PI * rq) / eqN, radius, cx, cy, angle);
+      if (rq === 0) ctx.moveTo(rp.x, rp.y); else ctx.lineTo(rp.x, rp.y);
+    }
+    ctx.stroke();
+
+    // State vector trail
+    for (var ti = 0; ti < stateTrail.length; ti++) {
+      var tr = stateTrail[ti];
+      if (tr.a < 0.02) continue;
+      var tp = project(tr.theta, tr.phi, radius, cx, cy, angle);
+      if (tp.z < -0.3) continue;
+      ctx.fillStyle = gs + (alpha * tr.a * 0.45) + ')';
+      ctx.beginPath(); ctx.arc(tp.x, tp.y, 2.2 * tr.a, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // Entanglement ghost vector
+    var ghostTheta = Math.PI - sT;
+    var ghostPhi = sP + Math.PI;
+    var gTip = project(ghostTheta, ghostPhi, radius, cx, cy, angle);
+    ctx.strokeStyle = gs + (alpha * 0.18) + ')';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(gTip.x, gTip.y); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = gs + (alpha * 0.18) + ')';
+    ctx.beginPath(); ctx.arc(gTip.x, gTip.y, 2, 0, Math.PI * 2); ctx.fill();
+
+    // Entanglement arc
+    var vTip = project(sT, sP, radius, cx, cy, angle);
+    ctx.strokeStyle = gs + (alpha * 0.1) + ')';
+    ctx.lineWidth = 0.6;
+    ctx.setLineDash([2, 4]);
+    ctx.beginPath(); ctx.moveTo(vTip.x, vTip.y); ctx.quadraticCurveTo(cx, cy, gTip.x, gTip.y); ctx.stroke();
+    ctx.setLineDash([]);
+
+
+    // Tip dot
+    ctx.fillStyle = gs + alpha + ')';
+    ctx.beginPath(); ctx.arc(vTip.x, vTip.y, 3.5, 0, Math.PI * 2); ctx.fill();
+
+    // Tip glow
+    var grd = ctx.createRadialGradient(vTip.x, vTip.y, 0, vTip.x, vTip.y, radius * 0.1);
+    grd.addColorStop(0, gs + (alpha * 0.4) + ')');
+    grd.addColorStop(0.5, gs + (alpha * 0.12) + ')');
+    grd.addColorStop(1, gs + '0)');
+    ctx.fillStyle = grd;
+    ctx.beginPath(); ctx.arc(vTip.x, vTip.y, radius * 0.1, 0, Math.PI * 2); ctx.fill();
+
+    // Theta arc
+    if (sT > 0.08 && sT < Math.PI - 0.08) {
+      var tAR = radius * 0.18;
+      ctx.strokeStyle = gs + (alpha * 0.3) + ')';
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      for (var ti2 = 0; ti2 <= 32; ti2++) {
+        var tp2 = project((sT * ti2) / 32, sP, tAR, cx, cy, angle);
+        if (ti2 === 0) ctx.moveTo(tp2.x, tp2.y); else ctx.lineTo(tp2.x, tp2.y);
+      }
+      ctx.stroke();
+      var tLbl = project(sT * 0.45, sP, tAR * 1.5, cx, cy, angle);
+      var tFS = Math.max(7, Math.round(radius * 0.038));
+      ctx.font = '400 ' + tFS + 'px "JetBrains Mono", monospace';
+      ctx.fillStyle = gs + (alpha * 0.5) + ')';
+      ctx.fillText('\u03b8', tLbl.x, tLbl.y);
+    }
+
+    // Phi arc
+    var phiN = ((sP % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+    if (phiN > 0.08 && phiN < 2 * Math.PI - 0.08) {
+      var pAR = radius * 0.22;
+      ctx.strokeStyle = gs + (alpha * 0.25) + ')';
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      var pDraw = Math.min(phiN, Math.PI * 1.5);
+      for (var pi2 = 0; pi2 <= 32; pi2++) {
+        var pp = project(Math.PI / 2, (pDraw * pi2) / 32, pAR, cx, cy, angle);
+        if (pi2 === 0) ctx.moveTo(pp.x, pp.y); else ctx.lineTo(pp.x, pp.y);
+      }
+      ctx.stroke();
+      var pLbl = project(Math.PI / 2, pDraw * 0.45, pAR * 1.35, cx, cy, angle);
+      ctx.fillStyle = gs + (alpha * 0.5) + ')';
+      ctx.fillText('\u03c6', pLbl.x, pLbl.y);
+    }
+
+    // Gate label with smooth fade
+    if (gateLabelAlpha > 0.01 && gateLabel) {
+      var glSz = Math.max(12, Math.round(radius * 0.08));
+      ctx.font = '700 ' + glSz + 'px "JetBrains Mono", monospace';
+      ctx.fillStyle = gs + (alpha * gateLabelAlpha * 0.9) + ')';
+      ctx.textAlign = 'left';
+      ctx.fillText(gateLabel, vTip.x + 14, vTip.y - 14);
+    }
+
+    ctx.restore();
+  }
+
+  // --- Q-Cube Rendering (Volumetric) ---
+  var QCUBE_FACES = [
+    [0,1,3,2],[4,6,7,5],[0,4,5,1],[2,3,7,6],[0,2,6,4],[1,5,7,3]
+  ];
+  var qcubeS = 0.62;
+  var qcubeProbs = [0,0,0,0,0,0,0,0];
+  var qcubeProbSmooth = [0.12,0.12,0.12,0.12,0.12,0.12,0.12,0.12];
+  var qcubeEnergyPhase = 0;
+
+  function drawQCubeElements(cx, cy, radius, alpha, now) {
+    if (alpha < 0.01) return;
+    var gs = 'rgba(' + GOLD.r + ',' + GOLD.g + ',' + GOLD.b + ',';
+    var tilt = 0.35;
+
+    if (now - lastQcubeProbShift >= 3000) {
+      lastQcubeProbShift = now;
+      qcubeProbTarget = (qcubeProbTarget + 1 + Math.floor(Math.random() * 6)) % 8;
+      for (var qi = 0; qi < 8; qi++) qcubeProbs[qi] = qi === qcubeProbTarget ? 1 : 0.08 + Math.random() * 0.12;
+    }
+    for (var qi2 = 0; qi2 < 8; qi2++) qcubeProbSmooth[qi2] += (qcubeProbs[qi2] - qcubeProbSmooth[qi2]) * 0.03;
+    qcubeEnergyPhase += 0.0012;
+
+    ctx.save();
+
+    var projVerts = [];
+    for (var vi = 0; vi < 8; vi++) {
+      var vt = QCUBE_VERTICES[vi];
+      projVerts.push(projectTilted(vt[0] * qcubeS, vt[1] * qcubeS, vt[2] * qcubeS, radius, cx, cy, angle, tilt));
+    }
+
+    var fogBreath = 0.06 + 0.035 * Math.sin(now * 0.0008);
+    var fogR = radius * 0.55;
+    var fogGrd = ctx.createRadialGradient(cx, cy, 0, cx, cy, fogR);
+    fogGrd.addColorStop(0, gs + (alpha * fogBreath) + ')');
+    fogGrd.addColorStop(0.5, gs + (alpha * fogBreath * 0.25) + ')');
+    fogGrd.addColorStop(1, gs + '0)');
+    ctx.fillStyle = fogGrd;
+    ctx.beginPath(); ctx.arc(cx, cy, fogR, 0, Math.PI * 2); ctx.fill();
+
+    var faceDepths = [];
+    for (var fi = 0; fi < QCUBE_FACES.length; fi++) {
+      var face = QCUBE_FACES[fi];
+      var avgZ = 0;
+      for (var fj = 0; fj < 4; fj++) avgZ += projVerts[face[fj]].z;
+      faceDepths.push({ idx: fi, z: avgZ / 4 });
+    }
+    faceDepths.sort(function(a, b) { return a.z - b.z; });
+
+    var faceTints = [
+      {r:GOLD.r,g:Math.min(255,GOLD.g+40),b:Math.min(255,GOLD.b+80)},
+      {r:GOLD.r,g:Math.min(255,GOLD.g+40),b:Math.min(255,GOLD.b+80)},
+      {r:Math.min(255,GOLD.r+30),g:GOLD.g,b:Math.min(255,GOLD.b+60)},
+      {r:Math.min(255,GOLD.r+30),g:GOLD.g,b:Math.min(255,GOLD.b+60)},
+      {r:GOLD.r,g:Math.min(255,GOLD.g+30),b:GOLD.b},
+      {r:GOLD.r,g:Math.min(255,GOLD.g+30),b:GOLD.b}
+    ];
+
+    for (var fd = 0; fd < faceDepths.length; fd++) {
+      var fIdx = faceDepths[fd].idx;
+      var face = QCUBE_FACES[fIdx];
+      var depthFactor = (faceDepths[fd].z + 1) / 2;
+      var faceAlpha = alpha * (0.015 + depthFactor * 0.045);
+      var ft = faceTints[fIdx];
+      var ftStr = 'rgba(' + ft.r + ',' + ft.g + ',' + ft.b + ',';
+
+      ctx.beginPath();
+      ctx.moveTo(projVerts[face[0]].x, projVerts[face[0]].y);
+      for (var fk = 1; fk < 4; fk++) ctx.lineTo(projVerts[face[fk]].x, projVerts[face[fk]].y);
+      ctx.closePath();
+      ctx.fillStyle = ftStr + faceAlpha + ')';
+      ctx.fill();
+    }
+
+    var scanPhase = (now * 0.0004) % (Math.PI * 2);
+    var scanCenter = Math.sin(scanPhase) * qcubeS * 0.9;
+    for (var sl = 0; sl < 20; sl++) {
+      var scanLocalY = -qcubeS + (sl / 19) * 2 * qcubeS;
+      var distFromScan = Math.abs(scanLocalY - scanCenter);
+      var scanIntensity = Math.max(0, 1 - distFromScan / (qcubeS * 0.5));
+      scanIntensity = scanIntensity * scanIntensity;
+      if (scanIntensity < 0.01) continue;
+      var scanA = alpha * 0.12 * scanIntensity;
+      var sl0 = projectTilted(-qcubeS * 1.05, scanLocalY, -qcubeS, radius, cx, cy, angle, tilt);
+      var sl1 = projectTilted(qcubeS * 1.05, scanLocalY, -qcubeS, radius, cx, cy, angle, tilt);
+      var sl2 = projectTilted(qcubeS * 1.05, scanLocalY, qcubeS, radius, cx, cy, angle, tilt);
+      var sl3 = projectTilted(-qcubeS * 1.05, scanLocalY, qcubeS, radius, cx, cy, angle, tilt);
+      ctx.strokeStyle = gs + scanA + ')';
+      ctx.lineWidth = 0.6;
+      ctx.beginPath();
+      ctx.moveTo(sl0.x, sl0.y); ctx.lineTo(sl1.x, sl1.y);
+      ctx.moveTo(sl2.x, sl2.y); ctx.lineTo(sl3.x, sl3.y);
+      ctx.stroke();
+    }
+
+    var edgeSorted = [];
+    for (var e = 0; e < QCUBE_EDGES.length; e++) {
+      var eei0 = QCUBE_EDGES[e][0], eei1 = QCUBE_EDGES[e][1];
+      edgeSorted.push({ idx: e, z: (projVerts[eei0].z + projVerts[eei1].z) / 2 });
+    }
+    edgeSorted.sort(function(a, b) { return a.z - b.z; });
+
+    for (var esi = 0; esi < edgeSorted.length; esi++) {
+      var eIdx = edgeSorted[esi].idx;
+      var ep0 = projVerts[QCUBE_EDGES[eIdx][0]], ep1 = projVerts[QCUBE_EDGES[eIdx][1]];
+      var edgeDepth = (edgeSorted[esi].z + 1) / 2;
+      var colorPhase = 0.6 + 0.4 * Math.sin(now * 0.0008 + eIdx * 0.52);
+
+      ctx.strokeStyle = gs + (alpha * 0.08 * edgeDepth * colorPhase) + ')';
+      ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.moveTo(ep0.x, ep0.y); ctx.lineTo(ep1.x, ep1.y); ctx.stroke();
+
+      ctx.strokeStyle = gs + (alpha * 0.2 * edgeDepth * colorPhase) + ')';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.moveTo(ep0.x, ep0.y); ctx.lineTo(ep1.x, ep1.y); ctx.stroke();
+
+      ctx.strokeStyle = gs + (alpha * (0.35 + edgeDepth * 0.5) * colorPhase) + ')';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(ep0.x, ep0.y); ctx.lineTo(ep1.x, ep1.y); ctx.stroke();
+    }
+
+    var innerAngle = now * 0.0005;
+    var innerTilt = tilt + Math.sin(now * 0.00035) * 0.2;
+    var innerScale = 0.26;
+    var octoV = [[0,1,0],[0,-1,0],[1,0,0],[-1,0,0],[0,0,1],[0,0,-1]];
+    var octoE = [[0,2],[0,3],[0,4],[0,5],[1,2],[1,3],[1,4],[1,5],[2,4],[4,3],[3,5],[5,2]];
+    var projO = [];
+    for (var oi = 0; oi < octoV.length; oi++) {
+      projO.push(projectTilted(
+        octoV[oi][0] * innerScale, octoV[oi][1] * innerScale, octoV[oi][2] * innerScale,
+        radius, cx, cy, angle + innerAngle, innerTilt
+      ));
+    }
+    var iBr = 0.25 + 0.15 * Math.sin(now * 0.0018);
+    for (var oe = 0; oe < octoE.length; oe++) {
+      var oa = projO[octoE[oe][0]], ob = projO[octoE[oe][1]];
+      ctx.strokeStyle = gs + (alpha * iBr * 0.2) + ')';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.moveTo(oa.x, oa.y); ctx.lineTo(ob.x, ob.y); ctx.stroke();
+      ctx.strokeStyle = gs + (alpha * iBr * 0.6) + ')';
+      ctx.lineWidth = 0.7;
+      ctx.beginPath(); ctx.moveTo(oa.x, oa.y); ctx.lineTo(ob.x, ob.y); ctx.stroke();
+    }
+    for (var od = 0; od < projO.length; od++) {
+      ctx.fillStyle = gs + (alpha * iBr * 0.7) + ')';
+      ctx.beginPath(); ctx.arc(projO[od].x, projO[od].y, 1.5, 0, Math.PI * 2); ctx.fill();
+    }
+
+    for (var pe = 0; pe < QCUBE_EDGES.length; pe++) {
+      var pi0 = QCUBE_EDGES[pe][0], pi1 = QCUBE_EDGES[pe][1];
+      var pp0 = projVerts[pi0], pp1 = projVerts[pi1];
+      var pMidZ = (pp0.z + pp1.z) / 2;
+      if (pMidZ < -0.4) continue;
+      var pDepth = (pMidZ + 1) / 2;
+      for (var pk = 0; pk < 3; pk++) {
+        var ft2 = ((now * 0.001 + pe * 0.42 + pk * 0.33) % 1);
+        var fx2 = pp0.x + (pp1.x - pp0.x) * ft2;
+        var fy2 = pp0.y + (pp1.y - pp0.y) * ft2;
+        var fa = alpha * 0.55 * Math.sin(ft2 * Math.PI) * pDepth;
+        if (fa < 0.01) continue;
+
+        var trailLen = 0.04;
+        var tt = ft2 - trailLen;
+        if (tt > 0) {
+          var tx = pp0.x + (pp1.x - pp0.x) * tt;
+          var ty = pp0.y + (pp1.y - pp0.y) * tt;
+          ctx.strokeStyle = gs + (fa * 0.25) + ')';
+          ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(fx2, fy2); ctx.stroke();
+        }
+
+        ctx.fillStyle = gs + fa + ')';
+        ctx.beginPath(); ctx.arc(fx2, fy2, 1.8, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,' + (fa * 0.5) + ')';
+        ctx.beginPath(); ctx.arc(fx2, fy2, 0.7, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+
+    var vertSorted = [];
+    for (var vs = 0; vs < 8; vs++) vertSorted.push({ idx: vs, z: projVerts[vs].z });
+    vertSorted.sort(function(a, b) { return a.z - b.z; });
+
+    for (var vsi = 0; vsi < vertSorted.length; vsi++) {
+      var v = vertSorted[vsi].idx;
+      var vp = projVerts[v];
+      var prob = qcubeProbSmooth[v];
+      var isT = (v === qcubeProbTarget);
+      var pulse = isT ? 0.7 + 0.3 * Math.sin(now * 0.003) : 0.3 + prob * 0.4;
+      var depthA = (vp.z + 1) / 2;
+      if (depthA < 0.1) continue;
+
+      if (prob > 0.15) {
+        var gr = radius * (0.1 + prob * 0.1);
+        var vGrd = ctx.createRadialGradient(vp.x, vp.y, 0, vp.x, vp.y, gr);
+        vGrd.addColorStop(0, gs + (alpha * pulse * 0.35 * depthA) + ')');
+        vGrd.addColorStop(0.35, gs + (alpha * pulse * 0.12 * depthA) + ')');
+        vGrd.addColorStop(0.7, gs + (alpha * pulse * 0.03 * depthA) + ')');
+        vGrd.addColorStop(1, gs + '0)');
+        ctx.fillStyle = vGrd;
+        ctx.beginPath(); ctx.arc(vp.x, vp.y, gr, 0, Math.PI * 2); ctx.fill();
+      }
+
+      if (isT) {
+        var haloR = radius * (0.055 + 0.02 * Math.sin(now * 0.004));
+        ctx.strokeStyle = gs + (alpha * 0.35 * depthA) + ')';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.arc(vp.x, vp.y, haloR, 0, Math.PI * 2); ctx.stroke();
+        ctx.strokeStyle = gs + (alpha * 0.12 * depthA) + ')';
+        ctx.lineWidth = 0.6;
+        ctx.beginPath(); ctx.arc(vp.x, vp.y, haloR * 1.5, 0, Math.PI * 2); ctx.stroke();
+      }
+
+      var dotR = isT ? 4.5 : 2 + prob * 2.5;
+      ctx.fillStyle = gs + (alpha * pulse * depthA) + ')';
+      ctx.beginPath(); ctx.arc(vp.x, vp.y, dotR, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,' + (alpha * pulse * depthA * 0.35) + ')';
+      ctx.beginPath(); ctx.arc(vp.x, vp.y, dotR * 0.35, 0, Math.PI * 2); ctx.fill();
+
+      if (depthA > 0.25) {
+        var lblSz = Math.max(7, Math.round(radius * 0.042));
+        ctx.font = '500 ' + lblSz + 'px "JetBrains Mono", monospace';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+        ctx.fillStyle = gs + (alpha * pulse * 0.85 * depthA) + ')';
+        ctx.fillText(QCUBE_LABELS[v], vp.x, vp.y - 11);
+
+        var barW = radius * 0.08;
+        var barH = 2;
+        var barX = vp.x - barW / 2;
+        var barY = vp.y + 7;
+        ctx.fillStyle = gs + (alpha * 0.08 * depthA) + ')';
+        ctx.fillRect(barX, barY, barW, barH);
+        ctx.fillStyle = gs + (alpha * pulse * 0.65 * depthA) + ')';
+        ctx.fillRect(barX, barY, barW * prob, barH);
+        if (prob > 0.1) {
+          ctx.fillStyle = 'rgba(255,255,255,' + (alpha * pulse * 0.2 * depthA) + ')';
+          ctx.fillRect(barX, barY, barW * prob, 0.8);
+        }
+
+        if (prob > 0.15) {
+          var pctSz = Math.max(6, Math.round(radius * 0.03));
+          ctx.font = '400 ' + pctSz + 'px "JetBrains Mono", monospace';
+          ctx.fillStyle = gs + (alpha * 0.45 * depthA) + ')';
+          ctx.textBaseline = 'top';
+          ctx.fillText(Math.round(prob * 100) + '%', vp.x, barY + barH + 2);
+        }
+      }
+    }
+
+    var ent = [[0,7],[1,6],[2,5],[3,4]];
+    for (var ei = 0; ei < ent.length; ei++) {
+      var pa = projVerts[ent[ei][0]], pb = projVerts[ent[ei][1]];
+      var entDepth = (pa.z + pb.z + 2) / 4;
+      var arcPulse = 0.5 + 0.5 * Math.sin(now * 0.0015 + ei * 1.57);
+      var arcA = alpha * 0.22 * arcPulse * entDepth;
+      if (arcA < 0.01) continue;
+
+      ctx.strokeStyle = gs + (arcA * 0.25) + ')';
+      ctx.lineWidth = 4;
+      ctx.setLineDash([3, 5]);
+      ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.quadraticCurveTo(cx, cy, pb.x, pb.y); ctx.stroke();
+
+      ctx.strokeStyle = gs + arcA + ')';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.quadraticCurveTo(cx, cy, pb.x, pb.y); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+
+    var coreR = radius * (0.045 + 0.02 * Math.sin(now * 0.002));
+    var coreGrd = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR * 4);
+    coreGrd.addColorStop(0, 'rgba(255,255,255,' + (alpha * 0.1) + ')');
+    coreGrd.addColorStop(0.1, gs + (alpha * 0.2) + ')');
+    coreGrd.addColorStop(0.4, gs + (alpha * 0.05) + ')');
+    coreGrd.addColorStop(1, gs + '0)');
+    ctx.fillStyle = coreGrd;
+    ctx.beginPath(); ctx.arc(cx, cy, coreR * 4, 0, Math.PI * 2); ctx.fill();
+
+    ctx.restore();
+  }
+
+  // --- Voxel Wave Function Rendering ---
+  function drawVoxelElements(cx, cy, radius, alpha, now) {
+    if (alpha < 0.01) return;
+    var gs = 'rgba(' + GOLD.r + ',' + GOLD.g + ',' + GOLD.b + ',';
+    var tilt = 0.35;
+    var boxS = 0.8;
+    var boxV = [[-boxS,-boxS,-boxS],[-boxS,-boxS,boxS],[-boxS,boxS,-boxS],[-boxS,boxS,boxS],
+                [boxS,-boxS,-boxS],[boxS,-boxS,boxS],[boxS,boxS,-boxS],[boxS,boxS,boxS]];
+    var boxE = [[0,1],[0,2],[0,4],[1,3],[1,5],[2,3],[2,6],[3,7],[4,5],[4,6],[5,7],[6,7]];
+
+    ctx.save();
+    ctx.setLineDash([2, 6]);
+    for (var e = 0; e < boxE.length; e++) {
+      var p0 = projectTilted(boxV[boxE[e][0]][0], boxV[boxE[e][0]][1], boxV[boxE[e][0]][2], radius, cx, cy, angle, tilt);
+      var p1 = projectTilted(boxV[boxE[e][1]][0], boxV[boxE[e][1]][1], boxV[boxE[e][1]][2], radius, cx, cy, angle, tilt);
+      ctx.strokeStyle = gs + (alpha * 0.12) + ')'; ctx.lineWidth = 0.6;
+      ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+
+    var lblP = projectTilted(0, boxS + 0.15, 0, radius, cx, cy, angle, tilt);
+    var lblSz = Math.max(9, Math.round(radius * 0.05));
+    ctx.font = '500 ' + lblSz + 'px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.fillStyle = gs + (alpha * 0.6) + ')';
+    ctx.fillText('\u03c8(x,y,z)', lblP.x, lblP.y);
+
+    var fx = Math.cos(now * 0.0005) * 0.5;
+    var fy = Math.sin(now * 0.0007) * 0.3;
+    var fz = Math.sin(now * 0.0003) * 0.4;
+    var fp = projectTilted(fx, fy, fz, radius, cx, cy, angle, tilt);
+    var focusGrad = ctx.createRadialGradient(fp.x, fp.y, 0, fp.x, fp.y, radius * 0.2);
+    focusGrad.addColorStop(0, gs + (alpha * 0.15) + ')');
+    focusGrad.addColorStop(1, gs + '0)');
+    ctx.fillStyle = focusGrad;
+    ctx.beginPath(); ctx.arc(fp.x, fp.y, radius * 0.2, 0, Math.PI * 2); ctx.fill();
+
+    var breathe = 0.7 + 0.3 * Math.sin(now * 0.002);
+    var bandP = projectTilted(-boxS - 0.1, -boxS, 0, radius, cx, cy, angle, tilt);
+    var bSz = Math.max(7, Math.round(radius * 0.032));
+    ctx.font = '400 ' + bSz + 'px "JetBrains Mono", monospace';
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = gs + (alpha * 0.35 * breathe) + ')';
+    ctx.fillText('|\u03c8|\u00b2', bandP.x - 4, bandP.y);
+
+    ctx.restore();
+  }
+
+  // --- Collapse burst particles ---
+  function drawCollapseParticles(cx, cy, radius, now) {
+    for (var ci = collapseParticles.length - 1; ci >= 0; ci--) {
+      var cp = collapseParticles[ci];
+      var age = now - cp.start;
+      if (age > 1200) { collapseParticles.splice(ci, 1); continue; }
+      var t = age / 1200;
+      var a = (1 - t) * 0.6;
+      var dist = t * radius * 0.4;
+      var px = cp.ox + Math.cos(cp.angle) * dist;
+      var py = cp.oy + Math.sin(cp.angle) * dist;
+      ctx.fillStyle = 'rgba(' + GOLD.r + ',' + GOLD.g + ',' + GOLD.b + ',' + a + ')';
+      ctx.beginPath(); ctx.arc(px, py, 1.5 * (1 - t) + 0.5, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+
+  // --- Main Draw ---
+  function draw() {
+    var w = canvas.width, h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    var cx = w / 2, cy = h / 2;
+    var radius = Math.min(w, h) * 0.202;
+    if (radius < 101) radius = 101;
+
+    var now = Date.now();
+    var dt = lastFrameTime ? Math.min(now - lastFrameTime, 64) : 16;
+    lastFrameTime = now;
+    angle += ROTATION_SPEED_PER_MS * dt;
+
+    updateMode(now);
+    updateBlochVector(now, dt);
+
+    var tilt = (qcubeVis + voxelVis) * 0.35;
+    var sphereVis = globeVis + blochVis;
+
+    // Project particles
+    var projected = [];
+    for (var i = 0; i < PARTICLE_COUNT; i++) {
+      var p = particles[i];
+      var pos = getParticleXYZ(p);
+      var proj;
+      if (tilt > 0.001) proj = projectTilted(pos.x, pos.y, pos.z, radius, cx, cy, angle, tilt);
+      else proj = projectUnit(pos.x, pos.y, pos.z, radius, cx, cy, angle);
+      projected.push({ x: proj.x, y: proj.y, z: proj.z, scale: proj.scale, size: p.size, idx: i });
+    }
+    projected.sort(function(a, b) { return a.z - b.z; });
+
+    // Connections (sphere modes)
+    if (sphereVis > 0.01) {
+    for (var i = 0; i < projected.length; i++) {
+      for (var j = i + 1; j < projected.length; j++) {
+        var dx = projected[i].x - projected[j].x;
+        var dy = projected[i].y - projected[j].y;
+          var sd = Math.sqrt(dx * dx + dy * dy);
+          if (sd < radius * 0.22 && projected[i].z > -0.3 && projected[j].z > -0.3) {
+          var avgZ = (projected[i].z + projected[j].z) / 2;
+            var ca = (avgZ + 1) / 2 * 0.08 * sphereVis;
+            if (ca < 0.01) continue;
+            ctx.strokeStyle = 'rgba(' + GOLD.r + ',' + GOLD.g + ',' + GOLD.b + ',' + ca + ')';
+          ctx.lineWidth = 0.4;
+            ctx.beginPath(); ctx.moveTo(projected[i].x, projected[i].y); ctx.lineTo(projected[j].x, projected[j].y); ctx.stroke();
+          }
+        }
+      }
+    }
+
+    // Draw particles (multi-mode styling)
+    for (var k = 0; k < projected.length; k++) {
+      var pt = projected[k];
+      var part = particles[pt.idx];
+      var depthAlpha = (pt.z + 1) / 2;
+      var alpha = 0, dotSize = pt.size;
+      var cr = GOLD.r, cg = GOLD.g, cb = GOLD.b;
+
+      if (sphereVis > 0) {
+        alpha += (depthAlpha * 0.4 + 0.03) * sphereVis;
+        dotSize = pt.size * (0.5 + depthAlpha * 0.8);
+      }
+      if (qcubeVis > 0) {
+        var prob = (part.qvi === qcubeProbTarget) ? 1.0 : 0.3;
+        alpha += (depthAlpha * 0.5 + 0.05) * prob * qcubeVis;
+        dotSize = Math.max(dotSize, pt.size * (0.6 + prob * 0.6));
+      }
+      if (voxelVis > 0) {
+        var dens = voxelDensity(part.vx, part.vy, part.vz, now);
+        alpha += dens * 0.5 * voxelVis;
+        dotSize = Math.max(dotSize, pt.size * (0.3 + dens * 1.0));
+        var phase = (Math.sin(part.vx * 3 + now * 0.001) + 1) * 0.5;
+        cr = Math.round(GOLD.r + (255 - GOLD.r) * phase * 0.3 * voxelVis);
+        cg = Math.round(GOLD.g + (255 - GOLD.g) * phase * 0.3 * voxelVis);
+        cb = Math.round(GOLD.b + (255 - GOLD.b) * phase * 0.15 * voxelVis);
+      }
+      if (alpha < 0.005) continue;
+      ctx.fillStyle = 'rgba(' + cr + ',' + cg + ',' + cb + ',' + alpha + ')';
+      ctx.beginPath(); ctx.arc(pt.x, pt.y, dotSize, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // Globe overlays
+    if (globeVis > 0.01) {
+      if (flashes.length === 0 && now - lastBurstAt >= BURST_INTERVAL && morphMode === 'globe') {
+      lastBurstAt = now;
+      var n = 3 + Math.floor(Math.random() * 2);
+      var usedCities = {};
+      for (var i = 0; i < n; i++) {
+        var ci;
+        do { ci = Math.floor(Math.random() * CITIES.length); } while (usedCities[ci] && Object.keys(usedCities).length < CITIES.length);
+        usedCities[ci] = true;
+          flashes.push({ phi: Math.acos(2 * Math.random() - 1), theta: Math.random() * 2 * Math.PI, start: now, duration: FLASH_DURATION, city: CITIES[ci] });
+      }
+      eventIndex = (eventIndex + 1) % EVENTS.length;
+    }
+
+    var r = radius;
+    var flashPositions = [];
+    for (var g = ghostPositions.length - 1; g >= 0; g--) {
+      if (now > ghostPositions[g].endTime) ghostPositions.splice(g, 1);
+    }
+    for (var f = flashes.length - 1; f >= 0; f--) {
+      var fl = flashes[f];
+      var elapsed = now - fl.start;
+      var p = project(fl.phi, fl.theta, r, cx, cy, angle);
+        if (elapsed > fl.duration) { flashes.splice(f, 1); continue; }
+      if (p.z < -0.5) continue;
+      var t = elapsed < HOLD_DURATION ? 1 : (1 - (elapsed - HOLD_DURATION) / (FLASH_DURATION - HOLD_DURATION));
+      if (t < 0) t = 0;
+      flashPositions.push({ x: p.x, y: p.y, t: t, city: fl.city || '' });
+    }
+
+    var allForThreads = flashPositions.slice();
+      var webMidpoints = [];
+    if (allForThreads.length >= 2) {
+      ctx.save();
+      var drawn = {};
+      var edgeCount = 0;
+        function key(a, b) { return a < b ? a + ',' + b : b + ',' + a; }
+      for (var i = 0; i < allForThreads.length; i++) {
+        var a = allForThreads[i];
+        var dists = [];
+        for (var j = 0; j < allForThreads.length; j++) {
+          if (j === i) continue;
+          var b = allForThreads[j];
+          var d = (a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y);
+          dists.push({ j: j, d: d });
+        }
+        dists.sort(function(u, v) { return u.d - v.d; });
+          var kk = Math.min(3, dists.length);
+          for (var n = 0; n < kk; n++) {
+          var j = dists[n].j;
+          if (drawn[key(i, j)]) continue;
+          drawn[key(i, j)] = true;
+          var b = allForThreads[j];
+          var threadAlpha = 0.18 + (a.t * a.t + b.t * b.t) * 0.12;
+          if (threadAlpha > 0.45) threadAlpha = 0.45;
+          ctx.strokeStyle = 'rgba(' + GOLD.r + ',' + GOLD.g + ',' + GOLD.b + ',' + threadAlpha + ')';
+            ctx.lineWidth = 1.5; ctx.setLineDash([2, 4]);
+            ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+            webMidpoints.push({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, t: Math.min(a.t, b.t), angle: Math.atan2(b.y - a.y, b.x - a.x), idx: edgeCount });
+          edgeCount++;
+        }
+      }
+        ctx.setLineDash([]); ctx.restore();
+    }
+
+    for (var f = 0; f < flashes.length; f++) {
+      var fl = flashes[f];
+      var elapsed = now - fl.start;
+      var p = project(fl.phi, fl.theta, r, cx, cy, angle);
+      if (p.z < -0.5) continue;
+      var t = elapsed < HOLD_DURATION ? 1 : (1 - (elapsed - HOLD_DURATION) / (FLASH_DURATION - HOLD_DURATION));
+      if (t < 0) t = 0;
+        var flashAlpha = t * t * 0.55 * globeVis;
+      var grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 0.55);
+      grad.addColorStop(0, 'rgba(' + GOLD.r + ',' + GOLD.g + ',' + GOLD.b + ',' + flashAlpha + ')');
+      grad.addColorStop(0.35, 'rgba(' + GOLD.r + ',' + GOLD.g + ',' + GOLD.b + ',' + flashAlpha * 0.5 + ')');
+      grad.addColorStop(0.6, 'rgba(' + GOLD.r + ',' + GOLD.g + ',' + GOLD.b + ',' + flashAlpha * 0.2 + ')');
+      grad.addColorStop(1, 'rgba(' + GOLD.r + ',' + GOLD.g + ',' + GOLD.b + ',0)');
+        ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(p.x, p.y, r * 0.55, 0, Math.PI * 2); ctx.fill();
+    }
+
+    if (flashPositions.length > 0) {
+      ctx.save();
+        ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      var labelFontSize = Math.max(8, Math.round(radius * 0.042));
+        ctx.font = '500 ' + labelFontSize + 'px "JetBrains Mono", monospace';
+      for (var lbl = 0; lbl < flashPositions.length; lbl++) {
+        var fp = flashPositions[lbl];
+        if (!fp.city) continue;
+          var labelAlpha = fp.t * 0.65 * globeVis;
+        if (labelAlpha < 0.02) continue;
+          ctx.shadowColor = 'rgba(0,0,0,' + (labelAlpha * 0.5) + ')'; ctx.shadowBlur = 3;
+        ctx.fillStyle = 'rgba(' + GOLD.r + ',' + GOLD.g + ',' + GOLD.b + ',' + labelAlpha + ')';
+        ctx.fillText(fp.city, fp.x, fp.y - 8);
+      }
+        ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.restore();
+    }
+
+    if (webMidpoints.length > 0) {
+      ctx.save();
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      var evFontSize = Math.max(7, Math.round(radius * 0.034));
+        ctx.font = '400 ' + evFontSize + 'px "JetBrains Mono", monospace';
+      for (var ev = 0; ev < webMidpoints.length; ev++) {
+        var mp = webMidpoints[ev];
+        var evLabel = EVENTS[(eventIndex + mp.idx) % EVENTS.length];
+          var evAlpha = mp.t * 0.5 * globeVis;
+        if (evAlpha < 0.02) continue;
+        ctx.save();
+        ctx.translate(mp.x, mp.y);
+        var ra = mp.angle;
+        if (ra > Math.PI / 2) ra -= Math.PI;
+        if (ra < -Math.PI / 2) ra += Math.PI;
+        ctx.rotate(ra);
+          ctx.shadowColor = 'rgba(0,0,0,' + (evAlpha * 0.4) + ')'; ctx.shadowBlur = 2;
+        ctx.fillStyle = 'rgba(' + GOLD.r + ',' + GOLD.g + ',' + GOLD.b + ',' + evAlpha + ')';
+        ctx.fillText(evLabel, 0, -4);
+        ctx.restore();
+      }
+        ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.restore();
+    }
+
+      // Satellites
+      if (morphMode === 'globe') {
+    if (satellites.length < SAT_MAX && now - lastSatSpawn >= SAT_SPAWN_INTERVAL) {
+      lastSatSpawn = now;
+      satellites.push({
+        start: now,
+            theta: Math.random() * Math.PI * 2,
+            inclination: (Math.random() * 0.6 + 0.3) * Math.PI,
+            axisAngle: Math.random() * Math.PI * 2,
+            orbitRadius: 1.35 + Math.random() * 0.25,
+            speed: (0.00006 + Math.random() * 0.00004) * (Math.random() < 0.5 ? 1 : -1),
+        trail: []
+      });
+    }
+      }
+    for (var si = satellites.length - 1; si >= 0; si--) {
+      var sat = satellites[si];
+      var satAge = now - sat.start;
+        if (satAge > SAT_LIFETIME) { satellites.splice(si, 1); continue; }
+      sat.theta += sat.speed * dt;
+      var orbR = radius * sat.orbitRadius;
+      var sx = Math.cos(sat.theta);
+      var sy = Math.sin(sat.theta) * Math.cos(sat.inclination);
+      var sz = Math.sin(sat.theta) * Math.sin(sat.inclination);
+        var cosA = Math.cos(sat.axisAngle), sinA = Math.sin(sat.axisAngle);
+      var rx = sx * cosA + sz * sinA;
+      var rz = -sx * sinA + sz * cosA;
+        var cosR = Math.cos(angle), sinR = Math.sin(angle);
+      var fx = rx * cosR - rz * sinR;
+      var fz = rx * sinR + rz * cosR;
+      var fy = sy;
+      var satScale = 1 / (1 + fz * 0.15);
+      var satX = cx + fx * orbR * satScale;
+      var satY = cy - fy * orbR * satScale;
+      var satAlpha = 1;
+      if (satAge < SAT_FADE_IN) satAlpha = satAge / SAT_FADE_IN;
+      else if (satAge > SAT_LIFETIME - SAT_FADE_OUT) satAlpha = (SAT_LIFETIME - satAge) / SAT_FADE_OUT;
+      if (satAlpha < 0) satAlpha = 0;
+        satAlpha *= globeVis;
+      if (fz > -0.6) {
+        sat.trail.push({ x: satX, y: satY, a: satAlpha, z: fz });
+        if (sat.trail.length > SAT_TRAIL_POINTS) sat.trail.shift();
+        if (sat.trail.length > 2) {
+            ctx.save(); ctx.setLineDash([1, 4]); ctx.lineCap = 'round'; ctx.lineWidth = 0.6;
+          ctx.beginPath();
+          var started2 = false;
+          for (var ti = 0; ti < sat.trail.length; ti++) {
+            var tp = sat.trail[ti];
+            if (tp.a < 0.01) { started2 = false; continue; }
+              if (!started2) { ctx.moveTo(tp.x, tp.y); started2 = true; } else { ctx.lineTo(tp.x, tp.y); }
+          }
+          ctx.strokeStyle = 'rgba(' + GOLD.r + ',' + GOLD.g + ',' + GOLD.b + ',' + (satAlpha * 0.15) + ')';
+            ctx.stroke(); ctx.setLineDash([]); ctx.restore();
+        }
+        var dotAlpha = satAlpha * 0.65;
+        var goldStr = 'rgba(' + GOLD.r + ',' + GOLD.g + ',' + GOLD.b + ',';
+          ctx.save(); ctx.translate(satX, satY);
+        if (sat.trail.length > 1) {
+          var prev = sat.trail[sat.trail.length - 2];
+          ctx.rotate(Math.atan2(satY - prev.y, satX - prev.x) + Math.PI / 2);
+        }
+        var s = 1.4;
+        ctx.fillStyle = goldStr + dotAlpha + ')';
+        ctx.fillRect(-1.5 * s, -1.5 * s, 3 * s, 3 * s);
+          ctx.strokeStyle = goldStr + (dotAlpha * 0.5) + ')'; ctx.lineWidth = 0.4;
+        ctx.strokeRect(-1.5 * s, -1.5 * s, 3 * s, 3 * s);
+          ctx.strokeStyle = goldStr + (dotAlpha * 0.4) + ')'; ctx.lineWidth = 0.6;
+          ctx.beginPath(); ctx.moveTo(-1.5 * s, 0); ctx.lineTo(-3.5 * s, 0); ctx.stroke();
+        ctx.fillStyle = goldStr + (dotAlpha * 0.55) + ')';
+        ctx.fillRect(-8 * s, -2 * s, 4.5 * s, 4 * s);
+          ctx.strokeStyle = goldStr + (dotAlpha * 0.35) + ')'; ctx.lineWidth = 0.3;
+        ctx.strokeRect(-8 * s, -2 * s, 4.5 * s, 4 * s);
+          ctx.beginPath(); ctx.moveTo(-8 * s, 0); ctx.lineTo(-3.5 * s, 0); ctx.moveTo(-5.75 * s, -2 * s); ctx.lineTo(-5.75 * s, 2 * s); ctx.stroke();
+          ctx.strokeStyle = goldStr + (dotAlpha * 0.4) + ')'; ctx.lineWidth = 0.6;
+          ctx.beginPath(); ctx.moveTo(1.5 * s, 0); ctx.lineTo(3.5 * s, 0); ctx.stroke();
+        ctx.fillStyle = goldStr + (dotAlpha * 0.55) + ')';
+        ctx.fillRect(3.5 * s, -2 * s, 4.5 * s, 4 * s);
+          ctx.strokeStyle = goldStr + (dotAlpha * 0.35) + ')'; ctx.lineWidth = 0.3;
+        ctx.strokeRect(3.5 * s, -2 * s, 4.5 * s, 4 * s);
+          ctx.beginPath(); ctx.moveTo(3.5 * s, 0); ctx.lineTo(8 * s, 0); ctx.moveTo(5.75 * s, -2 * s); ctx.lineTo(5.75 * s, 2 * s); ctx.stroke();
+          ctx.strokeStyle = goldStr + (dotAlpha * 0.5) + ')'; ctx.lineWidth = 0.5;
+          ctx.beginPath(); ctx.moveTo(0, -1.5 * s); ctx.lineTo(0, -3.5 * s); ctx.stroke();
+          ctx.beginPath(); ctx.arc(0, -3.5 * s, 1 * s, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
+        ctx.restore();
+        var satGrad = ctx.createRadialGradient(satX, satY, 0, satX, satY, 6);
+          satGrad.addColorStop(0, goldStr + (dotAlpha * 0.2) + ')'); satGrad.addColorStop(1, goldStr + '0)');
+          ctx.fillStyle = satGrad; ctx.beginPath(); ctx.arc(satX, satY, 6, 0, Math.PI * 2); ctx.fill();
+      } else {
+        sat.trail.push({ x: satX, y: satY, a: 0, z: fz });
+        if (sat.trail.length > SAT_TRAIL_POINTS) sat.trail.shift();
+        }
+      }
+    }
+
+    if (blochVis > 0.01) drawBlochElements(cx, cy, radius, blochVis, now);
+    if (qcubeVis > 0.01) drawQCubeElements(cx, cy, radius, qcubeVis, now);
+    if (voxelVis > 0.01) drawVoxelElements(cx, cy, radius, voxelVis, now);
+    if (collapseParticles.length > 0) drawCollapseParticles(cx, cy, radius, now);
+
+    // Measurement collapse trigger near end of bloch phase
+    if (morphMode === 'bloch') {
+      var blochElapsed = now - modeStart;
+      if (blochElapsed > MODE_DUR.bloch - 800 && collapseParticles.length === 0) {
+        var collapseTo = (smoothTheta < Math.PI / 2) ? 0.001 : Math.PI - 0.001;
+        stateTheta = collapseTo; smoothTheta = collapseTo;
+        statePhi = 0; smoothPhi = 0;
+        gateAnim = null;
+        var poleTip = project(collapseTo, 0, radius, cx, cy, angle);
+        for (var ci = 0; ci < 16; ci++) {
+          collapseParticles.push({ ox: poleTip.x, oy: poleTip.y, angle: (Math.PI * 2 * ci) / 16, start: now });
+        }
+      }
+    }
+
+    animId = requestAnimationFrame(draw);
+  }
+
+  function init() {
+    if (started) return;
+    if (!resize()) return;
+    started = true;
+    generateParticles();
+    draw();
+  }
+
+  var pollCount = 0;
+  var pollId = setInterval(function() {
+    pollCount++;
+    if (started || pollCount > 600) { clearInterval(pollId); return; }
+    init();
+  }, 50);
+
+  window.addEventListener('load', function() { setTimeout(init, 600); });
+  window.addEventListener('resize', function() { if (!started) return; resize(); });
+  document.addEventListener('visibilitychange', function() {
+    if (!started) return;
+    if (document.hidden) { if (animId) { cancelAnimationFrame(animId); animId = null; } }
+    else { if (!animId) draw(); }
+  });
+
+  var welcomeEl = document.getElementById('saaWelcomeScreen');
+  if (welcomeEl) {
+    var obs = new MutationObserver(function() {
+      if (started) { obs.disconnect(); return; }
+      if (welcomeEl.style.display !== 'none' && welcomeEl.classList.contains('visible')) {
+        setTimeout(init, 100);
+        setTimeout(init, 500);
+        setTimeout(init, 1000);
+      }
+    });
+    obs.observe(welcomeEl, { attributes: true, attributeFilter: ['style', 'class'] });
+  }
+})();
+</script>
+
 <!-- JSON-LD Schema.org Markup for SEO -->
 <script type="application/ld+json">
 {
@@ -6058,7 +7452,7 @@ html {
   "alternateName": "SAA Alliance",
   "url": "https://saa-alliance.com",
   "logo": "https://saa-alliance.com/wp-content/uploads/2026/01/nvidia-inception-program-badge-rgb-1c-blk-for-screen.png",
-  "description": "Enterprise-grade analytics ecosystem with 7 platforms for institutional investors, banks, and governments. NVIDIA AI-powered risk management, climate stress testing, and real-time intelligence.",
+  "description": "Enterprise-grade analytics ecosystem with 8 platforms for institutional investors, banks, and governments. NVIDIA AI-powered risk management, climate stress testing, and real-time intelligence.",
   "foundingDate": "2025",
   "numberOfEmployees": {
     "@type": "QuantitativeValue",

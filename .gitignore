@@ -81,12 +81,34 @@ secrets/
 *secret*
 *password*
 ghp_*
+*ee-key*
+*ee-key*.json
+*service*account*.json
+*-credentials*.json
+.env.production
+.env.development
+.env.staging
+
+# UE5 (Unreal Engine 5) build artifacts
+apps/ue5/*/Binaries/
+apps/ue5/*/Intermediate/
+apps/ue5/*/Saved/
+apps/ue5/*/DerivedDataCache/
+apps/ue5/*/.vs/
+apps/ue5/*/*.sln
+apps/ue5/*/Content/Developers/
 
 # Temporary files and deploy artifacts
 tmp/
 temp/
 *.tmp
 *.tar.gz
+
+# Large binary assets (GitHub limit 100 MB; use Git LFS or external storage)
+apps/web/public/models/buildings/full_gameready_city_buildings_ii.glb
+apps/web/public/models/buildings/full_gameready_city_buildings_iii_hongkong.glb
+apps/web/public/models/buildings/city_scene.glb
+apps/web/public/models/buildings/full_gameready_city_buildings.glb
 
 # Backup files
 backup_*.tar.gz

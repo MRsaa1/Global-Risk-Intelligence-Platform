@@ -137,6 +137,66 @@ class USGSClient:
         except Exception as e:
             logger.error(f"USGS significant earthquakes error: {e}")
             return []
+
+    async def get_earthquake_zones_global(
+        self, days: int = 365, min_magnitude: float = 5.0
+    ) -> List[Dict]:
+        """
+        Get global earthquakes M5+ with full coordinates for impact zone visualization.
+        Returns list of {id, lat, lng, magnitude, place, depth, time}.
+        """
+        cache_key = f"eq_zones:{days}:{min_magnitude}"
+        if cache_key in self._cache:
+            data, timestamp = self._cache[cache_key]
+            if datetime.utcnow() - timestamp < self._cache_ttl:
+                return data
+
+        end_time = datetime.utcnow()
+        start_time = end_time - timedelta(days=days)
+
+        params = {
+            "format": "geojson",
+            "starttime": start_time.strftime("%Y-%m-%d"),
+            "endtime": end_time.strftime("%Y-%m-%d"),
+            "minmagnitude": min_magnitude,
+            "orderby": "magnitude",
+            "limit": 200,
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.get(USGS_API_URL, params=params)
+                response.raise_for_status()
+                data = response.json()
+
+            out = []
+            for f in data.get("features", []):
+                coords = f.get("geometry", {}).get("coordinates", [])
+                if len(coords) < 2:
+                    continue
+                lng, lat = coords[0], coords[1]
+                depth = coords[2] if len(coords) > 2 else None
+                props = f.get("properties", {})
+                mag = props.get("mag")
+                if mag is None or mag < min_magnitude:
+                    continue
+                ts = props.get("time", 0)
+                out.append({
+                    "id": f.get("id"),
+                    "lat": lat,
+                    "lng": lng,
+                    "magnitude": mag,
+                    "place": props.get("place") or "Unknown",
+                    "depth": depth,
+                    "time": datetime.fromtimestamp(ts / 1000) if ts else None,
+                })
+
+            self._cache[cache_key] = (out, datetime.utcnow())
+            logger.info(f"USGS: Found {len(out)} earthquake zones M{min_magnitude}+ in last {days} days")
+            return out
+        except Exception as e:
+            logger.error(f"USGS earthquake zones error: {e}")
+            return []
     
     def clear_cache(self):
         """Clear cached data."""

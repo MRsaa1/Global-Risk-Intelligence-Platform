@@ -78,6 +78,14 @@ def _lang_to_riva(language: str) -> str:
     return mapping.get(lang, "en-US")
 
 
+def _default_female_voice_for_lang(language: str) -> Optional[str]:
+    """Return a female voice name for TTS when no voice is configured. Riva/NIM voice names."""
+    lang = (language or "en").strip().lower()
+    # Common Riva/NIM female voices per language
+    female_voices = {"en": "English-US.Female-1", "ru": "Russian.Female-1", "de": "German.Female-1", "fr": "French.Female-1"}
+    return female_voices.get(lang)
+
+
 def _wav_header(sample_rate: int, nchannels: int, sampwidth: int, nframes: int) -> bytes:
     """Build minimal 44-byte WAV header for PCM."""
     nbytes = nframes * nchannels * sampwidth
@@ -96,8 +104,8 @@ def _wav_header(sample_rate: int, nchannels: int, sampwidth: int, nframes: int) 
     return buf.getvalue()
 
 
-def _tts_grpc_sync(text: str, language: str) -> Optional[TTSResult]:
-    """Synchronous gRPC TTS (run in thread)."""
+def _tts_grpc_sync(text: str, language: str, voice_name: Optional[str] = None) -> Optional[TTSResult]:
+    """Synchronous gRPC TTS (run in thread). voice_name e.g. English-US.Female-1 for female."""
     if not RIVA_GRPC_AVAILABLE:
         return None
     try:
@@ -108,7 +116,7 @@ def _tts_grpc_sync(text: str, language: str) -> Optional[TTSResult]:
         sample_rate_hz = 22050
         resp = service.synthesize(
             text=text,
-            voice_name=None,
+            voice_name=voice_name or None,
             language_code=lang_code,
             encoding=AudioEncoding.LINEAR_PCM,
             sample_rate_hz=sample_rate_hz,
@@ -209,31 +217,38 @@ class NVIDIARivaService:
         """Return True if Riva is enabled and endpoint is configured."""
         return bool(self.enabled and (self.base_url or _grpc_uri()))
 
-    async def tts(self, text: str, language: str = "en") -> Optional[TTSResult]:
+    async def tts(self, text: str, language: str = "en", voice_name: Optional[str] = None) -> Optional[TTSResult]:
         """
         Convert text to speech (for report narration, voice alerts).
-        Prefers gRPC when nvidia-riva-client is installed; else tries HTTP.
+        voice_name: e.g. English-US.Female-1 or Magpie-Multilingual.EN-US.Sofia for female; uses riva_tts_voice if not set.
         """
         if not self.is_available():
             logger.debug("Riva TTS skipped: disabled or no URL")
             return None
         import asyncio
 
+        voice = (voice_name or "").strip() or (getattr(settings, "riva_tts_voice", "") or "").strip()
+        if not voice and _default_female_voice_for_lang(language):
+            voice = _default_female_voice_for_lang(language)
+
         if RIVA_GRPC_AVAILABLE:
             loop = asyncio.get_running_loop()
-            result = await loop.run_in_executor(None, _tts_grpc_sync, text, language)
+            result = await loop.run_in_executor(None, _tts_grpc_sync, text, language, voice or None)
             if result is not None:
                 return result
-        return await self._tts_http(text, language)
+        return await self._tts_http(text, language, voice or None)
 
-    async def _tts_http(self, text: str, language: str) -> Optional[TTSResult]:
+    async def _tts_http(self, text: str, language: str, voice_name: Optional[str] = None) -> Optional[TTSResult]:
         """HTTP fallback for TTS (NIM Riva or custom REST)."""
         try:
             url = f"{self.base_url}/v1/synthesize" if "50051" not in self.base_url else self.base_url.replace("50051", "8009") + "/v1/synthesize"
+            payload: dict = {"text": text, "model": self.tts_model, "language": language}
+            if voice_name:
+                payload["voice_name"] = voice_name
             async with httpx.AsyncClient(timeout=30.0) as client:
                 r = await client.post(
                     url,
-                    json={"text": text, "model": self.tts_model, "language": language},
+                    json=payload,
                 )
                 if r.status_code != 200:
                     logger.warning("Riva TTS HTTP returned %s: %s", r.status_code, (r.text or "")[:200])

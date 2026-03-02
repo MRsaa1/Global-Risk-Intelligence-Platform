@@ -20,7 +20,7 @@ export default function FeedbackButton() {
     <>
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 p-4 bg-primary-500 text-white rounded-full shadow-lg hover:bg-primary-600 transition-colors z-40"
+        className="fixed bottom-6 right-6 p-4 bg-zinc-600 text-zinc-100 rounded-full shadow-lg hover:bg-zinc-500 transition-colors z-40"
         title="Send Feedback"
       >
         <ChatBubbleLeftRightIcon className="w-6 h-6" />

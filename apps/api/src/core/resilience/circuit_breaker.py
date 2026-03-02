@@ -7,6 +7,7 @@ and allowing them to recover.
 import asyncio
 import time
 import logging
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Callable, Any, Optional
 from dataclasses import dataclass
@@ -90,9 +91,15 @@ class CircuitBreaker:
                     self.state = CircuitState.HALF_OPEN
                     self.success_count = 0
                 else:
+                    last_fail_str = "unknown"
+                    if self.last_failure_time is not None:
+                        try:
+                            last_fail_str = datetime.fromtimestamp(self.last_failure_time, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+                        except (OSError, ValueError):
+                            last_fail_str = str(self.last_failure_time)
                     raise CircuitBreakerOpenError(
                         f"Circuit breaker {self.name} is OPEN. "
-                        f"Last failure: {self.last_failure_time}. "
+                        f"Last failure: {last_fail_str}. "
                         f"Retry after {self.config.timeout}s"
                     )
         

@@ -19,6 +19,7 @@ from sqlalchemy.orm import selectinload
 import io
 
 from src.core.database import get_db
+from src.core.security import require_permission
 from src.models.asset import Asset
 from src.models.stress_test import StressTest, RiskZone, StressTestReport
 from src.models.historical_event import HistoricalEvent
@@ -176,6 +177,7 @@ async def export_assets_csv(
     risk_level: Optional[str] = Query(None, description="Filter by risk level"),
     city: Optional[str] = Query(None, description="Filter by city"),
     db: AsyncSession = Depends(get_db),
+    _user=Depends(require_permission("export:data")),
 ):
     """
     Export assets to CSV file.
@@ -397,6 +399,7 @@ async def export_stress_test_pdf_by_id(
     test_id: str,
     zones: Optional[List[Dict[str, Any]]] = Body(None),
     db: AsyncSession = Depends(get_db),
+    _user=Depends(require_permission("export:data")),
 ):
     """
     Generate PDF report for a stress test by ID.

@@ -63,7 +63,7 @@ export default function StressTestPanel({ isOpen, onClose, totalExposure }: Stre
           average_lgd: 0.45,
           scenario_type: selectedScenario,
           severity: severity,
-          num_simulations: 10000,
+          num_simulations: 100000,
         }),
       })
 
@@ -97,7 +97,7 @@ export default function StressTestPanel({ isOpen, onClose, totalExposure }: Stre
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h2 className="text-white font-medium text-lg">Stress Testing</h2>
-                <p className="text-white/40 text-xs">Monte Carlo simulation with {(10000).toLocaleString()} paths</p>
+                <p className="text-white/40 text-xs">Monte Carlo simulation with 100,000 paths</p>
               </div>
               <button
                 onClick={onClose}

@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import uuid4
 
-from sqlalchemy import DateTime, Enum, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, Enum, Float, ForeignKey, Integer, String, Text  # noqa: F401
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.core.database import Base
@@ -205,3 +205,21 @@ class InfrastructureDependency(Base):
     
     def __repr__(self) -> str:
         return f"<Dependency {self.source_id} -> {self.target_id}>"
+
+
+class CIPCascadeSimulation(Base):
+    """Stored cascade simulation run (FR-CIP-006, FR-CIP-007)."""
+    __tablename__ = "cip_cascade_simulations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    name: Mapped[Optional[str]] = mapped_column(String(255))
+    initial_failure_ids: Mapped[Optional[str]] = mapped_column(Text, comment="JSON array of infrastructure IDs")
+    time_horizon_hours: Mapped[int] = mapped_column(Integer, default=72)
+    timeline: Mapped[Optional[str]] = mapped_column(Text, comment="JSON array of {step, hour, affected_ids, impact_score}")
+    affected_assets: Mapped[Optional[str]] = mapped_column(Text, comment="JSON array of affected infra IDs with depth")
+    impact_score: Mapped[Optional[float]] = mapped_column(Float)
+    recovery_time_hours: Mapped[Optional[float]] = mapped_column(Float)
+    total_affected: Mapped[Optional[int]] = mapped_column(Integer)
+    population_affected: Mapped[Optional[int]] = mapped_column(Integer)
+    created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=datetime.utcnow)
+    created_by: Mapped[Optional[str]] = mapped_column(String(36))

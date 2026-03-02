@@ -9,11 +9,13 @@ import { useRef, useState, useEffect, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import * as Cesium from 'cesium'
+import { getApiBase } from '../config/env'
 import UnifiedStressTestSelector from './stress/UnifiedStressTestSelector'
+import type { DecisionObject } from '../lib/api'
 
 
 // Cesium Ion access token
-const CESIUM_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIwYTExZmMxNS1jY2RhLTQ2YjctOTg0Mi02NWQxNGQxYjFhZGYiLCJpZCI6Mzc4MTk5LCJpYXQiOjE3NjgzMjc3NjJ9.neQZ3X5JRYBalv7cjUuVrq_kVw0nVyKQlwtOyxls5OM'
+const CESIUM_TOKEN = import.meta.env.VITE_CESIUM_ION_TOKEN || ''
 
 // Cesium OSM Buildings Asset ID for worldwide gray 3D buildings
 const CESIUM_OSM_BUILDINGS = 96188
@@ -237,6 +239,10 @@ interface DigitalTwinPanelProps {
   showHeavyRainLayer?: boolean
   showDroughtLayer?: boolean
   showUvLayer?: boolean
+  showEarthquakeLayer?: boolean
+  /** When opened from climate zone double-click: filter stress tests to climatic only + by city region */
+  climateTriggerRiskType?: string | null
+  climateTriggerCityId?: string | null
   /** Total exposure (B USD) of all assets in the risk zone — when set, Asset Value shows this (cost of assets in zone) */
   zoneTotalExposure?: number | null
 }
@@ -257,6 +263,8 @@ interface RiskHighlight {
 
 // Stress Test Report data (matches backend execute response and StressTestReportContent)
 interface StressTestReport {
+  /** Backend stress test ID — use for CZML so 4D timeline is for this city, not catalog default (NY) */
+  stressTestId?: string
   eventName: string
   eventType: string
   eventId: string
@@ -297,9 +305,13 @@ interface StressTestReport {
   graphContext?: string
   /** Currency for display (USD, EUR, GBP) */
   currency?: string
+  /** Risk & Intelligence OS - ARIN Decision Object */
+  decisionObject?: DecisionObject
+  /** Regulatory compliance verification (when run after stress test) */
+  complianceVerification?: { verified: boolean; verifications: { framework_id: string; status: string; id: string }[]; verified_at: string | null }
 }
 
-export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, onCitySelected, assetId, dynamicAsset, eventId, eventName, eventCategory, timeHorizon, showFloodLayer = false, showWindLayer = false, showMetroFloodLayer = false, floodDepthOverride, showHeatLayer = false, showHeavyRainLayer = false, showDroughtLayer = false, showUvLayer = false, zoneTotalExposure = null }: DigitalTwinPanelProps) {
+export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, onCitySelected, assetId, dynamicAsset, eventId, eventName, eventCategory, timeHorizon, showFloodLayer = false, showWindLayer = false, showMetroFloodLayer = false, floodDepthOverride, showHeatLayer = false, showHeavyRainLayer = false, showDroughtLayer = false, showUvLayer = false, showEarthquakeLayer: _showEarthquakeLayer = false, climateTriggerRiskType = null, climateTriggerCityId = null, zoneTotalExposure = null }: DigitalTwinPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const viewerRef = useRef<Cesium.Viewer | null>(null)
   const photorealisticTilesetRef = useRef<Cesium.Cesium3DTileset | null>(null)
@@ -313,7 +325,7 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
   const [activeTab, setActiveTab] = useState<'3d' | 'sensors' | 'risks'>('3d')
   const [viewerReady, setViewerReady] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
-  const [loadProgress, setLoadProgress] = useState(0)
+  const [_loadProgress, setLoadProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [actual3DMode, setActual3DMode] = useState<'google' | 'osm' | 'premium'>('google')
   // ~12s quality delay: show "Loading Google 3D" while tiles load, then reveal full quality (SSE 1)
@@ -349,6 +361,20 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
   // Stress test type selection
   const [showTestSelector, setShowTestSelector] = useState(false)
   const [selectedScenario, setSelectedScenario] = useState<string>('')
+  // Pre-run synthetic zone so damage zone is visible as soon as user selects a climate scenario (before Run)
+  const [preRunZones, setPreRunZones] = useState<RiskHighlight[]>([])
+
+  // 4D Timeline (CZML) — load scenario timeline into this viewer, play/pause/scrub
+  const czmlDataSourceRef = useRef<Cesium.CzmlDataSource | null>(null)
+  const [play4dCzmlUrl, setPlay4dCzmlUrl] = useState<string | null>(null)
+  const [timelinePlaying, setTimelinePlaying] = useState(false)
+  const [timelineMultiplier, setTimelineMultiplier] = useState(3600)
+  const [timelineTime, setTimelineTime] = useState<string | null>(null)
+  const [timelineRange, setTimelineRange] = useState<{ start: number; end: number } | null>(null)
+  const [timelineScrubPct, setTimelineScrubPct] = useState(0)
+  const timelineScrubDraggingRef = useRef(false)
+  const timelineRangeRef = useRef<{ start: number; end: number } | null>(null)
+  const timelineClockRAFRef = useRef<number | null>(null)
   
   // Internal layer state for auto-enable when stress test is run inside DigitalTwin
   const [internalFloodLayer, setInternalFloodLayer] = useState(false)
@@ -403,7 +429,93 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
       setInternalUvLayer(true)
     }
   }, [selectedScenario])
-  
+
+  // Pre-run zones: show one synthetic zone when a climate scenario is selected (before Run)
+  const isClimateScenario = (scenarioId: string) => {
+    const id = (scenarioId || '').toLowerCase()
+    return id.includes('flood') || id.includes('sea_level') || id.includes('tsunami') || id.includes('heavy_rain') ||
+      id.includes('heat') || id.includes('heatwave') || id.includes('drought') || id.includes('wildfire') || id.includes('fire') ||
+      id.includes('wind') || id.includes('hurricane') || id.includes('typhoon') || id.includes('cyclone') || id.includes('uv')
+  }
+  // Draw pre-run zones (or clear) when no test is running — so damage zone is visible as soon as user selects climate scenario
+  useEffect(() => {
+    const viewer = viewerRef.current
+    if (!viewer || viewer.isDestroyed() || !viewerReady || !isOpen) return
+    if (stressTestRunning) return
+    const zonesToShow = riskHighlights.length > 0 ? riskHighlights : preRunZones
+    riskEntitiesRef.current.forEach((e) => { try { if (viewer.entities.contains(e)) viewer.entities.remove(e) } catch { /* ignore Cesium remove */ } })
+    riskEntitiesRef.current = []
+    if (zonesToShow.length === 0) {
+      viewer.scene.requestRender()
+      return
+    }
+    zonesToShow.forEach((zone) => {
+      const color = zone.riskLevel === 'critical'
+        ? Cesium.Color.fromCssColorString('#ff4444').withAlpha(0.18)
+        : zone.riskLevel === 'high'
+        ? Cesium.Color.fromCssColorString('#ff8800').withAlpha(0.15)
+        : zone.riskLevel === 'medium'
+        ? Cesium.Color.fromCssColorString('#ffcc00').withAlpha(0.12)
+        : Cesium.Color.fromCssColorString('#44cc44').withAlpha(0.10)
+      const outlineColor = zone.riskLevel === 'critical'
+        ? Cesium.Color.fromCssColorString('#ff4444').withAlpha(0.6)
+        : zone.riskLevel === 'high'
+        ? Cesium.Color.fromCssColorString('#ff8800').withAlpha(0.5)
+        : zone.riskLevel === 'medium'
+        ? Cesium.Color.fromCssColorString('#ffcc00').withAlpha(0.4)
+        : Cesium.Color.fromCssColorString('#44cc44').withAlpha(0.3)
+      const extrudedHeight = zone.riskLevel === 'critical' ? 120 : zone.riskLevel === 'high' ? 80 : 50
+      const entity = zone.polygon && zone.polygon.length >= 3
+        ? viewer.entities.add({
+            polygon: {
+              hierarchy: new Cesium.PolygonHierarchy(
+                zone.polygon.map(([lng, lat]) => Cesium.Cartesian3.fromDegrees(lng, lat, 95))
+              ),
+              height: 95,
+              extrudedHeight,
+              material: color,
+              outline: true,
+              outlineColor: outlineColor,
+              outlineWidth: 1,
+            },
+          })
+        : viewer.entities.add({
+            position: Cesium.Cartesian3.fromDegrees(zone.position.lng, zone.position.lat, 95),
+            ellipse: {
+              semiMajorAxis: zone.radius,
+              semiMinorAxis: zone.radius,
+              height: 95,
+              extrudedHeight,
+              material: color,
+              outline: true,
+              outlineColor: outlineColor,
+              outlineWidth: 1,
+            },
+          })
+      riskEntitiesRef.current.push(entity)
+      if (zone.riskLevel === 'critical') {
+        const markerEntity = viewer.entities.add({
+          position: Cesium.Cartesian3.fromDegrees(zone.position.lng, zone.position.lat, 150),
+          point: {
+            pixelSize: 8,
+            color: Cesium.Color.fromCssColorString('#ff4444'),
+            outlineColor: Cesium.Color.WHITE,
+            outlineWidth: 1,
+          },
+        })
+        riskEntitiesRef.current.push(markerEntity)
+      }
+    })
+    viewer.scene.requestRender()
+    return () => {
+      const v = viewerRef.current
+      if (v && !v.isDestroyed()) {
+        riskEntitiesRef.current.forEach((e) => { try { if (v.entities.contains(e)) v.entities.remove(e) } catch { /* ignore Cesium remove */ } })
+        riskEntitiesRef.current = []
+      }
+    }
+  }, [viewerReady, isOpen, stressTestRunning, riskHighlights, preRunZones, play4dCzmlUrl])
+
   // Picker mode (country / city / optional enterprise) when opening via D without a selected city
   const [pickerCountry, setPickerCountry] = useState('')
   const [pickerCityId, setPickerCityId] = useState('')
@@ -468,7 +580,8 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
   // - useOsmMode: Fallback only if Google fails
   const useGooglePhotorealistic = !pickerMode
   const useCesiumMode = false
-  const useOsmMode = false
+  const _useOsmMode = false
+  const INFO_MODE_ENABLED = false // Info Mode disabled - always use 3D
   
   // Compute city/asset data
   const { city: cityBase } = (() => {
@@ -477,13 +590,13 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
       // Check if this dynamic asset is for a premium city
       if (isPremiumCity && CITY_DATA[normalizedCityId]) {
         const premiumCity = CITY_DATA[normalizedCityId]
-        // Premium city model - logged via useEffect when panel opens
+        const apiCityForPremium = cities.find((c) => c.id.toLowerCase().replace(/[^a-z]/g, '') === normalizedCityId)
+        const exposureFromApi = typeof apiCityForPremium?.exposure === 'number' ? apiCityForPremium.exposure : null
         return {
           city: {
             ...premiumCity,
-            // Override with dynamic data
             risk_score: dynamicAsset.impactSeverity || premiumCity.risk_score,
-            value: dynamicAsset.exposure || premiumCity.value,
+            value: exposureFromApi ?? dynamicAsset.exposure ?? premiumCity.value,
             name: dynamicAsset.name || premiumCity.name,
           }
         }
@@ -504,12 +617,14 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
       }
       const valueFromApi = typeof apiCity?.exposure === 'number' ? apiCity.exposure : null
       const riskFromApi = typeof apiCity?.risk_score === 'number' ? apiCity.risk_score : null
+      // Prefer API exposure (reference/GDP data) over dynamicAsset.exposure so Asset Value is realistic
+      const assetValue = valueFromApi ?? dynamicAsset.exposure ?? 10
       return {
         city: {
           id: dynamicAsset.id,
           name: dynamicAsset.name,
           location: `${dynamicAsset.latitude.toFixed(4)}, ${dynamicAsset.longitude.toFixed(4)}`,
-          value: dynamicAsset.exposure ?? valueFromApi ?? 10,
+          value: assetValue,
           risk_score: dynamicAsset.impactSeverity ?? riskFromApi ?? 0.5,
           cesiumAssetId: CESIUM_OSM_BUILDINGS, // Use OSM Buildings
           cameraPosition: cam,
@@ -559,6 +674,27 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
     ? { ...cityBase, value: zoneTotalExposure }
     : cityBase
 
+  // Pre-run zones: set synthetic zone when a climate scenario is selected (city must be in scope)
+  useEffect(() => {
+    if (!selectedScenario || !isClimateScenario(selectedScenario)) {
+      setPreRunZones([])
+      return
+    }
+    const lat = city.cameraPosition?.lat ?? 40.71
+    const lng = city.cameraPosition?.lng ?? -74.01
+    setPreRunZones([{
+      position: { lat, lng },
+      radius: 2500,
+      riskLevel: 'critical',
+      label: 'Impact zone (preview)',
+      zoneType: 'flood',
+      affectedBuildings: 0,
+      estimatedLoss: 0,
+      populationAffected: 0,
+      recommendations: ['Run stress test for detailed zones'],
+    }])
+  }, [selectedScenario, city.cameraPosition?.lat, city.cameraPosition?.lng])
+
   // Initialize Cesium viewer when panel opens (skip when in picker mode)
   useEffect(() => {
     if (!isOpen || !containerRef.current || pickerMode) return
@@ -594,6 +730,7 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
           selectionIndicator: false,
           timeline: false,
           navigationHelpButton: false,
+          additionalOptions: { onlyUsingWithGoogleGeocoder: true },
           skyBox: false,
           skyAtmosphere: false,
           baseLayer: false,
@@ -610,6 +747,18 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
         // Dark background
         viewer.scene.backgroundColor = Cesium.Color.fromCssColorString('#0a0a0f')
         
+        // Cesium Ion streaming terrain (World Terrain) so globe has real elevation when visible
+        try {
+          const terrainProvider = await Cesium.CesiumTerrainProvider.fromIonAssetId(1, {
+            requestVertexNormals: true,
+          })
+          if (isMounted && viewer && !viewer.isDestroyed()) {
+            viewer.scene.setTerrain(new Cesium.Terrain(terrainProvider))
+          }
+        } catch (terrainErr) {
+          console.warn('Cesium Ion terrain failed, using ellipsoid:', terrainErr)
+        }
+        
         // Helper to check if viewer is still valid
         const isViewerValid = () => isMounted && viewer && !viewer.isDestroyed()
         
@@ -623,12 +772,13 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
           // =============================================
           const google3dOptions = {
             showCreditsOnScreen: true,
-            maximumScreenSpaceError: 4,
+            // Start with 8 so first tiles load faster and city appears sooner; moveEnd refines to 0.75–5
+            maximumScreenSpaceError: 8,
             skipLevelOfDetail: true,
             baseScreenSpaceError: 512,
             skipScreenSpaceErrorFactor: 12,
             skipLevels: 1,
-            immediatelyLoadDesiredLevelOfDetail: true,
+            immediatelyLoadDesiredLevelOfDetail: false,
             loadSiblings: false,
             cullWithChildrenBounds: true,
             maximumMemoryUsage: 1536,
@@ -638,10 +788,16 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
             dynamicScreenSpaceErrorHeightFalloff: 0.08,
           }
           try {
+            if (!viewer?.scene) {
+              tileset = undefined as any
+            } else {
             viewer.scene.globe.show = false
             viewer.scene.skyAtmosphere = new Cesium.SkyAtmosphere()
             if (typeof (Cesium as any).createGooglePhotorealistic3DTileset === 'function') {
-              tileset = await (Cesium as any).createGooglePhotorealistic3DTileset(google3dOptions)
+              tileset = await (Cesium as any).createGooglePhotorealistic3DTileset(
+                { onlyUsingWithGoogleGeocoder: true },
+                google3dOptions
+              )
             } else {
               tileset = await Cesium.Cesium3DTileset.fromIonAssetId(CESIUM_ION_GOOGLE_PHOTOREALISTIC, google3dOptions)
             }
@@ -650,13 +806,18 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
             photorealisticTilesetRef.current = tileset
             usedGooglePhotorealistic = true
             setActual3DMode('google')
+            // Wait for tileset to be ready (root tile loaded) so city view can start loading
+            await tileset.readyPromise
+            if (!isViewerValid()) return
             console.log('✅ Google Photorealistic 3D Tiles loaded for', city.name)
+            }
           } catch (googleErr: any) {
             console.warn('Google Photorealistic failed, falling back to OSM Buildings:', googleErr?.message)
             tileset = undefined as any
           }
         }
         if (!tileset && !useCesiumMode) {
+          if (!isViewerValid()) return
           // =============================================
           // CESIUM OSM BUILDINGS - Worldwide gray 3D buildings (professional look)
           // Used for cities without premium Cesium Ion models
@@ -695,9 +856,9 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
           }
 
           console.log('Digital Twin: Loading Cesium OSM Buildings for', city.name)
-          
+          if (!isViewerValid()) return
           viewer.scene.globe.show = false
-          
+
           // Load Cesium OSM Buildings (gray, professional)
           // Higher maximumScreenSpaceError = lower detail = less GPU pressure
           tileset = await Cesium.Cesium3DTileset.fromIonAssetId(CESIUM_OSM_BUILDINGS, {
@@ -717,11 +878,11 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
             dynamicScreenSpaceErrorFactor: 8.0,
             dynamicScreenSpaceErrorHeightFalloff: 0.25,
           })
-          
+
           if (!isViewerValid()) return
-          
+
           viewer.scene.primitives.add(tileset)
-          
+
           // Style OSM Buildings - gray professional look like New York
           tileset.style = new Cesium.Cesium3DTileStyle({
             color: 'color("#a0a0a0")'
@@ -776,15 +937,14 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
           setActual3DMode('premium')
         }
 
-        // Surface tile failures (often correlated with problematic content/GPU drivers)
-        tileset.tileFailed.addEventListener((e: any) => {
+        // Surface tile failures (e.g. Google 503). Log once per load to avoid console spam.
+        let tileFailureLogged = false
+        tileset.tileFailed.addEventListener((_e: any) => {
           try {
-            console.warn('Cesium tile failed', {
-              source: usedGooglePhotorealistic ? 'google' : useCesiumMode ? city.cesiumAssetId : CESIUM_OSM_BUILDINGS,
-              name: city.name,
-              message: e?.message,
-              url: e?.url,
-            })
+            if (tileFailureLogged) return
+            tileFailureLogged = true
+            const source = usedGooglePhotorealistic ? 'Google 3D Tiles' : useCesiumMode ? 'Cesium Ion' : 'OSM Buildings'
+            console.warn(`Some 3D tiles could not be loaded (${source}, ${city.name}). Server may have returned 503 or rate limit. Map may show partial imagery.`)
           } catch {
             // ignore
           }
@@ -851,8 +1011,28 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
             },
             duration: 1.0,
           })
-          // Keep loading overlay longer so first tiles load — avoid blank green screen
-          await new Promise(r => setTimeout(r, 4000))
+          // Wait for tiles for this view to load (no pending requests) so city is actually visible, max 15s
+          await new Promise<void>((resolve) => {
+            let intervalId: ReturnType<typeof setInterval> | null = null
+            const timeout = setTimeout(() => {
+              if (intervalId) clearInterval(intervalId)
+              try { tileset.loadProgress.removeEventListener(onProgress) } catch (_) { /* ignore */ }
+              resolve()
+            }, 15000)
+            const onProgress = (pending: number, processing: number) => {
+              if (pending + processing === 0) {
+                try { tileset.loadProgress.removeEventListener(onProgress) } catch (_) { /* ignore */ }
+                clearTimeout(timeout)
+                if (intervalId) clearInterval(intervalId)
+                resolve()
+              }
+            }
+            tileset.loadProgress.addEventListener(onProgress)
+            // Keep rendering so Cesium requests and loads tiles for the new camera position
+            intervalId = setInterval(() => {
+              if (viewer && !viewer.isDestroyed()) viewer.scene.requestRender()
+            }, 100)
+          })
           if (!isViewerValid()) return
         } else {
           viewer.camera.flyTo({
@@ -1009,7 +1189,7 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
           },
           label: {
             text: `Flood zone (${risk})\nWater level: ${depthM}m`,
-            font: '14pt sans-serif',
+            font: '14pt "JetBrains Mono", monospace',
             fillColor: Cesium.Color.WHITE,
             outlineColor: Cesium.Color.BLACK,
             outlineWidth: 2,
@@ -1062,7 +1242,7 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
         }
         const fill = colors[cat] ?? colors[0]
         const hierarchy = new Cesium.PolygonHierarchy(
-          data.polygon.map(([lon, lat]) => Cesium.Cartesian3.fromDegrees(lon, lat, 30))
+          data.polygon.map(([lon, lat]) => Cesium.Cartesian3.fromDegrees(lon, lat, 95))
         )
         windEntityRef.current = v.entities.add({
           id: 'dt-wind-layer',
@@ -1123,7 +1303,7 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
             },
             label: {
               text: `Metro: ${ent.name}\n${depthM > 0 ? `${depthM}m flooded` : 'Dry'}`,
-              font: '12pt sans-serif',
+              font: '12pt "JetBrains Mono", monospace',
               fillColor: Cesium.Color.WHITE,
               outlineColor: Cesium.Color.BLACK,
               outlineWidth: 2,
@@ -1294,6 +1474,10 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
     const viewer = viewerRef.current
     setStressTestRunning(true)
     setStressTestProgress(0)
+    setStressTestComplete(false)
+    setStressTestReport(null)
+    setRiskHighlights([])
+    setPreRunZones([])
     
     // Clear previous risk highlights
     riskEntitiesRef.current.forEach(entity => {
@@ -1301,11 +1485,15 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
     })
     riskEntitiesRef.current = []
     
+    const EXECUTE_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes — LLM + cascade can be slow
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), EXECUTE_TIMEOUT_MS)
+
     try {
       // Show initial progress
       setStressTestProgress(10)
-      
-      // Call backend API for stress test calculation
+
+      // Call backend API for stress test calculation (long timeout: LLM + cascade)
       const response = await fetch('/api/v1/stress-tests/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1313,16 +1501,18 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
           city_name: city.name,
           center_latitude: city.cameraPosition.lat,
           center_longitude: city.cameraPosition.lng,
-          event_id: scenarioId ?? selectedScenario ?? eventId ?? 'general-scenario',
+          event_id: scenarioId ?? selectedScenario ?? eventId ?? 'Heat_Stress_Energy',
           severity: city.risk_score,
           use_llm: true,
           entity_name: dynamicAsset?.name ?? city.name,
           use_kg: true,
           use_cascade_gnn: true,
           use_nvidia_orchestration: true,
-        })
+        }),
+        signal: controller.signal,
       })
-      
+
+      clearTimeout(timeoutId)
       setStressTestProgress(50)
       
       if (!response.ok) {
@@ -1358,8 +1548,9 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
       
       setRiskHighlights(highlights)
       
-      // Create report from backend data
+      // Create report from backend data (stressTestId = DB id for CZML so 4D is for this city)
       const report: StressTestReport = {
+        stressTestId: data.id,
         eventName: data.event_name,
         eventType: data.event_type,
         eventId: scenarioId ?? selectedScenario ?? eventId ?? 'general-scenario',
@@ -1385,11 +1576,12 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
         relatedEntities: data.related_entities ?? undefined,
         graphContext: data.graph_context ?? undefined,
         currency: data.currency ?? 'EUR',
+        decisionObject: data.decision_object ?? undefined,
+        complianceVerification: data.compliance_verification ?? undefined,
       }
 
       setStressTestReport(report)
       setStressTestProgress(100)
-      
       console.log('✅ Backend stress test completed:', data.id)
       
       // Add risk zone entities to Cesium viewer (polygon for flood, ellipse otherwise)
@@ -1416,9 +1608,9 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
           ? viewer.entities.add({
               polygon: {
                 hierarchy: new Cesium.PolygonHierarchy(
-                  zone.polygon.map(([lng, lat]) => Cesium.Cartesian3.fromDegrees(lng, lat, 30))
+                  zone.polygon.map(([lng, lat]) => Cesium.Cartesian3.fromDegrees(lng, lat, 95))
                 ),
-                height: 20,
+                height: 95,
                 extrudedHeight,
                 material: color,
                 outline: true,
@@ -1430,12 +1622,12 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
               position: Cesium.Cartesian3.fromDegrees(
                 zone.position.lng,
                 zone.position.lat,
-                30
+                95
               ),
               ellipse: {
                 semiMajorAxis: zone.radius,
                 semiMinorAxis: zone.radius,
-                height: 20,
+                height: 95,
                 extrudedHeight,
                 material: color,
                 outline: true,
@@ -1461,12 +1653,20 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
       })
       
     } catch (error) {
-      console.error('Backend API error, falling back to local calculation:', error)
-      // Fallback to local calculation if backend fails
+      clearTimeout(timeoutId)
+      const isTimeout = error instanceof Error && error.name === 'AbortError'
+      console.error(isTimeout ? 'Stress test request timed out' : 'Backend API error, falling back to local calculation:', error)
+      if (isTimeout) {
+        setStressTestRunning(false)
+        setStressTestProgress(0)
+        alert('Analysis is taking longer than 5 minutes. The server may be busy. Try again in a moment or use a smaller area.')
+        return
+      }
+      // Fallback to local calculation if backend fails (non-timeout)
       await runLocalStressTest()
       return
     }
-    
+
     setStressTestRunning(false)
     setStressTestComplete(true)
   }, [city, eventId, selectedScenario])
@@ -1477,6 +1677,115 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
     const t = setTimeout(runStressTest, 400)
     return () => clearTimeout(t)
   }, [isOpen, isLoading, hasPreSelectedEvent, stressTestRunning, stressTestComplete, effectiveCityId, runStressTest])
+
+  // 4D Timeline: load CZML into Digital Twin viewer when user clicks "Play 4D Timeline"
+  useEffect(() => {
+    const viewer = viewerRef.current
+    if (!viewer || viewer.isDestroyed()) return
+    if (!play4dCzmlUrl?.trim()) {
+      const ds = czmlDataSourceRef.current
+      if (ds && viewer.dataSources.contains(ds)) {
+        viewer.dataSources.remove(ds)
+        czmlDataSourceRef.current = null
+      }
+      timelineRangeRef.current = null
+      setTimelineRange(null)
+      setTimelineTime(null)
+      setTimelineScrubPct(0)
+      if (timelineClockRAFRef.current != null) {
+        cancelAnimationFrame(timelineClockRAFRef.current)
+        timelineClockRAFRef.current = null
+      }
+      return
+    }
+    const url = play4dCzmlUrl.trim()
+    Cesium.CzmlDataSource.load(url)
+      .then((dataSource: Cesium.CzmlDataSource) => {
+        if (!viewerRef.current || viewerRef.current.isDestroyed()) return
+        const prev = czmlDataSourceRef.current
+        if (prev && viewer.dataSources.contains(prev)) viewer.dataSources.remove(prev)
+        viewer.dataSources.add(dataSource)
+        czmlDataSourceRef.current = dataSource
+        // Apply CZML document clock to viewer so 4D timeline runs in T0→T+12m range (required for time-varying zones)
+        const dsClock = (dataSource as any).clock
+        if (dsClock && dsClock.startTime && dsClock.stopTime) {
+          viewer.clock.startTime = dsClock.startTime.clone()
+          viewer.clock.stopTime = dsClock.stopTime.clone()
+          viewer.clock.currentTime = (dsClock.currentTime && dsClock.currentTime.clone) ? dsClock.currentTime.clone() : dsClock.startTime.clone()
+          if (dsClock.clockRange != null) viewer.clock.clockRange = dsClock.clockRange
+          if (dsClock.multiplier != null) viewer.clock.multiplier = dsClock.multiplier
+        }
+        viewer.clock.shouldAnimate = true
+        viewer.clock.multiplier = timelineMultiplier
+        viewer.clock.clockRange = (Cesium as any).ClockRange.CLAMPED
+        setTimelinePlaying(true)
+        const start = Cesium.JulianDate.toDate(viewer.clock.startTime).getTime()
+        const end = Cesium.JulianDate.toDate(viewer.clock.stopTime).getTime()
+        const range = { start, end }
+        timelineRangeRef.current = range
+        setTimelineRange(range)
+        viewer.scene.requestRender()
+        // Do NOT zoomTo(dataSource) — it collapses the globe to a point and shows a white strip; keep current city view
+        // Zone entities (riskHighlights/preRunZones) are left visible — do not clear riskEntitiesRef when 4D loads
+        console.log('✅ Digital Twin 4D CZML loaded:', url)
+      })
+      .catch((e) => console.warn('Digital Twin 4D CZML load failed:', e))
+    return () => {
+      const v = viewerRef.current
+      if (!v || v.isDestroyed()) return
+      const ds = czmlDataSourceRef.current
+      if (ds) {
+        try {
+          if (v.dataSources.contains(ds)) v.dataSources.remove(ds)
+        } catch { /* ignore Cesium remove */ }
+        czmlDataSourceRef.current = null
+      }
+      setTimelineTime(null)
+      if (timelineClockRAFRef.current != null) {
+        cancelAnimationFrame(timelineClockRAFRef.current)
+        timelineClockRAFRef.current = null
+      }
+    }
+  }, [play4dCzmlUrl, timelineMultiplier])
+
+  // 4D Timeline: update displayed time and scrub when CZML is active
+  useEffect(() => {
+    if (!play4dCzmlUrl?.trim()) return
+    const viewer = viewerRef.current
+    if (!viewer || viewer.isDestroyed()) return
+    const tick = () => {
+      const v = viewerRef.current
+      if (!v || v.isDestroyed()) return
+      const stopTime = v.clock.stopTime
+      let current = v.clock.currentTime
+      if (current && stopTime && Cesium.JulianDate.compare(current, stopTime) >= 0) {
+        current = stopTime
+        v.clock.currentTime = stopTime
+        v.clock.shouldAnimate = false
+        setTimelinePlaying(false)
+      }
+      if (current) {
+        const d = Cesium.JulianDate.toGregorianDate(current)
+        setTimelineTime(
+          `${String(d.year).padStart(4, '0')}-${String(d.month).padStart(2, '0')}-${String(d.day).padStart(2, '0')} ${String(d.hour).padStart(2, '0')}:${String(d.minute).padStart(2, '0')}`
+        )
+        if (!timelineScrubDraggingRef.current && timelineRangeRef.current) {
+          const { start, end } = timelineRangeRef.current
+          const t = Cesium.JulianDate.toDate(current).getTime()
+          const pct = end > start ? Math.max(0, Math.min(100, ((t - start) / (end - start)) * 100)) : 0
+          setTimelineScrubPct(pct)
+        }
+      }
+      timelineClockRAFRef.current = requestAnimationFrame(tick)
+    }
+    timelineClockRAFRef.current = requestAnimationFrame(tick)
+    return () => {
+      if (timelineClockRAFRef.current != null) {
+        cancelAnimationFrame(timelineClockRAFRef.current)
+        timelineClockRAFRef.current = null
+      }
+    }
+  }, [play4dCzmlUrl])
 
   // When opened from Risk Zones with pre-selected stress test: do NOT auto-open report in new tab.
   // Show map first; user sees "Analysis Complete" + "View Report" and can open report when ready.
@@ -1624,7 +1933,7 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
     })
     
     // Helper function for recommendations
-    function generateRecommendations(cat: string, risk: string, zoneType: string): string[] {
+    function generateRecommendations(cat: string, risk: string, _zoneType: string): string[] {
       const urgentActions: Record<string, string[]> = {
         flood: ['Deploy flood barriers', 'Activate pumping stations', 'Evacuate basement levels'],
         seismic: ['Structural inspection required', 'Activate emergency protocols', 'Check gas lines'],
@@ -1723,7 +2032,7 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
     
     // Add risk zone entities to Cesium viewer
     // SUBTLE VISUALIZATION - flat ellipses with soft colors
-    highlights.forEach((zone, index) => {
+    highlights.forEach((zone, _index) => {
       // Subtle, muted colors with low opacity
       const color = zone.riskLevel === 'critical' 
         ? Cesium.Color.fromCssColorString('#ff4444').withAlpha(0.18)
@@ -1746,13 +2055,13 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
         position: Cesium.Cartesian3.fromDegrees(
           zone.position.lng,
           zone.position.lat,
-          30  // Low height above ground
+          95  // Above terrain so zone is visible
         ),
         ellipse: {
           semiMajorAxis: zone.radius,
           semiMinorAxis: zone.radius,
-          height: 20,  // Just above buildings
-          extrudedHeight: zone.riskLevel === 'critical' ? 120 : zone.riskLevel === 'high' ? 80 : 50,  // Low extrusion
+          height: 95,
+          extrudedHeight: zone.riskLevel === 'critical' ? 120 : zone.riskLevel === 'high' ? 80 : 50,
           material: color,
           outline: true,
           outlineColor: outlineColor,
@@ -1774,7 +2083,7 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
           },
           label: {
             text: zone.label,
-            font: '11px sans-serif',
+            font: '11px "JetBrains Mono", monospace',
             fillColor: Cesium.Color.WHITE,
             outlineColor: Cesium.Color.BLACK,
             outlineWidth: 1,
@@ -1804,23 +2113,23 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
           exit={{ opacity: 0, scale: 0.95 }}
           transition={{ duration: 0.3 }}
         >
-          <div className="h-full bg-black/95 backdrop-blur-xl rounded-2xl border border-white/10 overflow-hidden flex">
+          <div className="h-full bg-black/95 rounded-md border border-zinc-700 overflow-hidden flex">
             {/* Main content area - Picker (country/city) or 3D (Premium or OSM Buildings) */}
             <div className="flex-1 relative">
               {pickerMode ? (
                 <>
                   <div className="w-full h-full flex items-center justify-center p-8">
-                    <div className="w-full max-w-md bg-white/5 rounded-2xl border border-white/10 p-6">
-                      <h3 className="text-white text-lg font-light mb-1">Digital Twin</h3>
-                      <p className="text-white/50 text-sm mb-6">Select country, city, and optionally a strategic enterprise</p>
+                    <div className="w-full max-w-md bg-zinc-800 rounded-md border border-zinc-700 p-6">
+                      <h3 className="text-zinc-100 text-lg font-light mb-1">Digital Twin</h3>
+                      <p className="text-zinc-500 text-sm mb-6">Select country, city, and optionally a strategic enterprise</p>
                       
                       <div className="space-y-4">
                         <div>
-                          <label className="block text-white/50 text-xs uppercase tracking-wider mb-2">Country</label>
+                          <label className="block text-zinc-500 text-xs uppercase tracking-wider mb-2">Country</label>
                           <select
                             value={pickerCountry}
                             onChange={(e) => { setPickerCountry(e.target.value); setPickerCityId(''); }}
-                            className="w-full px-4 py-3 bg-black/30 border border-white/10 rounded-lg text-white text-sm"
+                            className="w-full px-4 py-3 bg-black/30 border border-zinc-700 rounded-md text-zinc-100 text-sm"
                           >
                             <option value="">— Select country —</option>
                             {countries.map((c) => (
@@ -1829,11 +2138,11 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
                           </select>
                         </div>
                         <div>
-                          <label className="block text-white/50 text-xs uppercase tracking-wider mb-2">City</label>
+                          <label className="block text-zinc-500 text-xs uppercase tracking-wider mb-2">City</label>
                           <select
                             value={pickerCityId}
                             onChange={(e) => setPickerCityId(e.target.value)}
-                            className="w-full px-4 py-3 bg-black/30 border border-white/10 rounded-lg text-white text-sm"
+                            className="w-full px-4 py-3 bg-black/30 border border-zinc-700 rounded-md text-zinc-100 text-sm"
                             disabled={!pickerCountry}
                           >
                             <option value="">— Select city —</option>
@@ -1843,11 +2152,11 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
                           </select>
                         </div>
                         <div>
-                          <label className="block text-white/50 text-xs uppercase tracking-wider mb-2">Strategic enterprise (optional)</label>
+                          <label className="block text-zinc-500 text-xs uppercase tracking-wider mb-2">Strategic enterprise (optional)</label>
                           <select
                             value={pickerEnterprise}
                             onChange={(e) => setPickerEnterprise(e.target.value)}
-                            className="w-full px-4 py-3 bg-black/30 border border-white/10 rounded-lg text-white text-sm"
+                            className="w-full px-4 py-3 bg-black/30 border border-zinc-700 rounded-md text-zinc-100 text-sm"
                           >
                             <option value="">— Not selected —</option>
                           </select>
@@ -1879,7 +2188,7 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
                             }
                           }}
                           disabled={!pickerCityId}
-                          className="w-full py-3 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 text-amber-400 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                          className="w-full py-3 bg-zinc-700 hover:bg-zinc-600 border border-zinc-600 text-zinc-200 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none"
                         >
                           Open 3D Digital Twin
                         </button>
@@ -1887,62 +2196,62 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
                     </div>
                   </div>
                   <div className="absolute top-4 right-4">
-                    <button onClick={onClose} className="p-2 bg-white/10 rounded-lg hover:bg-white/20 transition-colors">
-                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <button onClick={onClose} className="p-2 bg-zinc-700 rounded-md hover:bg-zinc-600 transition-colors">
+                      <svg className="w-5 h-5 text-zinc-100" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                       </svg>
                     </button>
                   </div>
                 </>
-              ) : false ? ( // Info Mode disabled - always use 3D
+              ) : INFO_MODE_ENABLED ? ( // Info Mode (disabled) - 3D used instead
                 // =============================================
                 // INFO MODE - For dynamic assets (no 3D model)
                 // =============================================
-                <div className="w-full h-full bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-8 overflow-auto">
+                <div className="w-full h-full bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-900 p-8 overflow-auto">
                   {/* Header */}
                   <div className="mb-8">
                     <div className="flex items-center gap-3 mb-2">
                       <div className={`w-3 h-3 rounded-full ${
-                        city.risk_score > 0.7 ? 'bg-red-500' :
-                        city.risk_score > 0.5 ? 'bg-orange-500' : 'bg-green-500'
+                        city.risk_score > 0.7 ? 'bg-red-500/80' :
+                        city.risk_score > 0.5 ? 'bg-orange-500/80' : 'bg-green-500/80'
                       }`} />
-                      <h2 className="text-white text-2xl font-light">{city.name}</h2>
+                      <h2 className="text-zinc-100 text-2xl font-light">{city.name}</h2>
                     </div>
-                    <p className="text-white/50 text-sm">{city.location}</p>
+                    <p className="text-zinc-500 text-sm">{city.location}</p>
                   </div>
                   
                   {/* Key Metrics Grid */}
                   <div className="grid grid-cols-2 gap-4 mb-8">
-                    <div className="bg-white/5 rounded-xl p-4 border border-white/10">
-                      <div className="text-white/50 text-xs uppercase tracking-wider mb-1">Exposure</div>
-                      <div className="text-white text-2xl font-light">€{(city.value || 0).toFixed(1)}B</div>
+                    <div className="bg-zinc-800 rounded-md p-4 border border-zinc-700">
+                      <div className="text-zinc-500 text-xs uppercase tracking-wider mb-1">Exposure</div>
+                      <div className="text-zinc-100 text-2xl font-light">€{(city.value || 0).toFixed(1)}B</div>
                     </div>
-                    <div className="bg-white/5 rounded-xl p-4 border border-white/10">
-                      <div className="text-white/50 text-xs uppercase tracking-wider mb-1">Risk Score</div>
+                    <div className="bg-zinc-800 rounded-md p-4 border border-zinc-700">
+                      <div className="text-zinc-500 text-xs uppercase tracking-wider mb-1">Risk Score</div>
                       <div className={`text-2xl font-light ${
-                        city.risk_score > 0.7 ? 'text-red-400' :
-                        city.risk_score > 0.5 ? 'text-orange-400' : 'text-green-400'
+                        city.risk_score > 0.7 ? 'text-red-400/80' :
+                        city.risk_score > 0.5 ? 'text-orange-400/80' : 'text-green-400/80'
                       }`}>{(city.risk_score * 100).toFixed(0)}%</div>
                     </div>
                   </div>
                   
                   {/* Risk Factors */}
                   <div className="mb-8">
-                    <h3 className="text-white/70 text-sm uppercase tracking-wider mb-4">Risk Factors</h3>
+                    <h3 className="text-zinc-300 text-sm uppercase tracking-wider mb-4">Risk Factors</h3>
                     <div className="space-y-3">
                       {Object.entries(city.risk_factors).map(([key, value]) => (
                         <div key={key} className="flex items-center gap-3">
-                          <div className="w-20 text-white/50 text-sm capitalize">{key}</div>
-                          <div className="flex-1 h-2 bg-white/10 rounded-full overflow-hidden">
+                          <div className="w-20 text-zinc-500 text-sm capitalize">{key}</div>
+                          <div className="flex-1 h-2 bg-zinc-700 rounded-full overflow-hidden">
                             <div 
                               className={`h-full rounded-full ${
-                                value > 0.7 ? 'bg-red-500' :
-                                value > 0.4 ? 'bg-orange-500' : 'bg-green-500'
+                                value > 0.7 ? 'bg-red-500/80' :
+                                value > 0.4 ? 'bg-orange-500/80' : 'bg-green-500/80'
                               }`}
                               style={{ width: `${value * 100}%` }}
                             />
                           </div>
-                          <div className="w-12 text-right text-white/70 text-sm">
+                          <div className="w-12 text-right text-zinc-300 text-sm">
                             {(value * 100).toFixed(0)}%
                           </div>
                         </div>
@@ -1952,40 +2261,40 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
                   
                   {/* Sensor Data */}
                   <div className="mb-8">
-                    <h3 className="text-white/70 text-sm uppercase tracking-wider mb-4">Live Sensors</h3>
+                    <h3 className="text-zinc-300 text-sm uppercase tracking-wider mb-4">Live Sensors</h3>
                     <div className="grid grid-cols-2 gap-3">
-                      <div className="bg-white/5 rounded-lg p-3 border border-white/5">
-                        <div className="text-white/40 text-xs">Temperature</div>
-                        <div className="text-amber-400 text-lg">{city.sensors.temperature.toFixed(1)}°C</div>
+                      <div className="bg-zinc-800 rounded-md p-3 border border-zinc-800">
+                        <div className="text-zinc-500 text-xs">Temperature</div>
+                        <div className="text-amber-400/80 text-lg">{city.sensors.temperature.toFixed(1)}°C</div>
                       </div>
-                      <div className="bg-white/5 rounded-lg p-3 border border-white/5">
-                        <div className="text-white/40 text-xs">Humidity</div>
-                        <div className="text-amber-400 text-lg">{city.sensors.humidity.toFixed(0)}%</div>
+                      <div className="bg-zinc-800 rounded-md p-3 border border-zinc-800">
+                        <div className="text-zinc-500 text-xs">Humidity</div>
+                        <div className="text-amber-400/80 text-lg">{city.sensors.humidity.toFixed(0)}%</div>
                       </div>
-                      <div className="bg-white/5 rounded-lg p-3 border border-white/5">
-                        <div className="text-white/40 text-xs">Vibration</div>
-                        <div className="text-amber-400 text-lg">{city.sensors.vibration.toFixed(3)}g</div>
+                      <div className="bg-zinc-800 rounded-md p-3 border border-zinc-800">
+                        <div className="text-zinc-500 text-xs">Vibration</div>
+                        <div className="text-amber-400/80 text-lg">{city.sensors.vibration.toFixed(3)}g</div>
                       </div>
-                      <div className="bg-white/5 rounded-lg p-3 border border-white/5">
-                        <div className="text-white/40 text-xs">Strain</div>
-                        <div className="text-amber-400 text-lg">{city.sensors.strain.toFixed(4)}</div>
+                      <div className="bg-zinc-800 rounded-md p-3 border border-zinc-800">
+                        <div className="text-zinc-500 text-xs">Strain</div>
+                        <div className="text-amber-400/80 text-lg">{city.sensors.strain.toFixed(4)}</div>
                       </div>
                     </div>
                   </div>
                   
                   {/* Actions */}
                   <div className="flex gap-3">
-                    <button className="flex-1 px-4 py-2 bg-amber-500/20 text-amber-400 rounded-lg border border-amber-500/30 hover:bg-amber-500/30 transition-colors text-sm">
+                    <button className="flex-1 px-4 py-2 bg-zinc-700 text-zinc-200 rounded-md border border-zinc-600 hover:bg-zinc-600 transition-colors text-sm">
                       Generate Report
                     </button>
-                    <button className="flex-1 px-4 py-2 bg-amber-500/20 text-amber-400 rounded-lg border border-amber-500/30 hover:bg-amber-500/30 transition-colors text-sm">
+                    <button className="flex-1 px-4 py-2 bg-zinc-700 text-zinc-200 rounded-md border border-zinc-600 hover:bg-zinc-600 transition-colors text-sm">
                       Action Plans
                     </button>
                   </div>
                   
                   {/* Note about 3D */}
-                  <div className="mt-6 p-3 bg-white/5 rounded-lg border border-white/10">
-                    <div className="text-white/40 text-xs">
+                  <div className="mt-6 p-3 bg-zinc-800 rounded-md border border-zinc-700">
+                    <div className="text-zinc-500 text-xs">
                       ℹ️ 3D visualization available for major cities with Cesium Ion models.
                       <br />Select a city from the Risk Zones panel for full 3D Digital Twin.
                     </div>
@@ -1999,19 +2308,19 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
                   <div 
                     ref={containerRef}
                     className="w-full h-full"
-                    style={{ background: '#0a0a0f' }}
+                    style={{ background: 'var(--quantum-bg-deep)' }}
                   />
                   
                   {/* Loading overlay (initial viewer + tileset load) */}
                   {isLoading && (
                     <div className="absolute inset-0 flex items-center justify-center bg-black/80">
                       <div className="text-center">
-                        <div className={`w-8 h-8 border-2 ${useCesiumMode ? 'border-amber-500' : 'border-amber-500'} border-t-transparent rounded-full animate-spin mx-auto mb-3`} />
-                        <div className="text-amber-400 text-sm">
+                        <div className={`w-8 h-8 border-2 ${useCesiumMode ? 'border-amber-500/80' : 'border-amber-500/80'} border-t-transparent rounded-full animate-spin mx-auto mb-3`} />
+                        <div className="text-amber-400/80 text-sm">
                           {useGooglePhotorealistic ? 'Loading 3D city...' : useCesiumMode ? 'Loading Premium 3D Model...' : 'Loading 3D Buildings...'}
                         </div>
-                        <div className="text-white/40 text-xs mt-1">{city.name}</div>
-                        <div className="text-white/30 text-[10px] mt-2">
+                        <div className="text-zinc-500 text-xs mt-1">{city.name}</div>
+                        <div className="text-zinc-600 text-[10px] mt-2">
                           {useGooglePhotorealistic 
                             ? 'Google Photorealistic 3D • City view next' 
                             : useCesiumMode 
@@ -2025,14 +2334,14 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
 
                   {/* Quality delay overlay: one countdown only */}
                   {!isLoading && qualityDelayActive && actual3DMode === 'google' && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/90 backdrop-blur-sm z-10">
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/90 z-10">
                       <div className="text-center">
-                        <div className="w-10 h-10 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-                        <div className="text-amber-400 text-base font-medium">Refining 3D city</div>
-                        <div className="text-amber-300 text-3xl font-mono font-bold mt-3 tabular-nums">
+                        <div className="w-10 h-10 border-2 border-amber-500/80 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                        <div className="text-amber-400/80 text-base font-medium">Refining 3D city</div>
+                        <div className="text-amber-300/80 text-3xl font-mono font-bold mt-3 tabular-nums">
                           {qualityDelayRemaining}s
                         </div>
-                        <div className="text-white/40 text-[10px] mt-2">Full photorealistic view next</div>
+                        <div className="text-zinc-500 text-[10px] mt-2">Full photorealistic view next</div>
                       </div>
                     </div>
                   )}
@@ -2041,9 +2350,9 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
                   {error && !isLoading && (
                     <div className="absolute inset-0 flex items-center justify-center bg-black/80">
                       <div className="text-center p-6 max-w-md">
-                        <div className="text-red-400 text-lg mb-2">Model Unavailable</div>
-                        <div className="text-white/60 text-sm mb-4">{error}</div>
-                        <div className="text-white/40 text-xs">
+                        <div className="text-red-400/80 text-lg mb-2">Model Unavailable</div>
+                        <div className="text-zinc-400 text-sm mb-4">{error}</div>
+                        <div className="text-zinc-500 text-xs">
                           {useGooglePhotorealistic 
                             ? 'Google Photorealistic 3D Tiles (Cesium Ion Asset #2275207). Check Cesium Ion access.'
                             : useCesiumMode 
@@ -2057,21 +2366,21 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
                   
                   {/* City name overlay */}
                   <div className="absolute top-4 left-4 pointer-events-none">
-                    <h2 className="text-white text-xl font-light">{city.name}</h2>
-                    <p className="text-white/50 text-sm">{city.location}</p>
+                    <h2 className="text-zinc-100 text-xl font-light">{city.name}</h2>
+                    <p className="text-zinc-500 text-sm">{city.location}</p>
                     {actual3DMode === 'google' ? (
                       <div className="mt-1 flex items-center gap-1.5">
-                        <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                        <div className="w-1.5 h-1.5 rounded-full bg-amber-500/80 animate-pulse" />
                         <span className="text-amber-400/70 text-[10px] uppercase tracking-wider">Google Photorealistic 3D</span>
                       </div>
                     ) : actual3DMode === 'premium' ? (
                       <div className="mt-1 flex items-center gap-1.5">
-                        <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                        <div className="w-1.5 h-1.5 rounded-full bg-amber-500/80 animate-pulse" />
                         <span className="text-amber-400/70 text-[10px] uppercase tracking-wider">Premium 3D Model</span>
                       </div>
                     ) : (
                       <div className="mt-1 flex items-center gap-1.5">
-                        <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                        <div className="w-1.5 h-1.5 rounded-full bg-amber-500/80 animate-pulse" />
                         <span className="text-amber-400/70 text-[10px] uppercase tracking-wider">Cesium OSM Buildings</span>
                       </div>
                     )}
@@ -2099,7 +2408,7 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
                               duration: 0.25,
                             })
                           }}
-                          className="w-9 h-9 flex items-center justify-center rounded-lg bg-amber-500/30 hover:bg-amber-500/50 border border-amber-400/40 text-amber-200 text-lg font-bold transition-colors cursor-pointer"
+                          className="w-9 h-9 flex items-center justify-center rounded-md bg-zinc-700 hover:bg-zinc-600 border border-zinc-600 text-zinc-200 text-lg font-bold transition-colors cursor-pointer"
                           title="Zoom in"
                         >
                           +
@@ -2121,7 +2430,7 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
                               duration: 0.25,
                             })
                           }}
-                          className="w-9 h-9 flex items-center justify-center rounded-lg bg-amber-500/30 hover:bg-amber-500/50 border border-amber-400/40 text-amber-200 text-lg font-bold transition-colors cursor-pointer"
+                          className="w-9 h-9 flex items-center justify-center rounded-md bg-zinc-700 hover:bg-zinc-600 border border-zinc-600 text-zinc-200 text-lg font-bold transition-colors cursor-pointer"
                           title="Zoom out"
                         >
                           −
@@ -2146,7 +2455,7 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
                               duration: 0.8,
                             })
                           }}
-                          className="w-9 h-9 flex items-center justify-center rounded-lg bg-black/70 hover:bg-black/90 border border-white/15 text-white transition-colors"
+                          className="w-9 h-9 flex items-center justify-center rounded-md bg-black/70 hover:bg-black/90 border border-zinc-700 text-zinc-100 transition-colors"
                           title="Reset view / Center"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2158,10 +2467,10 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
                     {/* Close button - always visible */}
                     <button
                       onClick={onClose}
-                      className="w-9 h-9 flex items-center justify-center rounded-lg bg-black/70 hover:bg-black/90 border border-white/15 transition-colors"
+                      className="w-9 h-9 flex items-center justify-center rounded-md bg-black/70 hover:bg-black/90 border border-zinc-700 transition-colors"
                       title="Close"
                     >
-                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-5 h-5 text-zinc-100" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                       </svg>
                     </button>
@@ -2170,46 +2479,46 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
                   {/* Scenario Context Banner - Shows what test will be run */}
                   {(eventName || eventId) && !stressTestComplete && (
                     <div className="absolute bottom-20 left-4 right-4 pointer-events-auto">
-                      <div className="bg-black/80 backdrop-blur-sm rounded-lg p-3 border border-amber-500/30">
+                      <div className="bg-zinc-900/90 rounded-md p-3 border border-zinc-700">
                         <div className="flex items-start gap-3">
-                          <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+                          <div className="w-8 h-8 rounded-md bg-zinc-700 flex items-center justify-center flex-shrink-0">
                             {eventCategory === 'climate' || eventCategory === 'natural' ? (
-                              <svg className="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg className="w-4 h-4 text-amber-400/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
                               </svg>
                             ) : eventCategory === 'financial' ? (
-                              <svg className="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg className="w-4 h-4 text-amber-400/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                               </svg>
                             ) : eventCategory === 'geopolitical' || eventCategory === 'conflict' ? (
-                              <svg className="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg className="w-4 h-4 text-amber-400/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                               </svg>
                             ) : (
-                              <svg className="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg className="w-4 h-4 text-amber-400/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                               </svg>
                             )}
                           </div>
                           <div className="flex-1">
-                            <div className="text-white/40 text-[10px] uppercase tracking-wider mb-0.5">
+                            <div className="text-zinc-500 text-[10px] uppercase tracking-wider mb-0.5">
                               Stress Test Scenario
                             </div>
-                            <div className="text-amber-400 text-sm font-medium">
+                            <div className="text-amber-400/80 text-sm font-medium">
                               {eventName || eventId || 'General Risk Assessment'}
                             </div>
                             <div className="flex items-center gap-3 mt-1.5">
                               {eventCategory && (
-                                <span className="text-[10px] text-white/50 bg-white/10 px-1.5 py-0.5 rounded">
+                                <span className="text-[10px] text-zinc-500 bg-zinc-700 px-1.5 py-0.5 rounded">
                                   {eventCategory.charAt(0).toUpperCase() + eventCategory.slice(1)}
                                 </span>
                               )}
                               {timeHorizon && (
-                                <span className="text-[10px] text-white/50 bg-white/10 px-1.5 py-0.5 rounded">
+                                <span className="text-[10px] text-zinc-500 bg-zinc-700 px-1.5 py-0.5 rounded">
                                   {timeHorizon === 'current' ? 'Current' : `${timeHorizon} Forecast`}
                                 </span>
                               )}
-                              <span className="text-[10px] text-white/30">
+                              <span className="text-[10px] text-zinc-600">
                                 City: {city.name}
                               </span>
                             </div>
@@ -2222,29 +2531,31 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
                   {/* Bottom controls - Risk indicator + Stress Test button */}
                   <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between pointer-events-auto">
                     {/* Risk indicator - opaque background for visibility */}
-                    <div className={`px-4 py-2 rounded-lg text-sm font-semibold shadow-lg ${
-                      city.risk_score > 0.7 ? 'bg-red-900/95 text-red-100 border-2 border-red-400' :
-                      city.risk_score > 0.5 ? 'bg-orange-900/95 text-orange-100 border-2 border-orange-400' :
-                      'bg-emerald-900/95 text-emerald-100 border-2 border-emerald-400'
+                    <div className={`px-4 py-2 rounded-md text-sm font-semibold shadow-lg ${
+                      city.risk_score > 0.7 ? 'bg-red-900/95 text-red-100 border-2 border-red-400/80' :
+                      city.risk_score > 0.5 ? 'bg-orange-900/95 text-orange-100 border-2 border-orange-400/80' :
+                      'bg-emerald-900/95 text-emerald-100 border-2 border-emerald-400/80'
                     }`}>
                       Risk: {(city.risk_score * 100).toFixed(0)}%
                     </div>
                     
-                    {/* Stress Test Button with Selector - opaque background for visibility */}
-                    {!stressTestComplete && (
-                      <div className="relative">
+                    {/* Stress Test Button with Selector - always visible so user can run another test after report */}
+                    <div className="relative">
                         {stressTestRunning ? (
-                          <button
-                            disabled
-                            className="px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 bg-amber-900/95 text-amber-100 border-2 border-amber-400 cursor-wait shadow-lg"
-                          >
-                            <div className="w-4 h-4 border-2 border-amber-200 border-t-transparent rounded-full animate-spin" />
-                            <span>Analyzing... {stressTestProgress}%</span>
-                          </button>
+                          <div className="flex flex-col items-center gap-1">
+                            <button
+                              disabled
+                              className="px-4 py-2 rounded-md text-sm font-semibold flex items-center gap-2 bg-amber-900/95 text-amber-100 border-2 border-amber-400/80 cursor-wait shadow-lg"
+                            >
+                              <div className="w-4 h-4 border-2 border-amber-200 border-t-transparent rounded-full animate-spin" />
+                              <span>Analyzing… {stressTestProgress}%</span>
+                            </button>
+                            <span className="text-xs text-amber-200/80">May take 1–2 minutes for large cities</span>
+                          </div>
                         ) : hasPreSelectedEvent ? (
                           <button
                             disabled
-                            className="px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 bg-amber-900/95 text-amber-100 border-2 border-amber-400 cursor-wait shadow-lg"
+                            className="px-4 py-2 rounded-md text-sm font-semibold flex items-center gap-2 bg-amber-900/95 text-amber-100 border-2 border-amber-400/80 cursor-wait shadow-lg"
                           >
                             <div className="w-4 h-4 border-2 border-amber-200 border-t-transparent rounded-full animate-spin" />
                             <span>Preparing analysis…</span>
@@ -2254,19 +2565,19 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
                             <button
                               onClick={() => setShowTestSelector(!showTestSelector)}
                               disabled={isLoading}
-                              className="px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-all bg-amber-900/95 text-amber-100 border-2 border-amber-400 hover:bg-amber-800 hover:scale-[1.02] shadow-lg"
+                              className="px-4 py-2 rounded-md text-sm font-semibold flex items-center gap-2 transition-all bg-amber-900/95 text-amber-100 border-2 border-amber-400/80 hover:bg-amber-800 hover:scale-[1.02] shadow-lg"
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
                               </svg>
-                              <span>Select Stress Test</span>
+                              <span>{stressTestComplete ? 'Select another stress test' : 'Select Stress Test'}</span>
                               <svg className={`w-3 h-3 transition-transform ${showTestSelector ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                               </svg>
                             </button>
                             {/* Stress Test Selector Dropdown */}
                             {showTestSelector && !stressTestRunning && (
-                          <div className="absolute bottom-full right-0 mb-2 w-96 bg-black/95 backdrop-blur-xl rounded-xl border border-white/20 shadow-2xl overflow-hidden">
+                          <div className="absolute bottom-full right-0 mb-2 w-96 bg-black/95 rounded-md border border-zinc-600 shadow-2xl overflow-hidden">
                             <div className="p-2">
                               <UnifiedStressTestSelector
                                 selectedScenarioId={selectedScenario || null}
@@ -2279,14 +2590,16 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
                                   setSelectedScenario('')
                                   setShowTestSelector(false)
                                 }}
+                                filterClimaticOnly={Boolean(climateTriggerRiskType)}
+                                filterByCityId={climateTriggerCityId}
                               />
                             </div>
                             
                             {/* Close button */}
-                            <div className="p-2 border-t border-white/10">
+                            <div className="p-2 border-t border-zinc-700">
                               <button
                                 onClick={() => setShowTestSelector(false)}
-                                className="w-full py-1.5 text-xs text-white/40 hover:text-white/60 transition-all"
+                                className="w-full py-1.5 text-xs text-zinc-500 hover:text-zinc-400 transition-all"
                               >
                                 Cancel
                               </button>
@@ -2296,39 +2609,131 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
                           </>
                         )}
                       </div>
-                    )}
                   </div>
                   
                   {/* Risk zones legend - shows after test complete */}
                   {stressTestComplete && riskHighlights.length > 0 && (
-                    <div className="absolute top-20 left-4 bg-black/80 backdrop-blur-sm rounded-lg p-3 border border-white/10">
-                      <div className="text-white/70 text-xs uppercase tracking-wider mb-2">Risk Zones</div>
+                    <div className="absolute top-20 left-4 bg-black/80 rounded-md p-3 border border-zinc-700">
+                      <div className="text-zinc-300 text-xs uppercase tracking-wider mb-2">Risk Zones</div>
                       <div className="space-y-1.5">
                         <div className="flex items-center gap-2 text-xs">
-                          <div className="w-3 h-3 rounded-full bg-red-500" />
-                          <span className="text-white/70">Critical ({riskHighlights.filter(r => r.riskLevel === 'critical').length})</span>
+                          <div className="w-3 h-3 rounded-full bg-red-500/80" />
+                          <span className="text-zinc-300">Critical ({riskHighlights.filter(r => r.riskLevel === 'critical').length})</span>
                         </div>
                         <div className="flex items-center gap-2 text-xs">
-                          <div className="w-3 h-3 rounded-full bg-orange-500" />
-                          <span className="text-white/70">High ({riskHighlights.filter(r => r.riskLevel === 'high').length})</span>
+                          <div className="w-3 h-3 rounded-full bg-orange-500/80" />
+                          <span className="text-zinc-300">High ({riskHighlights.filter(r => r.riskLevel === 'high').length})</span>
                         </div>
                         <div className="flex items-center gap-2 text-xs">
-                          <div className="w-3 h-3 rounded-full bg-yellow-500" />
-                          <span className="text-white/70">Medium ({riskHighlights.filter(r => r.riskLevel === 'medium').length})</span>
+                          <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
+                          <span className="text-zinc-300">Medium ({riskHighlights.filter(r => r.riskLevel === 'medium').length})</span>
                         </div>
                       </div>
                     </div>
                   )}
 
-                  {/* Report ready pill: single place for Analysis complete + View Report (no duplicate in toolbar) */}
+                  {/* 4D Timeline bar — when CZML is loaded (unique to Digital Twin) */}
+                  {play4dCzmlUrl?.trim() && (
+                    <div className="absolute bottom-3 left-3 right-3 flex items-center gap-3 bg-black/70 rounded-md border border-zinc-700 px-3 py-2 z-20 pointer-events-auto">
+                      <span className="text-zinc-400 text-xs max-w-[220px] shrink-0" title="Same stress test scenario; playback stops at T+12m">
+                        Impact (T0→T+12m). Stops at T+12m.
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const v = viewerRef.current
+                          if (!v || v.isDestroyed()) return
+                          v.clock.shouldAnimate = !v.clock.shouldAnimate
+                          setTimelinePlaying(v.clock.shouldAnimate)
+                        }}
+                        className="text-zinc-300 hover:text-white px-2 py-1 text-xs font-medium"
+                      >
+                        {timelinePlaying ? 'Pause' : 'Play'}
+                      </button>
+                      <div className="flex gap-1">
+                        {[3600, 36000, 360000].map((m) => (
+                          <button
+                            key={m}
+                            type="button"
+                            onClick={() => {
+                              const v = viewerRef.current
+                              if (!v || v.isDestroyed()) return
+                              v.clock.multiplier = m
+                              setTimelineMultiplier(m)
+                            }}
+                            className={`px-2 py-1 text-xs rounded ${timelineMultiplier === m ? 'bg-amber-600/80 text-black' : 'text-zinc-400 hover:text-white'}`}
+                          >
+                            {m === 3600 ? 'x1' : m === 36000 ? 'x10' : 'x100'}
+                          </button>
+                        ))}
+                      </div>
+                      <span className="text-zinc-500 text-xs tabular-nums min-w-[140px]">
+                        {timelineTime ?? '—'}
+                      </span>
+                      {timelineRange && (
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          value={timelineScrubPct}
+                          className="flex-1 h-1.5 bg-zinc-700 rounded-full appearance-none cursor-pointer"
+                          onMouseDown={() => { timelineScrubDraggingRef.current = true }}
+                          onMouseUp={() => { timelineScrubDraggingRef.current = false }}
+                          onTouchStart={() => { timelineScrubDraggingRef.current = true }}
+                          onTouchEnd={() => { timelineScrubDraggingRef.current = false }}
+                          onChange={(e) => {
+                            const v = viewerRef.current
+                            if (!v || v.isDestroyed() || !timelineRange) return
+                            const pct = Number(e.target.value) / 100
+                            const t = timelineRange.start + pct * (timelineRange.end - timelineRange.start)
+                            v.clock.currentTime = Cesium.JulianDate.fromDate(new Date(t))
+                            v.clock.shouldAnimate = false
+                            setTimelinePlaying(false)
+                            setTimelineScrubPct(pct)
+                          }}
+                        />
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setPlay4dCzmlUrl(null)}
+                        className="text-zinc-500 hover:text-zinc-300 text-xs"
+                        title="Close 4D timeline"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Report ready pill: Analysis complete + Play 4D Timeline + View Report. 4D = same scenario animated T0→T+12m; report = stress test PDF. */}
                   {stressTestComplete && stressTestReport && (
-                    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 px-4 py-2.5 bg-black/85 backdrop-blur-sm rounded-xl border border-green-500/40 shadow-lg z-10">
-                      <span className="text-green-400 text-sm font-medium flex items-center gap-2">
+                    <div className={`absolute left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 px-4 py-2.5 bg-black/85 rounded-md border border-green-500/40 shadow-lg z-10 ${play4dCzmlUrl ? 'bottom-20' : 'bottom-6'}`}>
+                      <div className="flex items-center gap-3">
+                      <span className="text-green-400/80 text-sm font-medium flex items-center gap-2">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                         Report ready
                       </span>
+                      {stressTestReport.complianceVerification?.verified && (
+                        <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 border border-emerald-500/40 text-emerald-400/80 text-xs font-medium" title="Regulatory verification passed">
+                          Compliance verified
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                        const path = `/api/v1/stress-tests/${encodeURIComponent(stressTestReport.stressTestId ?? stressTestReport.eventId)}/czml`
+                        const base = getApiBase()
+                        setPlay4dCzmlUrl(base ? `${base.replace(/\/+$/, '')}${path}` : path)
+                      }}
+                        className="px-3 py-1.5 bg-amber-700/80 text-amber-100 border border-amber-500/60 rounded-md text-sm font-medium hover:bg-amber-600/80 transition-colors flex items-center gap-1.5"
+                        title="Animate the same scenario in 3D from T0 to T+12m. Timeline stops at T+12m. The report (View Report) is the same stress test."
+                      >
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                        Play 4D Timeline
+                      </button>
                       <button
                         onClick={() => {
                           try {
@@ -2338,10 +2743,12 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
                             console.error('Report open failed:', e)
                           }
                         }}
-                        className="px-3 py-1.5 bg-amber-500/25 text-amber-400 border border-amber-500/50 rounded-lg text-sm font-medium hover:bg-amber-500/35 transition-colors"
+                        className="px-3 py-1.5 bg-zinc-700 text-zinc-200 border border-zinc-600 rounded-md text-sm font-medium hover:bg-zinc-600 transition-colors"
                       >
                         View Report
                       </button>
+                      </div>
+                      <span className="text-zinc-500 text-[10px]">Report = stress test. 4D = same scenario, animated (stops at T+12m).</span>
                     </div>
                   )}
                 </>
@@ -2350,17 +2757,17 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
             
             {/* Info Panel - hidden in picker mode */}
             {!pickerMode && (
-            <div className="w-80 border-l border-white/10 p-4 overflow-y-auto bg-black/50">
+            <div className="w-80 border-l border-zinc-700 p-4 overflow-y-auto bg-black/50">
               {/* Tabs */}
               <div className="flex gap-2 mb-4">
                 {(['3d', 'sensors', 'risks'] as const).map((tab) => (
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
-                    className={`px-3 py-1.5 rounded-lg text-xs uppercase tracking-wider transition-all ${
+                    className={`px-3 py-1.5 rounded-md text-xs uppercase tracking-wider transition-all ${
                       activeTab === tab
-                        ? 'bg-amber-500/20 text-amber-400'
-                        : 'bg-white/5 text-white/50 hover:bg-white/10'
+                        ? 'bg-zinc-700 text-zinc-200'
+                        : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700'
                     }`}
                   >
                     {tab}
@@ -2370,46 +2777,46 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
               
               {/* Asset Value */}
               <div className="mb-6">
-                <div className="text-white/40 text-[10px] uppercase tracking-wider mb-1">Asset Value</div>
-                <div className="text-white text-2xl font-light">
-                  ${city.value}<span className="text-sm text-white/40">B</span>
+                <div className="text-zinc-500 text-[10px] uppercase tracking-wider mb-1">Asset Value</div>
+                <div className="text-zinc-100 text-2xl font-light">
+                  ${city.value}<span className="text-sm text-zinc-500">B</span>
                 </div>
               </div>
               
               {/* Risk Score */}
               <div className="mb-6">
-                <div className="text-white/40 text-[10px] uppercase tracking-wider mb-2">Overall Risk</div>
+                <div className="text-zinc-500 text-[10px] uppercase tracking-wider mb-2">Overall Risk</div>
                 <div className="flex items-center gap-3">
-                  <div className="flex-1 h-2 bg-white/10 rounded-full overflow-hidden">
+                  <div className="flex-1 h-2 bg-zinc-700 rounded-full overflow-hidden">
                     <div 
                       className={`h-full rounded-full ${
-                        city.risk_score > 0.7 ? 'bg-red-500' :
-                        city.risk_score > 0.5 ? 'bg-orange-500' :
-                        city.risk_score > 0.3 ? 'bg-yellow-500' : 'bg-green-500'
+                        city.risk_score > 0.7 ? 'bg-red-500/80' :
+                        city.risk_score > 0.5 ? 'bg-orange-500/80' :
+                        city.risk_score > 0.3 ? 'bg-yellow-500/80' : 'bg-green-500/80'
                       }`}
                       style={{ width: `${city.risk_score * 100}%` }}
                     />
                   </div>
-                  <span className="text-white font-mono">{(city.risk_score * 100).toFixed(0)}%</span>
+                  <span className="text-zinc-100 font-mono">{(city.risk_score * 100).toFixed(0)}%</span>
                 </div>
               </div>
               
               {/* Risk Factors */}
               {activeTab === 'risks' && (
                 <div className="space-y-3">
-                  <div className="text-white/40 text-[10px] uppercase tracking-wider mb-2">Risk Factors</div>
+                  <div className="text-zinc-500 text-[10px] uppercase tracking-wider mb-2">Risk Factors</div>
                   {Object.entries(city.risk_factors).map(([key, value]) => (
                     <div key={key}>
                       <div className="flex justify-between text-xs mb-1">
-                        <span className="text-white/70 capitalize">{key}</span>
-                        <span className="text-white font-mono">{(value * 100).toFixed(0)}%</span>
+                        <span className="text-zinc-300 capitalize">{key}</span>
+                        <span className="text-zinc-100 font-mono">{(value * 100).toFixed(0)}%</span>
                       </div>
-                      <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+                      <div className="h-1.5 bg-zinc-700 rounded-full overflow-hidden">
                         <div 
                           className={`h-full rounded-full ${
-                            value > 0.7 ? 'bg-red-500' :
-                            value > 0.5 ? 'bg-orange-500' :
-                            value > 0.3 ? 'bg-yellow-500' : 'bg-green-500'
+                            value > 0.7 ? 'bg-red-500/80' :
+                            value > 0.5 ? 'bg-orange-500/80' :
+                            value > 0.3 ? 'bg-yellow-500/80' : 'bg-green-500/80'
                           }`}
                           style={{ width: `${value * 100}%` }}
                         />
@@ -2422,28 +2829,28 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
               {/* Sensors */}
               {activeTab === 'sensors' && (
                 <div className="space-y-4">
-                  <div className="text-white/40 text-[10px] uppercase tracking-wider mb-2">Live Sensors</div>
+                  <div className="text-zinc-500 text-[10px] uppercase tracking-wider mb-2">Live Sensors</div>
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="p-3 bg-white/5 rounded-lg">
-                      <div className="text-white/40 text-[10px]">Temperature</div>
-                      <div className="text-white text-lg">{city.sensors.temperature.toFixed(1)}°C</div>
+                    <div className="p-3 bg-zinc-800 rounded-md">
+                      <div className="text-zinc-500 text-[10px]">Temperature</div>
+                      <div className="text-zinc-100 text-lg">{city.sensors.temperature.toFixed(1)}°C</div>
                     </div>
-                    <div className="p-3 bg-white/5 rounded-lg">
-                      <div className="text-white/40 text-[10px]">Humidity</div>
-                      <div className="text-white text-lg">{city.sensors.humidity.toFixed(0)}%</div>
+                    <div className="p-3 bg-zinc-800 rounded-md">
+                      <div className="text-zinc-500 text-[10px]">Humidity</div>
+                      <div className="text-zinc-100 text-lg">{city.sensors.humidity.toFixed(0)}%</div>
                     </div>
-                    <div className="p-3 bg-white/5 rounded-lg">
-                      <div className="text-white/40 text-[10px]">Vibration</div>
-                      <div className="text-white text-lg">{city.sensors.vibration.toFixed(3)}g</div>
+                    <div className="p-3 bg-zinc-800 rounded-md">
+                      <div className="text-zinc-500 text-[10px]">Vibration</div>
+                      <div className="text-zinc-100 text-lg">{city.sensors.vibration.toFixed(3)}g</div>
                     </div>
-                    <div className="p-3 bg-white/5 rounded-lg">
-                      <div className="text-white/40 text-[10px]">Strain</div>
-                      <div className="text-white text-lg">{city.sensors.strain.toFixed(4)}ε</div>
+                    <div className="p-3 bg-zinc-800 rounded-md">
+                      <div className="text-zinc-500 text-[10px]">Strain</div>
+                      <div className="text-zinc-100 text-lg">{city.sensors.strain.toFixed(4)}ε</div>
                     </div>
                   </div>
                   
                   <div className="flex items-center gap-2 mt-4">
-                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                    <div className="w-2 h-2 rounded-full bg-green-500/80 animate-pulse" />
                     <span className="text-green-400/60 text-xs">All sensors online</span>
                   </div>
                 </div>
@@ -2453,21 +2860,21 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
               {activeTab === '3d' && (() => {
                 const isGoogle = actual3DMode === 'google'
                 const isPremium = actual3DMode === 'premium'
-                const isOsm = actual3DMode === 'osm'
+                const _isOsm = actual3DMode === 'osm'
                 return (
                 <div className="space-y-4">
-                  <div className="text-white/40 text-[10px] uppercase tracking-wider mb-2">3D Model Info</div>
-                  <div className="text-white/60 text-sm space-y-1">
+                  <div className="text-zinc-500 text-[10px] uppercase tracking-wider mb-2">3D Model Info</div>
+                  <div className="text-zinc-400 text-sm space-y-1">
                     <p>• Drag to rotate view</p>
                     <p>• Scroll to zoom</p>
                     <p>• Right-click to pan</p>
                   </div>
                   
-                  <div className="mt-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-                    <div className="text-amber-400 text-xs font-medium mb-1">
+                  <div className="mt-4 p-3 bg-zinc-800 border border-zinc-700 rounded-md">
+                    <div className="text-amber-400/80 text-xs font-medium mb-1">
                       {isGoogle ? 'Google Photorealistic 3D Tiles' : isPremium ? 'Cesium Ion 3D Tiles' : 'Cesium OSM Buildings'}
                     </div>
-                    <div className="text-white/50 text-xs">
+                    <div className="text-zinc-500 text-xs">
                       {isGoogle
                         ? 'High-resolution photogrammetry from Google Maps Platform Map Tiles API'
                         : isPremium
@@ -2476,9 +2883,9 @@ export default function DigitalTwinPanel({ isOpen, onClose, pickerMode = false, 
                     </div>
                   </div>
 
-                  <div className="mt-4 p-3 bg-white/5 rounded-lg">
-                    <div className="text-white/40 text-[10px] uppercase mb-2">Data Sources</div>
-                    <div className="space-y-1 text-xs text-white/50">
+                  <div className="mt-4 p-3 bg-zinc-800 rounded-md">
+                    <div className="text-zinc-500 text-[10px] uppercase mb-2">Data Sources</div>
+                    <div className="space-y-1 text-xs text-zinc-500">
                       <div>• 3D Model: {isGoogle ? 'Google Maps Platform' : isPremium ? 'Cesium Ion (Premium)' : 'Cesium Ion (OSM)'}</div>
                       <div>• Risk Data: PFRP Engine</div>
                       <div>• Sensors: IoT Network</div>

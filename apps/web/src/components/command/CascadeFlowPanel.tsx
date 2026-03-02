@@ -84,39 +84,39 @@ export default function CascadeFlowPanel({ selectedZone, stressTest }: CascadeFl
   }
 
   return (
-    <div className="h-full bg-black/80 backdrop-blur-xl border border-white/10 rounded-xl p-4 flex flex-col">
+    <div className="h-full bg-black/80 border border-zinc-800 rounded-md p-4 flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <ShareIcon className="w-5 h-5 text-purple-400" />
-          <h3 className="text-sm font-medium text-white">Cascade Flow</h3>
+          <ShareIcon className="w-5 h-5 text-zinc-400" />
+          <h3 className="text-sm font-medium text-zinc-100">Cascade Flow</h3>
         </div>
         <button
           onClick={() => refetch()}
-          className="p-1.5 hover:bg-white/10 rounded-lg transition-colors"
+          className="p-1.5 hover:bg-zinc-700 rounded-md transition-colors"
           title="Refresh"
         >
-          <ArrowPathIcon className={`w-4 h-4 text-white/50 ${isLoading ? 'animate-spin' : ''}`} />
+          <ArrowPathIcon className={`w-4 h-4 text-zinc-500 ${isLoading ? 'animate-spin' : ''}`} />
         </button>
       </div>
 
       {/* Metrics Summary */}
       <div className="grid grid-cols-4 gap-2 mb-3">
-        <div className="p-2 bg-white/5 rounded-lg text-center">
-          <div className="text-lg font-bold text-purple-400">{metrics?.affected_count || 0}</div>
-          <div className="text-[9px] text-white/40">Affected</div>
+        <div className="p-2 bg-zinc-800 rounded-md text-center">
+          <div className="text-lg font-bold text-zinc-400">{metrics?.affected_count || 0}</div>
+          <div className="text-[9px] text-zinc-500">Affected</div>
         </div>
-        <div className="p-2 bg-white/5 rounded-lg text-center">
-          <div className="text-lg font-bold text-amber-400">{formatCurrency(metrics?.total_loss || 0)}</div>
-          <div className="text-[9px] text-white/40">Est. Loss</div>
+        <div className="p-2 bg-zinc-800 rounded-md text-center">
+          <div className="text-lg font-bold text-amber-400/80">{formatCurrency(metrics?.total_loss || 0)}</div>
+          <div className="text-[9px] text-zinc-500">Est. Loss</div>
         </div>
-        <div className="p-2 bg-white/5 rounded-lg text-center">
-          <div className="text-lg font-bold text-red-400">{metrics?.critical_paths || 0}</div>
-          <div className="text-[9px] text-white/40">Critical</div>
+        <div className="p-2 bg-zinc-800 rounded-md text-center">
+          <div className="text-lg font-bold text-red-400/80">{metrics?.critical_paths || 0}</div>
+          <div className="text-[9px] text-zinc-500">Critical</div>
         </div>
-        <div className="p-2 bg-white/5 rounded-lg text-center">
-          <div className="text-lg font-bold text-emerald-400">{metrics?.containment_points || 0}</div>
-          <div className="text-[9px] text-white/40">Contain</div>
+        <div className="p-2 bg-zinc-800 rounded-md text-center">
+          <div className="text-lg font-bold text-emerald-400/80">{metrics?.containment_points || 0}</div>
+          <div className="text-[9px] text-zinc-500">Contain</div>
         </div>
       </div>
 
@@ -137,15 +137,15 @@ export default function CascadeFlowPanel({ selectedZone, stressTest }: CascadeFl
         ) : (
           <div className="h-full flex items-center justify-center">
             <div className="text-center">
-              <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-              <span className="text-xs text-white/40">Building cascade...</span>
+              <div className="w-8 h-8 border-2 border-zinc-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+              <span className="text-xs text-zinc-500">Building cascade...</span>
             </div>
           </div>
         )}
       </div>
 
       {/* Legend */}
-      <div className="mt-2 pt-2 border-t border-white/5 flex items-center justify-center gap-4 text-[10px] text-white/40">
+      <div className="mt-2 pt-2 border-t border-zinc-800 flex items-center justify-center gap-4 text-[10px] text-zinc-500">
         <div className="flex items-center gap-1.5">
           <div className="w-2 h-2 rounded-full bg-[#8a4a4a]" />
           <span>Trigger</span>

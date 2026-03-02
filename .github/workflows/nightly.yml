@@ -1,0 +1,52 @@
+name: Nightly
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.13"
+
+jobs:
+  integration:
+    name: Integration tests (backend)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: apps/api/pyproject.toml
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run migrations
+        run: alembic upgrade head
+        env:
+          USE_SQLITE: "true"
+          DATABASE_URL: ""
+
+      - name: Run integration tests
+        run: |
+          pytest tests/integration/ tests/security/ -v --tb=short --timeout=60 -q
+        env:
+          USE_SQLITE: "true"
+          SECRET_KEY: "nightly-test-secret-key-do-not-use-in-production"
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-integration-logs
+          path: apps/api/
+          if-no-files-found: ignore

@@ -4,6 +4,7 @@ Event Emitter Service for Platform Events.
 Handles:
 - Event creation with causality chain
 - Broadcasting to WebSocket channels
+- Redis pub/sub when enable_redis (multi-worker)
 - Event logging for audit trail
 """
 from datetime import datetime
@@ -12,6 +13,7 @@ from uuid import uuid4
 
 import structlog
 
+from src.core.config import settings
 from src.models.events import PlatformEvent, EventTypes
 from src.api.v1.endpoints.websocket import manager as ws_manager
 
@@ -101,11 +103,16 @@ class EventEmitter:
             self._event_log = self._event_log[-self._max_log_size:]
     
     async def _broadcast(self, event: PlatformEvent):
-        """Broadcast event to WebSocket channels."""
+        """Broadcast event to WebSocket channels. When Redis is enabled, also publish to Redis for other workers."""
         channel = EventTypes.get_channel_for_event(event.event_type)
-        
-        # Broadcast to specific channel
-        await ws_manager.broadcast_to_channel(channel, event.dict())
+        payload = event.dict()
+        await ws_manager.broadcast_to_channel(channel, payload)
+        if getattr(settings, "enable_redis", False) and (getattr(settings, "redis_url", "") or "").strip():
+            try:
+                from src.services.redis_bus import publish_event
+                await publish_event(channel, payload)
+            except Exception as e:
+                logger.warning("Redis publish_event failed", error=str(e))
     
     async def emit_stress_test_started(
         self,
@@ -426,6 +433,59 @@ class EventEmitter:
             action="created",
             data={"name": title, "message": message, "severity": severity, **extra},
             intent=False,
+        )
+
+    async def emit_data_refresh_completed(
+        self,
+        source_id: str,
+        summary: Dict[str, Any],
+        affected_city_ids: Optional[List[str]] = None,
+    ) -> PlatformEvent:
+        """Emit data refresh completed (real-time ingestion pipeline)."""
+        return await self.emit(
+            event_type=EventTypes.DATA_REFRESH_COMPLETED,
+            entity_type="data_source",
+            entity_id=source_id,
+            action="refresh_completed",
+            data={
+                "source_id": source_id,
+                "summary": summary,
+                "affected_city_ids": affected_city_ids or [],
+            },
+            intent=False,
+            actor_type="system",
+        )
+
+    async def emit_threat_detected(
+        self,
+        threat_id: str,
+        source: str,
+        data: Dict[str, Any],
+    ) -> PlatformEvent:
+        """Emit threat detected (OSINT / social / cyber)."""
+        return await self.emit(
+            event_type=EventTypes.THREAT_DETECTED,
+            entity_type="threat",
+            entity_id=threat_id,
+            action="detected",
+            data={"source": source, **data},
+            intent=False,
+            actor_type="system",
+        )
+
+    async def emit_market_update(
+        self,
+        data: Dict[str, Any],
+    ) -> PlatformEvent:
+        """Emit market data update (VIX, indices, spreads)."""
+        return await self.emit(
+            event_type=EventTypes.MARKET_UPDATE,
+            entity_type="market",
+            entity_id="ticker",
+            action="updated",
+            data=data,
+            intent=False,
+            actor_type="system",
         )
     
     def get_recent_events(self, limit: int = 50) -> List[PlatformEvent]:

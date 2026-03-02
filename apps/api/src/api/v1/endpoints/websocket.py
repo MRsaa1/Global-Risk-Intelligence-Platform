@@ -13,12 +13,29 @@ from datetime import datetime
 from typing import Dict, Set, Optional, Any
 from uuid import uuid4
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, Query
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
+
+from src.core.database import get_db
+from src.core.security import get_current_user
+from src.models.user import User
 
 logger = structlog.get_logger()
 router = APIRouter()
+
+# Public channels anyone can subscribe to (no auth required)
+PUBLIC_CHANNELS = frozenset({
+    "dashboard", "command_center", "assets", "alerts",
+    "stress_tests", "viewer", "annotations",
+    "threat_intelligence", "market_data",
+    "natural_hazards", "weather", "biosecurity",
+    "cyber_threats", "economic", "infrastructure",
+})
+# ACL: channels that require valid JWT; without auth these are not subscribed.
+# Add channel names here when they must be restricted to authenticated users only.
+AUTH_REQUIRED_CHANNELS = frozenset({"assets"})
 
 
 # ==================== CONNECTION MANAGER ====================
@@ -44,7 +61,25 @@ class ConnectionManager:
         # connection -> metadata
         self._connection_info: Dict[WebSocket, Dict] = {}
         self._lock = asyncio.Lock()
-    
+        # Last payload for late-joining clients
+        self._last_market_data: Optional[dict] = None
+        # source_id -> updated_at (from data.refresh_completed)
+        self._last_refresh_by_source: Dict[str, str] = {}
+        # Recent threat events for late-joining threat_intelligence subscribers
+        self._last_threat_events: list[dict] = []
+        self._last_threat_signatures: Set[str] = set()
+
+    def _threat_signature(self, event: dict) -> str:
+        """Stable key for deduplicating replayed threat events."""
+        event_id = (event.get("event_id") or "").strip()
+        if event_id:
+            return f"id:{event_id}"
+        data = event.get("data") or {}
+        source = str(data.get("source") or "").strip().lower()
+        text = str(data.get("text") or data.get("title") or "").strip().lower()
+        url = str(data.get("url") or "").strip().lower()
+        return f"sig:{source}|{url}|{text}"
+
     async def connect(
         self, 
         websocket: WebSocket, 
@@ -62,27 +97,93 @@ class ConnectionManager:
                 "id": str(uuid4())[:8],
             }
             
-            # Subscribe to requested channels
+            # Subscribe to requested channels (validated against whitelist)
             default_channels = ["dashboard"]
-            for channel in (channels or default_channels):
-                await self._subscribe(websocket, channel)
+            channel_list = list(channels or default_channels)
+            for ch in channel_list:
+                await self._subscribe(websocket, ch, user_id=user_id)
             
             # Subscribe to user-specific channel
             if user_id:
-                await self._subscribe(websocket, f"user:{user_id}")
+                await self._subscribe(websocket, f"user:{user_id}", user_id=user_id)
         
+        # Send last market_data snapshot to new subscriber so they see data immediately
+        last_market = getattr(self, "_last_market_data", None)
+        if last_market and "market_data" in channel_list:
+            try:
+                await websocket.send_json({
+                    "type": "message",
+                    "channel": "market_data",
+                    "data": last_market,
+                    "timestamp": datetime.utcnow().isoformat(),
+                })
+            except Exception:
+                pass
+
+        # Send last refresh timestamps for dashboard so Live Data Bar / panels show times
+        last_refresh = getattr(self, "_last_refresh_by_source", None) or {}
+        if last_refresh and "dashboard" in channel_list:
+            now_iso = datetime.utcnow().isoformat()
+            for src_id, updated_at in last_refresh.items():
+                try:
+                    await websocket.send_json({
+                        "type": "message",
+                        "channel": "dashboard",
+                        "data": {
+                            "event_type": "data.refresh_completed",
+                            "entity_type": "data_source",
+                            "entity_id": src_id,
+                            "action": "refresh_completed",
+                            "data": {
+                                "source_id": src_id,
+                                "summary": {"updated_at": updated_at},
+                            },
+                            "intent": False,
+                            "actor_type": "system",
+                            "timestamp": updated_at,
+                        },
+                        "timestamp": now_iso,
+                    })
+                except Exception:
+                    break
+        
+        # Send recent threat signals so feed isn't empty after reconnects
+        last_threat_events = getattr(self, "_last_threat_events", None) or []
+        if last_threat_events and "threat_intelligence" in channel_list:
+            now_iso = datetime.utcnow().isoformat()
+            for event in last_threat_events:
+                try:
+                    await websocket.send_json({
+                        "type": "message",
+                        "channel": "threat_intelligence",
+                        "data": event,
+                        "timestamp": now_iso,
+                    })
+                except Exception:
+                    break
+
         logger.info(
             "WebSocket connected",
             connection_id=self._connection_info[websocket]["id"],
             channels=list(self._connection_channels.get(websocket, [])),
         )
     
-    async def _subscribe(self, websocket: WebSocket, channel: str):
-        """Subscribe connection to a channel."""
+    async def _subscribe(self, websocket: WebSocket, channel: str, user_id: Optional[str] = None):
+        """Subscribe connection to a channel. Validates whitelist and ACL (auth-required channels)."""
+        # user:* channels require the connection to be authenticated as that user
+        if channel.startswith("user:"):
+            target_uid = channel.split(":", 1)[1]
+            if not user_id or user_id != target_uid:
+                return False  # silently reject
+        elif channel not in PUBLIC_CHANNELS:
+            return False  # unknown channel
+        elif channel in AUTH_REQUIRED_CHANNELS and not user_id:
+            return False  # ACL: sensitive channel requires auth
         if channel not in self._channels:
             self._channels[channel] = set()
         self._channels[channel].add(websocket)
         self._connection_channels[websocket].add(channel)
+        return True
     
     async def _unsubscribe(self, websocket: WebSocket, channel: str):
         """Unsubscribe connection from a channel."""
@@ -111,15 +212,23 @@ class ConnectionManager:
         )
     
     async def subscribe(self, websocket: WebSocket, channel: str):
-        """Subscribe to additional channel."""
+        """Subscribe to additional channel (validated)."""
+        user_id = self._connection_info.get(websocket, {}).get("user_id")
         async with self._lock:
-            await self._subscribe(websocket, channel)
+            ok = await self._subscribe(websocket, channel, user_id=user_id)
         
-        await websocket.send_json({
-            "type": "subscribed",
-            "channel": channel,
-            "timestamp": datetime.utcnow().isoformat(),
-        })
+        if ok:
+            await websocket.send_json({
+                "type": "subscribed",
+                "channel": channel,
+                "timestamp": datetime.utcnow().isoformat(),
+            })
+        else:
+            await websocket.send_json({
+                "type": "error",
+                "message": f"Channel '{channel}' not allowed",
+                "timestamp": datetime.utcnow().isoformat(),
+            })
     
     async def unsubscribe(self, websocket: WebSocket, channel: str):
         """Unsubscribe from a channel."""
@@ -139,6 +248,28 @@ class ConnectionManager:
         exclude: WebSocket = None,
     ):
         """Broadcast message to all connections in a channel."""
+        if channel == "market_data" and isinstance(message, dict):
+            self._last_market_data = dict(message)
+        if channel == "dashboard" and isinstance(message, dict):
+            if message.get("event_type") == "data.refresh_completed":
+                data = message.get("data") or {}
+                source_id = data.get("source_id")
+                summary = data.get("summary") or {}
+                updated_at = summary.get("updated_at")
+                if source_id and updated_at:
+                    self._last_refresh_by_source[source_id] = updated_at
+        if channel == "threat_intelligence" and isinstance(message, dict):
+            event_type = message.get("event_type")
+            if event_type in {"threat.social_detected", "threat.detected"}:
+                event_copy = dict(message)
+                signature = self._threat_signature(event_copy)
+                if signature not in self._last_threat_signatures:
+                    self._last_threat_events.append(event_copy)
+                    self._last_threat_signatures.add(signature)
+                    # Keep small rolling window
+                    if len(self._last_threat_events) > 30:
+                        self._last_threat_events = self._last_threat_events[-30:]
+                        self._last_threat_signatures = {self._threat_signature(evt) for evt in self._last_threat_events}
         if channel not in self._channels:
             return
         
@@ -279,11 +410,24 @@ async def emit_notification(user_id: str, notification: dict):
 
 # ==================== WEBSOCKET ENDPOINTS ====================
 
+async def _resolve_ws_user_id(token: Optional[str]) -> Optional[str]:
+    """Extract user_id from JWT token for WebSocket connections. Returns None if token is absent or invalid."""
+    if not token:
+        return None
+    try:
+        from jose import jwt as _jwt
+        from src.core.config import settings as _s
+        payload = _jwt.decode(token, _s.secret_key, algorithms=[_s.algorithm])
+        return payload.get("sub")
+    except Exception:
+        return None
+
+
 @router.websocket("/connect")
 async def websocket_endpoint(
     websocket: WebSocket,
     channels: str = Query(default="dashboard", description="Comma-separated channels"),
-    user_id: str = Query(default=None, description="User ID for personal notifications"),
+    token: Optional[str] = Query(default=None, description="JWT token for authenticated connections"),
 ):
     """
     Main WebSocket endpoint for real-time updates.
@@ -297,7 +441,7 @@ async def websocket_endpoint(
       - stress_tests: Stress test progress
       - viewer: Real-time viewer telemetry (position/focus)
       - annotations: Collaboration events for annotations
-    - user_id: Optional user ID for personal notifications
+    - token: Optional JWT token to identify the user securely
     
     **Incoming Messages:**
     - {"action": "subscribe", "channel": "..."} - Subscribe to channel
@@ -311,6 +455,10 @@ async def websocket_endpoint(
     - {"type": "pong"} - Pong response
     """
     channel_list = [c.strip() for c in channels.split(",") if c.strip()]
+    user_id = await _resolve_ws_user_id(token)
+    # ACL: drop auth-required channels if not authenticated (no 403 to avoid leaking channel list)
+    if not user_id:
+        channel_list = [ch for ch in channel_list if ch not in AUTH_REQUIRED_CHANNELS]
     
     await manager.connect(websocket, channels=channel_list, user_id=user_id)
     
@@ -396,11 +544,16 @@ async def get_websocket_stats():
 async def broadcast_message(
     channel: str = Query(..., description="Channel to broadcast to"),
     message: dict = None,
+    current_user: User = Depends(get_current_user),
 ):
     """
-    Broadcast a message to a channel (admin only).
+    Broadcast a message to a channel (admin only — requires valid JWT + admin role).
     
     Used for testing and admin notifications.
     """
+    from src.models.user import UserRole
+    if current_user.role != UserRole.ADMIN.value:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Admin role required for broadcast")
     await manager.broadcast_to_channel(channel, message or {"test": True})
     return {"status": "sent", "channel": channel}

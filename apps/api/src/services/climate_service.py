@@ -77,6 +77,8 @@ class ClimateRiskAssessment:
     # Metadata
     assessed_at: datetime = None
     data_sources: list[str] = None
+    provenance: Optional[dict] = None  # { data_sources, source_id?, updated_at? }
+    confidence: float = 0.8  # 0-1
     
     def __post_init__(self):
         if self.assessed_at is None:
@@ -211,6 +213,7 @@ class ClimateService:
         data_sources = ["CMIP6", "FEMA", "Copernicus"]
         if flood and getattr(flood, "data_source", "").startswith("Open-Meteo"):
             data_sources.append("Open-Meteo")
+        from src.core.provenance_response import make_provenance
         assessment = ClimateRiskAssessment(
             latitude=latitude,
             longitude=longitude,
@@ -225,6 +228,11 @@ class ClimateService:
             composite_score=composite,
             risk_category=risk_category,
             data_sources=data_sources,
+            provenance=make_provenance(
+                data_sources=data_sources,
+                updated_at=datetime.utcnow().isoformat(),
+            ),
+            confidence=0.8,
         )
         
         self.cache[cache_key] = assessment

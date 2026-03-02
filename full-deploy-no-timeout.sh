@@ -166,7 +166,7 @@ cd ~/global-risk-platform
 cd apps/api
 source .venv/bin/activate
 export USE_SQLITE=true
-nohup python -m uvicorn src.main:app --host 0.0.0.0 --port 9002 --timeout-keep-alive 120 > /tmp/api.log 2>&1 &
+nohup python -m uvicorn src.main:app --host 0.0.0.0 --port 9002 --timeout-keep-alive 120 --no-access-log > /tmp/api.log 2>&1 &
 echo "✅ Backend started on port 9002"
 
 # Start frontend

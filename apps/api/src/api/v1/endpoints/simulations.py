@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
+from src.core.provenance_response import make_risk_response_provenance
 from src.models.asset import Asset
 from src.services.climate_service import ClimateScenario, climate_service
 from src.services.financial_models import financial_model_service
@@ -131,6 +132,8 @@ class FinancialAnalysisResponse(BaseModel):
     
     # Summary
     risk_summary: dict
+    provenance: Optional[dict] = None
+    confidence: Optional[float] = None
 
 
 # Credit Limit Schemas (Phase 0.2)
@@ -430,6 +433,10 @@ async def run_financial_analysis(
             "lgd_factors": lgd_result.factors,
             "valuation_factors": valuation_result.factors if valuation_result else None,
         },
+        **make_risk_response_provenance(
+            data_sources=["financial_models", "asset_risk"],
+            confidence=0.75,
+        ),
     )
 
 
@@ -535,3 +542,81 @@ async def calculate_insurance_premium(
         deductible_discount=result.deductible_discount,
         premium_breakdown=result.premium_breakdown,
     )
+
+
+# ==================== MULTI-MODULE SIMULATION (FR-CROSS-002) ====================
+
+class MultiModuleSimulationRequest(BaseModel):
+    """Request for cross-module simulation: infra failure -> supply chain -> financial contagion."""
+    infrastructure_failure_ids: list[str] = Field(..., min_length=1, description="CIP infrastructure IDs that fail")
+    time_horizon_hours: int = Field(default=72, ge=1, le=720)
+
+
+@router.post("/multi-module", summary="Multi-module simulation (FR-CROSS-002)")
+async def run_multi_module_simulation(
+    data: MultiModuleSimulationRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Run cross-module simulation: infrastructure failure -> supply chain disruption -> financial contagion.
+    
+    Stages:
+    1. CIP: Cascade from initial infra failures
+    2. SCSS: Impact on suppliers dependent on affected infrastructure
+    3. SRO: Financial contagion from exposed institutions
+    """
+    from src.modules.cip.service import CIPService
+    from src.modules.scss.service import SCSSService
+    from src.modules.sro.contagion_simulator import get_contagion_simulator, ShockDefinition
+
+    cip_svc = CIPService(db)
+    scss_svc = SCSSService(db)
+    sro_sim = get_contagion_simulator(db)
+
+    # 1. CIP cascade
+    cip_result = await cip_svc.run_cascade_simulation(
+        initial_failure_ids=data.infrastructure_failure_ids,
+        time_horizon_hours=data.time_horizon_hours,
+        name="Multi-module run",
+    )
+    if "error" in cip_result:
+        raise HTTPException(status_code=400, detail=cip_result["error"])
+    affected_infra = set(a["infrastructure_id"] for a in cip_result.get("affected_assets", []))
+
+    # 2. SCSS: Identify suppliers impacted (stub: use bottleneck/route analysis)
+    scss_impact = {"suppliers_affected": 0, "message": "Supply chain impact estimated from CIP cascade"}
+    try:
+        bottlenecks = await scss_svc.analyze_bottlenecks()
+        scss_impact["bottlenecks_in_scope"] = len(bottlenecks.get("bottlenecks", []))
+    except Exception:
+        pass
+
+    # 3. SRO: Financial contagion (physical shock propagates to financial system)
+    shock = ShockDefinition(
+        shock_type="infrastructure_cascade",
+        magnitude=min(3.0, 1.0 + len(affected_infra) * 0.2),
+        affected_region=None,
+        affected_sector="finance",
+        duration_days=30,
+    )
+    contagion_result = await sro_sim.simulate_cascade(
+        initial_shock=shock,
+        time_horizon_days=data.time_horizon_hours // 24 or 1,
+        interventions=None,
+        n_monte_carlo=50,
+    )
+
+    return {
+        "cip": {
+            "initial_failures": data.infrastructure_failure_ids,
+            "total_affected": cip_result.get("total_affected", 0),
+            "impact_score": cip_result.get("impact_score"),
+            "population_affected": cip_result.get("population_affected", 0),
+        },
+        "scss": scss_impact,
+        "sro": {
+            "probability_systemic_collapse": contagion_result.probability_systemic_collapse,
+            "percentiles": contagion_result.percentiles,
+            "critical_path": contagion_result.critical_path[:10],
+        },
+    }

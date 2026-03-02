@@ -35,27 +35,33 @@ export default function StressTestReportPage() {
       .catch(() => setCities([]))
   }, [])
 
+  const PDF_EXPORT_TIMEOUT_MS = 2 * 60 * 1000 // 2 minutes
+
   const onExportPDF = useCallback(async () => {
     if (!report) return
     setIsExportingPDF(true)
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), PDF_EXPORT_TIMEOUT_MS)
     try {
       const pdfRequest = {
         test_name: report.eventName,
         city_name: report.cityName,
         test_type: report.eventType,
-        severity: report.zones.length > 0
-          ? Math.max(...report.zones.map(z =>
+        severity: (report.zones?.length ?? 0) > 0
+          ? Math.max(...(report.zones ?? []).map(z =>
               z.riskLevel === 'critical' ? 0.9 : z.riskLevel === 'high' ? 0.7 : z.riskLevel === 'medium' ? 0.5 : 0.3
             ))
           : 0.5,
-        zones: report.zones.map(z => ({
+        zones: (report.zones ?? []).map(z => ({
           name: z.label,
           zone_level: z.riskLevel,
           affected_assets_count: z.affectedBuildings,
           expected_loss: z.estimatedLoss,
           population_affected: z.populationAffected,
+          radius: z.radius,
+          recommendations: z.recommendations,
         })),
-        actions: report.mitigationActions.map(a => ({
+        actions: (report.mitigationActions ?? []).map(a => ({
           title: a.action,
           priority: a.priority,
           estimated_cost: a.cost,
@@ -69,12 +75,18 @@ export default function StressTestReportPage() {
         concluding_summary: report.concludingSummary ?? undefined,
         report_v2: report.reportV2 ?? undefined,
         currency: report.currency ?? undefined,
+        decision_object: report.decisionObject ?? undefined,
+        event_name: report.eventName ?? undefined,
+        disclosure_draft: report.disclosureDraft ?? undefined,
+        data_sources_used: report.dataSourcesUsed ?? undefined,
       }
       const response = await fetch('/api/v1/stress/report/pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(pdfRequest),
+        signal: controller.signal,
       })
+      clearTimeout(timeoutId)
       if (!response.ok) throw new Error(`PDF generation failed: ${response.statusText}`)
       const blob = await response.blob()
       const url = window.URL.createObjectURL(blob)
@@ -86,8 +98,12 @@ export default function StressTestReportPage() {
       document.body.removeChild(link)
       window.URL.revokeObjectURL(url)
     } catch (e) {
+      clearTimeout(timeoutId)
+      const isTimeout = e instanceof Error && e.name === 'AbortError'
       console.error('PDF export failed:', e)
-      alert('PDF export failed. Please try again.')
+      alert(isTimeout
+        ? 'PDF generation is taking too long. The server may be busy. Please try again in a moment.'
+        : 'PDF export failed. Please try again.')
     } finally {
       setIsExportingPDF(false)
     }
@@ -105,14 +121,14 @@ export default function StressTestReportPage() {
 
   if (report === null) {
     return (
-      <div className="min-h-screen bg-[#0a0a0f] text-white flex flex-col items-center justify-center p-8">
-        <h1 className="text-xl font-medium mb-2">No report data</h1>
-        <p className="text-white/60 text-sm text-center max-w-md mb-6">
+      <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col items-center justify-center p-8">
+        <h1 className="text-xl font-display font-medium mb-2">No report data</h1>
+        <p className="text-zinc-400 text-sm text-center max-w-md mb-6">
           Complete a stress test in Digital Twin and click View Report to open the report here.
         </p>
         <Link
           to="/command"
-          className="px-4 py-2 bg-amber-500/20 text-amber-400 rounded-lg text-sm hover:bg-amber-500/30 transition-colors"
+          className="px-4 py-2 bg-zinc-700 text-zinc-400 rounded-md text-sm hover:bg-zinc-600 transition-colors"
         >
           Go to Command Center
         </Link>
@@ -121,34 +137,35 @@ export default function StressTestReportPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-white flex flex-col">
+    <div className="h-screen bg-zinc-950 text-zinc-100 flex flex-col overflow-hidden">
       {/* Top bar */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 shrink-0">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-700 shrink-0">
         <div>
-          <h1 className="text-white text-lg font-medium">Stress Test Report</h1>
-          <p className="text-white/50 text-sm">{report.cityName} • {report.eventName}</p>
+          <h1 className="text-zinc-100 text-lg font-display font-medium">Stress Test Report</h1>
+          <p className="text-zinc-500 text-sm">{report.cityName} • {report.eventName}</p>
+          <p className="text-zinc-600 text-xs mt-0.5">Scenario applied as hazard/severity template to selected location.</p>
         </div>
         <div className="flex items-center gap-2">
           <Link
             to="/command"
-            className="px-3 py-1.5 text-white/60 hover:text-white/80 text-sm transition-colors"
+            className="px-3 py-1.5 text-zinc-400 hover:text-zinc-200 text-sm transition-colors"
           >
             Command Center
           </Link>
           <button
             onClick={onClose}
-            className="p-2 bg-white/10 rounded-lg hover:bg-white/20 transition-colors"
+            className="p-2 bg-zinc-700 rounded-md hover:bg-zinc-600 transition-colors"
             title="Close"
           >
-            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 text-zinc-100" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
       </div>
 
-      {/* Report body */}
-      <div className="flex-1 overflow-hidden">
+      {/* Report body — scrollable so full report can be read; explicit scrollbar */}
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden" style={{ scrollbarGutter: 'stable' }}>
         <StressTestReportContent
           report={report}
           cities={cities}

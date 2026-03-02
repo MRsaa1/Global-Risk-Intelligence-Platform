@@ -25,11 +25,11 @@ const steps = [
           Our platform connects physical reality with financial models in real-time.
         </p>
         <div className="grid grid-cols-2 gap-4">
-          <div className="p-4 bg-dark-bg rounded-xl">
+          <div className="p-4 bg-dark-bg rounded-md">
             <p className="text-sm font-medium mb-1">5 Layers</p>
             <p className="text-xs text-dark-muted">From Verified Truth to Autonomous Agents</p>
           </div>
-          <div className="p-4 bg-dark-bg rounded-xl">
+          <div className="p-4 bg-dark-bg rounded-md">
             <p className="text-sm font-medium mb-1">Real-time</p>
             <p className="text-xs text-dark-muted">Continuous synchronization</p>
           </div>
@@ -49,19 +49,19 @@ const steps = [
         </p>
         <ul className="space-y-2 text-sm">
           <li className="flex items-center gap-2">
-            <CheckCircleIcon className="w-5 h-5 text-green-400" />
+            <CheckCircleIcon className="w-5 h-5 text-green-400/80" />
             <span>3D BIM models with full geometry</span>
           </li>
           <li className="flex items-center gap-2">
-            <CheckCircleIcon className="w-5 h-5 text-green-400" />
+            <CheckCircleIcon className="w-5 h-5 text-green-400/80" />
             <span>Complete timeline from construction to now</span>
           </li>
           <li className="flex items-center gap-2">
-            <CheckCircleIcon className="w-5 h-5 text-green-400" />
+            <CheckCircleIcon className="w-5 h-5 text-green-400/80" />
             <span>Real-time sensor data</span>
           </li>
           <li className="flex items-center gap-2">
-            <CheckCircleIcon className="w-5 h-5 text-green-400" />
+            <CheckCircleIcon className="w-5 h-5 text-green-400/80" />
             <span>Climate exposures and risk scores</span>
           </li>
         </ul>
@@ -78,7 +78,7 @@ const steps = [
         <p className="text-dark-muted">
           Traditional models miss hidden risks. We map the full dependency network:
         </p>
-        <div className="p-4 bg-dark-bg rounded-xl">
+        <div className="p-4 bg-dark-bg rounded-md">
           <p className="text-sm font-medium mb-2">Example:</p>
           <p className="text-xs text-dark-muted">
             Power Grid Sector 7 failure affects 23 assets with €1.2B exposure.
@@ -100,7 +100,7 @@ const steps = [
         </p>
         <div className="grid grid-cols-2 gap-3">
           {['Physics', 'Climate', 'Economics', 'Cascade'].map((engine) => (
-            <div key={engine} className="p-3 bg-dark-bg rounded-lg text-center">
+            <div key={engine} className="p-3 bg-dark-bg rounded-md text-center">
               <p className="text-sm font-medium">{engine}</p>
             </div>
           ))}
@@ -124,7 +124,7 @@ const steps = [
             { name: 'ANALYST', desc: 'Deep dives on alerts' },
             { name: 'ADVISOR', desc: 'Recommends actions with ROI' },
           ].map((agent) => (
-            <div key={agent.name} className="p-3 bg-dark-bg rounded-lg">
+            <div key={agent.name} className="p-3 bg-dark-bg rounded-md">
               <p className="text-sm font-medium">{agent.name}</p>
               <p className="text-xs text-dark-muted">{agent.desc}</p>
             </div>
@@ -169,17 +169,17 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   const Icon = step.icon
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-8">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-8">
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="glass rounded-2xl p-8 max-w-2xl w-full max-h-[90vh] overflow-auto"
+        className="glass rounded-md p-8 max-w-2xl w-full max-h-[90vh] overflow-auto"
       >
         {/* Header */}
         <div className="flex items-start justify-between mb-6">
           <div className="flex items-center gap-4">
-            <div className="p-3 bg-primary-500/20 rounded-xl">
-              <Icon className="w-8 h-8 text-primary-400" />
+            <div className="p-3 bg-zinc-500/20 rounded-md">
+              <Icon className="w-8 h-8 text-zinc-400" />
             </div>
             <div>
               <h2 className="text-2xl font-display font-bold">{step.title}</h2>
@@ -188,7 +188,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
           </div>
           <button
             onClick={handleSkip}
-            className="p-2 hover:bg-dark-bg rounded-lg transition-colors"
+            className="p-2 hover:bg-dark-bg rounded-md transition-colors"
           >
             <XMarkIcon className="w-5 h-5 text-dark-muted" />
           </button>
@@ -201,7 +201,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
               <div
                 key={s.id}
                 className={`h-1 flex-1 rounded-full ${
-                  idx <= currentStep ? 'bg-primary-500' : 'bg-dark-border'
+                  idx <= currentStep ? 'bg-zinc-500' : 'bg-dark-border'
                 }`}
               />
             ))}
@@ -229,7 +229,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
           <button
             onClick={handlePrevious}
             disabled={currentStep === 0}
-            className="px-4 py-2 bg-dark-card border border-dark-border rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-dark-bg transition-colors"
+            className="px-4 py-2 bg-dark-card border border-dark-border rounded-md font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-dark-bg transition-colors"
           >
             Previous
           </button>
@@ -242,7 +242,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
             </button>
             <button
               onClick={handleNext}
-              className="px-6 py-2 bg-primary-500 text-white rounded-xl font-medium hover:bg-primary-600 transition-colors"
+              className="px-6 py-2 bg-zinc-500 text-white rounded-md font-medium hover:bg-zinc-600 transition-colors"
             >
               {currentStep === steps.length - 1 ? 'Get Started' : 'Next'}
             </button>

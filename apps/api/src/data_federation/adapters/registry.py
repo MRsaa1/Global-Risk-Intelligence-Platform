@@ -10,6 +10,7 @@ from .noaa import NOAAAdapter
 from .fema import FEMAAdapter
 from .cmip6 import CMIP6Adapter
 from .nim import NIMAdapter
+from .overpass import OverpassAdapter
 
 
 _REGISTRY: Dict[str, BaseAdapter] = {}
@@ -25,6 +26,7 @@ def _ensure_registry() -> None:
         FEMAAdapter,
         CMIP6Adapter,
         NIMAdapter,
+        OverpassAdapter,
     ):
         inst = cls()
         _REGISTRY[inst.name()] = inst

@@ -28,6 +28,29 @@ from src.services.knowledge_graph import get_knowledge_graph_service
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Building models: cycle by asset order (1st asset → 1st model, 2nd → 2nd, then repeat).
+# Served from frontend public/models/buildings/
+# ---------------------------------------------------------------------------
+BUILDING_MODELS_ORDERED: list[str] = [
+    "/models/buildings/beautiful_city.glb",
+    "/models/buildings/building_no_6_form_tokyo_otemachi_building_pack.glb",
+    "/models/buildings/bulding_pacific_electric_lofts_low_poly.glb",
+    "/models/buildings/city_block.glb",
+    "/models/buildings/city_scene.glb",
+    "/models/buildings/cultural_center.glb",
+    "/models/buildings/full_gameready_city_buildings.glb",
+    "/models/buildings/full_gameready_city_buildings_ii.glb",
+    "/models/buildings/full_gameready_city_buildings_iii_hongkong.glb",
+    "/models/buildings/game_ready_mid_poly_building.glb",
+    "/models/buildings/kurala_kylamaki_workshop_in_turku_finland.glb",
+    "/models/buildings/low-poly_city_buildings.glb",
+    "/models/buildings/modern_city_block.glb",
+    "/models/buildings/nashville_building.glb",
+    "/models/buildings/new_york_buildings.glb",
+]
+_DEFAULT_MODEL = BUILDING_MODELS_ORDERED[0] if BUILDING_MODELS_ORDERED else "/models/buildings/beautiful_city.glb"
+
 
 SAMPLE_ASSETS = [
     {
@@ -221,20 +244,43 @@ async def seed_sample_assets(db: AsyncSession) -> list[Asset]:
     return created_assets
 
 
+async def refresh_twin_geometry_from_asset_type(db: AsyncSession) -> int:
+    """
+    Update existing Digital Twins: set geometry_path by asset order (1st → 1st model, 2nd → 2nd, then repeat).
+    Use when demo was loaded before or after replacing building models; no need to clear/re-seed.
+    Returns number of twins updated.
+    """
+    result = await db.execute(
+        select(DigitalTwin, Asset).where(DigitalTwin.asset_id == Asset.id).order_by(Asset.id)
+    )
+    pairs = result.all()
+    n = len(BUILDING_MODELS_ORDERED) or 1
+    for i, (twin, asset) in enumerate(pairs):
+        twin.geometry_type = "glb"
+        twin.geometry_path = BUILDING_MODELS_ORDERED[i % n]
+    await db.commit()
+    logger.info("Refreshed geometry_path for %s digital twins (cycle order)", len(pairs))
+    return len(pairs)
+
+
 async def seed_digital_twins(db: AsyncSession, assets: list[Asset]) -> list[DigitalTwin]:
     """Create digital twins for assets with sample timeline."""
     twins = []
     
-    for asset in assets:
+    n_models = len(BUILDING_MODELS_ORDERED) or 1
+    for i, asset in enumerate(assets):
         twin_id = str(uuid4())
         remaining_years = 50 - (2024 - (asset.year_built or 2024))
+        # Cycle: 1st asset → 1st model, 2nd → 2nd, ... then repeat
+        _model_path = BUILDING_MODELS_ORDERED[i % n_models]
         twin = DigitalTwin(
             id=twin_id,
             asset_id=str(asset.id),
             state=TwinState.SYNCHRONIZED,
             last_sync_at=datetime.utcnow(),
             sync_source="seed_data",
-            geometry_type="ifc",
+            geometry_type="glb",
+            geometry_path=_model_path,
             structural_integrity=100 - (asset.physical_risk_score or 0),
             condition_score=100 - (asset.physical_risk_score or 0) * 0.8,
             remaining_useful_life_years=max(0.0, float(remaining_years)),
@@ -689,9 +735,26 @@ async def seed_all(db: AsyncSession):
     - Digital twins with timelines
     - Knowledge graph relationships
     - Sample portfolios, projects, and fraud claims (when tables are empty)
+    
+    Idempotent: if 80+ assets exist, skips (demo already loaded).
     """
     logger.info("Starting data seeding...")
     warnings: list[str] = []
+
+    # Idempotent: skip if demo already loaded
+    r = await db.execute(select(func.count()).select_from(Asset))
+    existing_count = r.scalar() or 0
+    if existing_count >= 80:
+        logger.info("Demo already loaded (%s assets), skipping seed", existing_count)
+        return {
+            "assets_created": 0,
+            "twins_created": 0,
+            "infrastructure_nodes": 0,
+            "portfolios_created": 0,
+            "projects_created": 0,
+            "claims_created": 0,
+            "message": "Demo already loaded. Clear data first if you want to re-seed.",
+        }
 
     # Seed assets
     assets = await seed_sample_assets(db)
@@ -731,6 +794,16 @@ async def seed_all(db: AsyncSession):
         else:
             raise
 
+    # Seed strategic modules (CIP, SCSS, SRO) — 6 entities each + relationships
+    # Non-fatal: never raise — demo must work even if CIP/SCSS/SRO tables or services fail
+    strategic_result = {}
+    try:
+        from src.services.strategic_modules_seed import seed_strategic_modules
+        strategic_result = await seed_strategic_modules(db)
+    except Exception as e:
+        logger.warning("Strategic modules seed failed (non-fatal): %s", e)
+        warnings.append("strategic_modules: " + str(e))
+
     logger.info("Data seeding completed successfully")
     result = {
         "assets_created": len(assets),
@@ -739,7 +812,8 @@ async def seed_all(db: AsyncSession):
         "portfolios_created": portfolios_created,
         "projects_created": projects_created,
         "claims_created": claims_created,
-        "message": "Demo base loaded. Portfolios, Projects, and Fraud sections now have sample data.",
+        **strategic_result,
+        "message": "Demo base loaded. Portfolios, Projects, Fraud, and Strategic Modules (CIP, SCSS, SRO) have sample data.",
     }
     if warnings:
         result["warnings"] = warnings

@@ -12,43 +12,43 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class REITMetrics:
-    """REIT metrics calculation result."""
+    """REIT metrics calculation result. Income-related fields are None when no NOI data."""
     portfolio_id: str
     portfolio_name: str
     as_of_date: date
-    
+
     # Core metrics
     nav: float
     nav_per_share: Optional[float]
-    ffo: float
-    affo: float
-    
-    # Yield
-    dividend_yield: float
-    earnings_yield: float
-    
+    ffo: Optional[float]
+    affo: Optional[float]
+
+    # Yield (None when no income data)
+    dividend_yield: Optional[float]
+    earnings_yield: Optional[float]
+
     # Leverage
     debt_to_equity: float
     loan_to_value: float
-    interest_coverage: float
-    
-    # Operational
+    interest_coverage: Optional[float]
+
+    # Operational (noi/cap_rate None when no annual_noi)
     occupancy: float
-    noi: float
-    cap_rate: float
-    
+    noi: Optional[float]
+    cap_rate: Optional[float]
+
     # Performance
     ytd_return: float
     total_return_1y: Optional[float]
-    
+
     # Portfolio stats
     asset_count: int
     total_gfa_m2: float
-    
+
     # Risk
     var_95: float
     climate_risk_score: float
-    
+
     # Breakdown
     sector_allocation: dict
     geographic_allocation: dict
@@ -109,31 +109,34 @@ class REITMetricsService:
             for pa, a in portfolio_assets
         )
         
-        # Calculate NOI
-        noi = sum(
+        # Calculate NOI (None when no annual_noi data on any asset)
+        noi_raw = sum(
             (pa.annual_noi or 0) * (pa.share_pct / 100)
             for pa, a in portfolio_assets
         )
-        
-        # FFO = NOI - interest expense (estimate) + depreciation (estimate)
-        # Simplified: FFO ≈ NOI * 0.7 (after interest)
-        ffo = noi * 0.7
-        
-        # AFFO = FFO - maintenance capex (estimate 5% of NOI)
-        affo = ffo - (noi * 0.05)
-        
+        has_noi_data = any(pa.annual_noi is not None for pa, a in portfolio_assets)
+        noi = noi_raw if has_noi_data else None
+
+        # FFO / AFFO / yields / interest coverage / cap_rate: only when we have income data
+        if noi is not None and noi > 0:
+            ffo = noi * 0.7
+            affo = ffo - (noi * 0.05)
+        else:
+            ffo = None
+            affo = None
+
         # Calculate debt
         total_debt = portfolio.total_debt or nav * 0.4  # Assume 40% leverage
         total_equity = nav - total_debt
-        
+
         # Leverage metrics
         debt_to_equity = total_debt / total_equity if total_equity > 0 else 0
         loan_to_value = total_debt / nav if nav > 0 else 0
-        
-        # Interest coverage (assume 4% interest rate)
+
+        # Interest coverage (None when no NOI)
         annual_interest = total_debt * 0.04
-        interest_coverage = noi / annual_interest if annual_interest > 0 else 0
-        
+        interest_coverage = (noi / annual_interest) if (annual_interest > 0 and noi is not None) else None
+
         # Occupancy (weighted average)
         total_weight = sum(
             (pa.current_value or 0) for pa, a in portfolio_assets
@@ -142,13 +145,17 @@ class REITMetricsService:
             (pa.occupancy or 0.95) * (pa.current_value or 0)
             for pa, a in portfolio_assets
         ) / total_weight if total_weight > 0 else 0.95
-        
-        # Cap rate
-        cap_rate = noi / nav if nav > 0 else 0.05
-        
-        # Yield
-        dividend_yield = (affo * 0.9) / nav if nav > 0 else 0  # 90% payout ratio
-        earnings_yield = ffo / nav if nav > 0 else 0
+
+        # Cap rate (None when no NOI data)
+        cap_rate = (noi / nav) if (nav > 0 and noi is not None) else None
+
+        # Yield (None when no income data)
+        if nav > 0 and ffo is not None and affo is not None:
+            dividend_yield = (affo * 0.9) / nav
+            earnings_yield = ffo / nav
+        else:
+            dividend_yield = None
+            earnings_yield = None
         
         # Per share metrics
         nav_per_share = nav / shares_outstanding if shares_outstanding else None

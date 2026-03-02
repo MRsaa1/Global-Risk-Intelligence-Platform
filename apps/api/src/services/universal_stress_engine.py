@@ -133,8 +133,10 @@ def run_universal_monte_carlo(
     exposures: List[ExposureEntity],
     correlation_matrix: Optional[np.ndarray] = None,
     stress_factor: float = 1.0,
-    n_simulations: int = 10000,
-    cascade_factors: Optional[np.ndarray] = None
+    n_simulations: int = 100000,
+    cascade_factors: Optional[np.ndarray] = None,
+    distribution: str = "gaussian",
+    degrees_of_freedom: int = 5,
 ) -> MonteCarloResult:
     """
     Universal Monte Carlo simulation for stress testing.
@@ -145,7 +147,7 @@ def run_universal_monte_carlo(
         exposures: List of exposure entities
         correlation_matrix: Asset correlation matrix (n_assets x n_assets)
         stress_factor: Scenario severity multiplier for PD
-        n_simulations: Number of Monte Carlo paths (default 10,000)
+        n_simulations: Number of Monte Carlo paths (default 100,000)
         cascade_factors: Optional per-entity cascade factors
     
     Returns:
@@ -193,8 +195,11 @@ def run_universal_monte_carlo(
         logger.warning("Correlation matrix not positive definite, using identity")
         chol = np.eye(n_assets)
     
-    # Generate correlated random samples (Gaussian copula)
-    z = np.random.standard_normal((n_simulations, n_assets))
+    # Generate correlated random samples (Gaussian copula or Student-t)
+    if distribution == "student_t":
+        z = np.random.standard_t(degrees_of_freedom, size=(n_simulations, n_assets))
+    else:
+        z = np.random.standard_normal((n_simulations, n_assets))
     correlated_z = z @ chol.T
     
     # Convert PDs to thresholds (inverse normal CDF)
@@ -325,11 +330,13 @@ def get_sector_parameters(
     
     params = SECTOR_PARAMS.get(sector, SECTOR_PARAMS[SectorType.ENTERPRISE])
     
-    # Adjust for scenario type
+    # Adjust for scenario type (support composite e.g. oil_20+taiwan_earthquake)
     scenario_multipliers = {
         "flood": {"pd_mult": 1.5, "lgd_mult": 1.3},
         "seismic": {"pd_mult": 1.8, "lgd_mult": 1.5},
         "financial": {"pd_mult": 2.0, "lgd_mult": 1.2},
+        "volatility_spike": {"pd_mult": 2.2, "lgd_mult": 1.25},
+        "liquidity_dry_up": {"pd_mult": 1.9, "lgd_mult": 1.4},
         "pandemic": {"pd_mult": 1.4, "lgd_mult": 1.1},
         "cyber": {"pd_mult": 1.3, "lgd_mult": 1.4},
         "supply_chain": {"pd_mult": 1.6, "lgd_mult": 1.3},
@@ -337,12 +344,18 @@ def get_sector_parameters(
         "climate": {"pd_mult": 1.5, "lgd_mult": 1.4},
         "geopolitical": {"pd_mult": 1.7, "lgd_mult": 1.3},
         "energy": {"pd_mult": 1.4, "lgd_mult": 1.2},
+        "oil_20": {"pd_mult": 1.5, "lgd_mult": 1.2},
+        "taiwan_earthquake": {"pd_mult": 1.8, "lgd_mult": 1.4},
     }
-    
-    scenario_mult = scenario_multipliers.get(
-        scenario_type.lower(), 
-        {"pd_mult": 1.0, "lgd_mult": 1.0}
-    )
+    st_lower = scenario_type.lower()
+    if "+" in st_lower:
+        parts = [p.strip() for p in st_lower.split("+") if p.strip()]
+        pd_mults = [scenario_multipliers.get(p, {"pd_mult": 1.0, "lgd_mult": 1.0})["pd_mult"] for p in parts]
+        lgd_mults = [scenario_multipliers.get(p, {"pd_mult": 1.0, "lgd_mult": 1.0})["lgd_mult"] for p in parts]
+        composite_factor = 0.9 ** max(0, len(parts) - 1)
+        scenario_mult = {"pd_mult": min(2.5, max(pd_mults) * composite_factor), "lgd_mult": min(1.5, max(lgd_mults) * composite_factor)}
+    else:
+        scenario_mult = scenario_multipliers.get(st_lower, {"pd_mult": 1.0, "lgd_mult": 1.0})
     
     # Apply severity scaling (1x to 3x at 100% severity)
     severity_mult = 1 + (severity * 2)
@@ -369,8 +382,12 @@ def execute_universal_stress_test(
     scenario_type: str,
     severity: float,
     correlation_matrix: Optional[np.ndarray] = None,
-    n_simulations: int = 10000,
-    include_cascade: bool = True
+    n_simulations: int = 100000,
+    include_cascade: bool = True,
+    market_regime: Optional[str] = None,
+    market_indicators: Optional[Dict[str, Any]] = None,
+    distribution: str = "gaussian",
+    degrees_of_freedom: int = 5,
 ) -> StressTestResult:
     """
     Execute a complete universal stress test.
@@ -419,6 +436,42 @@ def execute_universal_stress_test(
     sector_params = get_sector_parameters(primary_sector, scenario_type, severity)
     stress_factor = sector_params["severity_mult"]
     
+    # --- Regime Engine integration ---
+    regime_used = None
+    regime_params_dict = None
+    try:
+        from src.services.regime_engine import (
+            resolve_regime,
+            get_regime_params,
+            apply_regime_to_stress_factor,
+            apply_regime_to_correlation,
+            apply_regime_to_pd_lgd,
+        )
+        regime = resolve_regime(market_regime, market_indicators)
+        regime_used = regime.value
+        rp = get_regime_params(regime)
+        regime_params_dict = rp.to_dict()
+
+        # Apply regime multipliers to stress factor
+        stress_factor = apply_regime_to_stress_factor(stress_factor, regime)
+
+        # Apply regime PD/LGD factors to each exposure entity
+        pd_arr = np.array([e.pd for e in exposures])
+        lgd_arr = np.array([e.lgd for e in exposures])
+        stressed_pd, stressed_lgd = apply_regime_to_pd_lgd(pd_arr, lgd_arr, regime)
+        for i, entity in enumerate(exposures):
+            entity.pd = float(stressed_pd[i])
+            entity.lgd = float(stressed_lgd[i])
+
+        # Apply regime correlation shift
+        if correlation_matrix is not None:
+            correlation_matrix = apply_regime_to_correlation(correlation_matrix, regime)
+
+        logger.info("Regime '%s' applied: stress_factor=%.3f, vol_mult=%.1f, pd_factor=%.1f",
+                     regime_used, stress_factor, rp.volatility_multiplier, rp.pd_stress_factor)
+    except ImportError:
+        logger.warning("Regime engine not available, proceeding without regime adjustments")
+    
     # Apply cascade factors if enabled
     if include_cascade:
         cf_min, cf_max = sector_params["cf_min"], sector_params["cf_max"]
@@ -431,7 +484,9 @@ def execute_universal_stress_test(
         exposures=exposures,
         correlation_matrix=correlation_matrix,
         stress_factor=stress_factor,
-        n_simulations=n_simulations
+        n_simulations=n_simulations,
+        distribution=distribution,
+        degrees_of_freedom=degrees_of_freedom,
     )
     
     # Calculate direct loss (deterministic using expected values)
@@ -460,7 +515,11 @@ def execute_universal_stress_test(
             "scenario_type": scenario_type,
             "severity": severity,
             "stress_factor": stress_factor,
-            "sector_params": sector_params
+            "sector_params": sector_params,
+            "regime_used": regime_used,
+            "regime_parameters": regime_params_dict,
+            "distribution": distribution,
+            "degrees_of_freedom": degrees_of_freedom if distribution == "student_t" else None,
         }
     )
 
@@ -525,7 +584,7 @@ def compute_monte_carlo_metrics(
     sector: str,
     scenario_type: str,
     severity: float,
-    n_simulations: int = 10000
+    n_simulations: int = 100000
 ) -> Dict[str, Any]:
     """
     Quick Monte Carlo computation for report metrics.

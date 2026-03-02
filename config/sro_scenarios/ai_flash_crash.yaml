@@ -1,0 +1,24 @@
+name: AI-Driven Flash Crash
+description: Emerging risk - Algorithmic trading cascade
+initial_shocks:
+  - type: market_flash_crash
+    magnitude: 1.5
+    affected_markets: [equities, derivatives]
+    duration_days: 1
+  - type: liquidity_freeze
+    magnitude: 2.0
+    duration_days: 5
+transmission_channels:
+  direct_exposure:
+    hft_exposure: 50e9
+  indirect_effects:
+    fire_sales_trigger: 0.10
+    margin_call_cascade: true
+interventions:
+  - day: 0
+    type: circuit_breaker
+    markets: [equities, derivatives]
+    duration_days: 1
+  - day: 1
+    type: emergency_liquidity
+    amount_usd: 100e9

@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.config import settings
 from src.core.database import get_db
 from src.models.user import User, UserRole
+from src.models.enterprise_auth import ROLE_PERMISSIONS, RolePermissionOverride
 
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -102,6 +103,24 @@ async def get_current_user(
     return user
 
 
+def resolve_user_id_from_token(token: Optional[str]) -> Optional[str]:
+    """
+    Extract user_id (sub) from JWT token string. For WebSocket query param auth.
+    Returns None if token is absent or invalid. Does not hit DB.
+    """
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(
+            token,
+            settings.secret_key,
+            algorithms=[settings.algorithm],
+        )
+        return payload.get("sub")
+    except JWTError:
+        return None
+
+
 async def get_current_active_user(
     current_user: User = Depends(get_current_user),
 ) -> User:
@@ -163,3 +182,27 @@ def require_role(required_role: UserRole):
 # Role dependencies
 require_admin = require_role(UserRole.ADMIN)
 require_analyst = require_role(UserRole.ANALYST)
+
+
+def require_permission(permission: str):
+    """FastAPI dependency: require the current user to have the given permission (RBAC)."""
+    async def _check(
+        current_user: User = Depends(get_current_active_user),
+        db: AsyncSession = Depends(get_db),
+    ) -> User:
+        base_perms = set(ROLE_PERMISSIONS.get(current_user.role, []))
+        result = await db.execute(
+            select(RolePermissionOverride).where(RolePermissionOverride.user_id == current_user.id)
+        )
+        for o in result.scalars().all():
+            if o.granted:
+                base_perms.add(o.permission)
+            else:
+                base_perms.discard(o.permission)
+        if permission not in base_perms and "admin:all" not in base_perms:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Permission required: {permission}",
+            )
+        return current_user
+    return _check

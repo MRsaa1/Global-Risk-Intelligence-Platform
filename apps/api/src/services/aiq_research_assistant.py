@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.core.config import settings
+from src.services.client_finetune_context import get_client_context_snippet
 from src.services.nemo_guardrails import get_nemo_guardrails_service
 from src.services.nemo_retriever import get_nemo_retriever_service
 from src.services.nvidia_llm import LLMModel, llm_service
@@ -42,6 +43,18 @@ class AiqResult:
     text: str
     sources: List[CitationSource]
     debug: Optional[Dict[str, Any]] = None
+
+
+def _is_complex_query(question: str) -> bool:
+    """Heuristic: long or explicit request for steps/plan → use Nemotron if enabled."""
+    q = (question or "").strip().lower()
+    if len(q) > 300:
+        return True
+    triggers = [
+        "по шагам", "пошагов", "план", "распиши план", "объясни по шагам",
+        "step by step", "steps", "plan", "break down", "reasoning",
+    ]
+    return any(t in q for t in triggers)
 
 
 def _safe_json_dumps(obj: Any, max_len: int = 15_000) -> str:
@@ -197,13 +210,16 @@ Service policies (JSON):
 
 Sources:
 {sources_block if sources_block else "(no external sources)"}"""
-
+        system_prompt = "Be concise and operational. Prefer concrete, verifiable statements."
+        client_snippet = get_client_context_snippet()
+        if client_snippet:
+            system_prompt = client_snippet + "\n\n" + system_prompt
         resp = await llm_service.generate(
             prompt=prompt,
             model=LLMModel.LLAMA_70B,
             max_tokens=650,
             temperature=0.3,
-            system_prompt="Be concise and operational. Prefer concrete, verifiable statements.",
+            system_prompt=system_prompt,
         )
         return resp.content or ""
 
@@ -382,12 +398,19 @@ Policies (JSON):
 Sources:
 {sources_block if sources_block else "(no sources)"}"""
 
+        use_nemotron = getattr(settings, "use_nemotron_for_reasoning", False) and _is_complex_query(question)
+        model = LLMModel.NEMOTRON_NANO_9B if use_nemotron else LLMModel.LLAMA_70B
+        model_id_override = (getattr(settings, "nemotron_model_id", "") or "").strip() or None
+        if use_nemotron and not model_id_override:
+            model_id_override = None  # use enum value
+
         resp = await llm_service.generate(
             prompt=prompt,
-            model=LLMModel.LLAMA_70B,
+            model=model,
             max_tokens=900,
             temperature=0.2,
             system_prompt="Prefer verifiable statements. Ask for missing inputs only if required.",
+            model_id_override=model_id_override if use_nemotron else None,
         )
 
         draft = (resp.content or "").replace("**", "").replace("•", "-")
@@ -398,6 +421,46 @@ Sources:
 
         all_sources = (base_sources + retrieved_sources)[:12]
         return AiqResult(text=final.strip(), sources=all_sources, debug=retrieval_debug)
+
+    async def plan_steps(self, goal: str, context: Optional[Dict[str, Any]] = None) -> List[str]:
+        """
+        Break down a goal into ordered steps (for agentic orchestration).
+        Returns a list of step descriptions. Uses Nemotron when use_nemotron_for_reasoning is True.
+        """
+        if not getattr(llm_service, "is_available", False):
+            return [goal]
+        ctx = context or {}
+        prompt = f"""Given this goal, output a JSON array of 1–8 concrete steps to achieve it. Each step one short sentence.
+Goal: {goal}
+Context: {_safe_json_dumps(ctx, max_len=2000)}
+
+Output only a JSON array of strings, e.g. ["Step 1", "Step 2"]. No markdown."""
+        use_nemotron = getattr(settings, "use_nemotron_for_reasoning", False)
+        model = LLMModel.NEMOTRON_NANO_9B if use_nemotron else LLMModel.LLAMA_70B
+        model_id_override = (getattr(settings, "nemotron_model_id", "") or "").strip() or None
+        resp = await llm_service.generate(
+            prompt=prompt,
+            model=model,
+            max_tokens=600,
+            temperature=0.2,
+            system_prompt="Output only valid JSON array of strings.",
+            model_id_override=model_id_override if use_nemotron else None,
+        )
+        raw = (resp.content or "").strip()
+        # Strip markdown code block if present
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+            raw = raw.strip()
+        try:
+            steps = json.loads(raw)
+            if isinstance(steps, list):
+                return [str(s) for s in steps if s]
+            return [goal]
+        except Exception:
+            logger.debug("plan_steps JSON parse failed, using goal as single step: %s", raw[:200])
+            return [goal]
 
 
 # Singleton

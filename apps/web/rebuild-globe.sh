@@ -1,15 +1,17 @@
 #!/bin/bash
-# Принудительная пересборка фронта, чтобы применились правки глобуса (города по чекбоксам, синие круги как риск-зоны, круги над рельефом).
+# Принудительная пересборка фронта (кэш Vite).
+# Исправляет: 504 Outdated Optimize Dep (react, react-dom, @tanstack/react-query и т.д. не грузятся).
+# Также применяются правки глобуса (города по чекбоксам, синие круги).
 # Запускать из корня репозитория: ./apps/web/rebuild-globe.sh
 
 set -e
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT"
 
-echo "🧹 Очистка кэша Vite..."
+echo "🧹 Очистка кэша Vite (node_modules/.vite, dist)..."
 rm -rf node_modules/.vite
 rm -rf dist
-echo "✅ Кэш удалён"
+echo "✅ Кэш удалён (при 504 Outdated Optimize Dep — перезапустите npm run dev)"
 echo ""
 echo "▶️  Запустите dev-сервер в ЭТОМ терминале:"
 echo "   npm run dev"

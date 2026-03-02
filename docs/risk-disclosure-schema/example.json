@@ -1,0 +1,35 @@
+{
+  "identity": {
+    "municipality_id": "bastrop_tx",
+    "municipality_name": "Bastrop TX",
+    "period": "2026-01-01 to 2026-12-31",
+    "schema_version": "1.0"
+  },
+  "hazards": [
+    { "type": "flood", "score": 72, "level": "high", "source": "community_risk" },
+    { "type": "heat", "score": 65, "level": "medium", "source": "community_risk" }
+  ],
+  "exposure": {
+    "annual_expected_loss_m": 4.2,
+    "loss_100_year_m": 63.0,
+    "projected_2050_m": 6.7
+  },
+  "governance": {
+    "frameworks": ["MUNICIPAL_INSURABILITY"],
+    "sections": 3
+  },
+  "provenance": {
+    "data_sources": ["community_risk", "climate_service", "financial_models", "audit_extension"],
+    "updated_at": "2026-02-27T12:00:00Z",
+    "model_versions": { "risk_model": "v2", "climate_service": "1.0" }
+  },
+  "insurability": {
+    "availability": "limited",
+    "premium_impact_score": 0.72
+  },
+  "roi_evidence": {
+    "loss_reduction_12m": 450000,
+    "reaction_time_median_hours": 4.0,
+    "insurance_impact_score": 0.68
+  }
+}

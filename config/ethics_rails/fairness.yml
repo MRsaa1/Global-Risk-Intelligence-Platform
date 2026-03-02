@@ -1,0 +1,35 @@
+# Fairness — Ethics rail
+# Colang equivalent: define flow fairness; require equity checks for high-impact decisions
+name: fairness
+description: Bias and fairness checks across populations and groups
+version: "1.0"
+
+rules:
+  - id: vulnerable_groups_affected
+    condition: vulnerable_groups_non_empty AND severity_above_threshold
+    severity_threshold: 0.4
+    action: apply_rawlsian
+    message: "Vulnerable populations affected; Rawlsian priority protection applied."
+  - id: disparate_impact
+    condition: impact_unequal_across_groups
+    action: flag_for_review
+    message: "Potential disparate impact; flag for fairness review."
+  - id: require_equity_assessment
+    condition: high_impact_decision
+    impact_threshold: 0.6
+    action: require_impact_assessment
+    message: "High-impact decision; require impact assessment on affected communities."
+
+triggers:
+  - vulnerable_groups
+  - affected_population
+  - severity
+  - object_type
+
+groups_to_check:
+  - children
+  - elderly
+  - low_income
+  - minorities
+  - displaced
+  - disabled

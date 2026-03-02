@@ -6,6 +6,18 @@ export default defineConfig({
   plugins: [
     react(),
   ],
+  // Avoid 504 (Outdated Optimize Dep): pre-bundle core deps; exclude html2canvas so it's in-chunk.
+  // Do NOT use force: true — it re-optimizes every start and causes 504 when the browser has stale refs.
+  optimizeDeps: {
+    include: [
+      'react',
+      'react-dom',
+      'react-dom/client',
+      'react-router-dom',
+      '@tanstack/react-query',
+    ],
+    exclude: ['html2canvas'],
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -16,7 +28,11 @@ export default defineConfig({
   server: {
     port: 5180,
     host: '127.0.0.1',
-    strictPort: true,
+    strictPort: false, // if 5180 is in use, Vite will try 5181, 5182, ...
+    // Pre-transform entry and lazy routes so deps are ready and 504 is less likely
+    warmup: {
+      clientFiles: ['./index.html', './src/main.tsx', './src/App.tsx', './src/pages/Dashboard.tsx', './src/pages/Assets.tsx'],
+    },
     hmr: {
       protocol: 'ws',
       // Use IPv4 explicitly to avoid macOS localhost(::1) ECONNRESET/ECONNREFUSED issues
@@ -59,6 +75,26 @@ export default defineConfig({
     },
   },
   build: {
-    chunkSizeWarningLimit: 3000,
+    chunkSizeWarningLimit: 1500,
+    rollupOptions: {
+      output: {
+        manualChunks: (id) => {
+          if (id.includes('node_modules/cesium')) return 'cesium'
+          if (id.includes('node_modules/three')) return 'three'
+          if (id.includes('node_modules/recharts') || id.includes('node_modules/d3')) return 'charts'
+          if (id.includes('node_modules/plotly.js') || id.includes('react-plotly.js')) return 'plotly'
+          if (id.includes('node_modules/deck.gl') || id.includes('@deck.gl')) return 'deck'
+          if (id.includes('node_modules/maplibre') || id.includes('react-map-gl')) return 'map'
+          if (id.includes('node_modules/@xeokit') || id.includes('web-ifc')) return 'bim'
+        },
+      },
+    },
+  },
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: ['./src/test/setup.ts'],
+    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    coverage: { provider: 'v8', reporter: ['text', 'json-summary'], exclude: ['node_modules/', 'src/test/'] },
   },
 })

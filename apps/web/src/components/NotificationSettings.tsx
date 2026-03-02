@@ -46,7 +46,7 @@ export default function NotificationSettings({
 
   if (!isSupported) {
     return (
-      <div className={`flex items-center gap-3 text-white/40 text-sm ${className}`}>
+      <div className={`flex items-center gap-3 text-zinc-500 text-sm ${className}`}>
         <BellSlashIcon className="w-5 h-5" />
         <span>Notifications not supported in this browser</span>
       </div>
@@ -59,10 +59,10 @@ export default function NotificationSettings({
         <button
           onClick={handleToggle}
           disabled={isLoading || permission === 'denied'}
-          className={`p-2 rounded-lg transition-colors ${
+          className={`p-2 rounded-md transition-colors ${
             enabled
-              ? 'bg-amber-500/20 text-amber-400'
-              : 'bg-white/5 text-white/60 hover:bg-white/10'
+              ? 'bg-zinc-700 text-zinc-300'
+              : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
           } ${permission === 'denied' ? 'opacity-50 cursor-not-allowed' : ''}`}
           title={enabled ? t('notification.enabled') : t('notification.disabled')}
         >
@@ -74,7 +74,7 @@ export default function NotificationSettings({
         </button>
         
         {permission === 'denied' && (
-          <span className="text-xs text-red-400">
+          <span className="text-xs text-red-400/80">
             {t('notification.permission_denied')}
           </span>
         )}
@@ -84,21 +84,21 @@ export default function NotificationSettings({
 
   // Default variant with more details
   return (
-    <div className={`p-4 bg-white/5 rounded-xl border border-white/10 ${className}`}>
+    <div className={`p-4 bg-zinc-800 rounded-md border border-zinc-700 ${className}`}>
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3">
           {enabled ? (
-            <div className="p-2 bg-amber-500/10 rounded-lg">
-              <BellIcon className="w-5 h-5 text-amber-400" />
+            <div className="p-2 bg-zinc-800 rounded-md">
+              <BellIcon className="w-5 h-5 text-zinc-400" />
             </div>
           ) : (
-            <div className="p-2 bg-white/5 rounded-lg">
-              <BellSlashIcon className="w-5 h-5 text-white/40" />
+            <div className="p-2 bg-zinc-800 rounded-md">
+              <BellSlashIcon className="w-5 h-5 text-zinc-500" />
             </div>
           )}
           <div>
-            <h3 className="text-white font-medium">Push Notifications</h3>
-            <p className="text-white/50 text-sm">
+            <h3 className="text-zinc-100 font-medium">Push Notifications</h3>
+            <p className="text-zinc-400 text-sm">
               Receive alerts for stress tests and critical events
             </p>
           </div>
@@ -109,11 +109,11 @@ export default function NotificationSettings({
           onClick={permission === 'default' ? handleRequestPermission : handleToggle}
           disabled={isLoading || permission === 'denied'}
           className={`relative w-12 h-6 rounded-full transition-colors ${
-            enabled ? 'bg-amber-500' : 'bg-white/20'
+            enabled ? 'bg-zinc-500' : 'bg-zinc-600'
           } ${permission === 'denied' ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
           <motion.div
-            className="absolute top-1 w-4 h-4 bg-white rounded-full"
+            className="absolute top-1 w-4 h-4 bg-zinc-100 rounded-full"
             animate={{ left: enabled ? 28 : 4 }}
             transition={{ type: 'spring', stiffness: 500, damping: 30 }}
           />
@@ -124,20 +124,20 @@ export default function NotificationSettings({
       <div className="flex items-center gap-2 text-xs">
         {permission === 'granted' && (
           <>
-            <CheckCircleIcon className="w-4 h-4 text-emerald-400" />
-            <span className="text-emerald-400">Permission granted</span>
+            <CheckCircleIcon className="w-4 h-4 text-emerald-400/80" />
+            <span className="text-emerald-400/80">Permission granted</span>
           </>
         )}
         {permission === 'denied' && (
           <>
-            <XCircleIcon className="w-4 h-4 text-red-400" />
-            <span className="text-red-400">
+            <XCircleIcon className="w-4 h-4 text-red-400/80" />
+            <span className="text-red-400/80">
               Permission denied. Enable in browser settings.
             </span>
           </>
         )}
         {permission === 'default' && (
-          <span className="text-white/40">
+          <span className="text-zinc-500">
             Click to enable notifications
           </span>
         )}
@@ -148,9 +148,9 @@ export default function NotificationSettings({
         <motion.div
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: 'auto' }}
-          className="mt-4 pt-4 border-t border-white/10"
+          className="mt-4 pt-4 border-t border-zinc-700"
         >
-          <p className="text-white/50 text-xs mb-3">You will receive notifications for:</p>
+          <p className="text-zinc-400 text-xs mb-3">You will receive notifications for:</p>
           <div className="space-y-2">
             {[
               'Stress test completions',
@@ -158,8 +158,8 @@ export default function NotificationSettings({
               'Infrastructure status changes',
               'Cascade failure warnings',
             ].map((item, i) => (
-              <div key={i} className="flex items-center gap-2 text-sm text-white/70">
-                <CheckCircleIcon className="w-4 h-4 text-amber-400" />
+              <div key={i} className="flex items-center gap-2 text-sm text-zinc-300">
+                <CheckCircleIcon className="w-4 h-4 text-zinc-400" />
                 <span>{item}</span>
               </div>
             ))}

@@ -1,6 +1,7 @@
 """weather_forecast pipeline: NIM (FourCastNet) + Weather fallback."""
 from __future__ import annotations
 
+from src.core.config import settings
 from ..adapters.registry import get_adapter
 from .base import BasePipeline, PipelineContext, PipelineResult
 
@@ -24,7 +25,9 @@ class WeatherForecastPipeline(BasePipeline):
         region = context.region
         opts = context.options or {}
 
-        nim = get_adapter("nim")
+        nim = None
+        if getattr(settings, "use_local_nim", False) and getattr(settings, "use_nim_weather", True):
+            nim = get_adapter("nim")
         forecasts = None
         source = "weather_fallback"
 

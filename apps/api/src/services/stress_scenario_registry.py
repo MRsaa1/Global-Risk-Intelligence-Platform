@@ -43,6 +43,28 @@ class StressScenario(BaseModel):
 # =============================================================================
 
 REGULATORY_SCENARIOS: List[StressScenario] = [
+    # Flagship product scenario: flood + heat + infrastructure (one geography)
+    StressScenario(
+        id="flagship_flood_heat_infra",
+        name="Flagship: Flood + Heat + Infrastructure",
+        category="Climate",
+        library="Regulatory",
+        source="Internal",
+        severity="High",
+        severity_numeric=0.78,
+        horizon=2035,
+        probability=0.12,
+        risk_types=["Physical", "Operational", "Financial"],
+        triggers=["flood", "heat", "infrastructure"],
+        applicable_regulations=["TCFD", "NGFS"],
+        can_trigger_cascade=True,
+        parameters={
+            "flood_frequency_multiplier": 2.5,
+            "heat_stress_multiplier": 1.8,
+            "infrastructure_impact": True,
+            "pd_multiplier": 2.0,
+        },
+    ),
     # Climate (5)
     StressScenario(
         id="NGFS_SSP5_2050",

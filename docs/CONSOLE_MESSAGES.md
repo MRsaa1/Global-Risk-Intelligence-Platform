@@ -1,45 +1,31 @@
-# Console messages and how we handle them
+# Пояснение сообщений в консоли браузера
 
-This doc explains common browser-console messages you may see when running the web app and what (if anything) to do about them.
+## Не из приложения (расширения браузера)
 
-## From browser extensions (safe to ignore)
+| Сообщение | Источник | Действие |
+|-----------|----------|----------|
+| `Port connected` (inject.js) | Расширение (например, кошелёк, React DevTools) | Игнорировать |
+| `[Violation] Permissions policy violation: unload is not allowed` (inject.js) | Расширение | Игнорировать или отключить расширение на localhost |
+| `SES Removing unpermitted intrinsics` (lockdown-install.js) | Расширение (например, MetaMask/SES) | Игнорировать |
 
-- **`inject.js: Port connected`** – From a browser extension (e.g. wallet, dev tools). Not from the app.
-- **`[Violation] Permissions policy violation: unload is not allowed`** – Extension script; not from the app.
-- **`lockdown-install.js: SES Removing unpermitted intrinsics`** – Extension (e.g. MetaMask). Safe to ignore.
+## Из приложения
 
-## From the app
+| Сообщение | Значение |
+|-----------|----------|
+| `Download the React DevTools...` | Рекомендация установить React DevTools. Не ошибка. |
+| `CesiumGlobe: Rotation enabled`, `✅ Cesium Globe initialized`, `✅ NASA Black Marble loaded`, и т.д. | Нормальная инициализация глобуса и слоёв. |
+| `WebSocket connecting to: ws://...` / `WebSocket connected` | Подключение к стримингу API. Всё в порядке. |
+| `onOpenDigitalTwin called`, `City clicked: Madrid`, `Digital Twin: Loading 3D model...`, `✅ Google Photorealistic 3D Tiles loaded` | Открытие Digital Twin и загрузка 3D для города. Ожидаемое поведение. |
+| `CesiumGlobe: Rendering paused` | Рендер глобуса приостановлен (например, при открытом Digital Twin). Нормально. |
 
-### IFC / BIM viewer
+## Предупреждение Cesium (3D Tiles)
 
-- **`IFC Load Error: TypeError: Missing field: "LINEWRITER_BUFFER"`**  
-  This happened when the IFC loader received non-IFC data (e.g. an HTML 404 page from a demo URL). We now:
-  - Check that the response is OK and non-empty before parsing.
-  - Validate that the buffer starts with `ISO-10303-21` (IFC STEP header) before calling `web-ifc`’s `OpenModel`.  
-  If a demo URL still fails, you’ll get a clearer error like *“File is not a valid IFC…”* or *“Demo unavailable (404)…”*. Use another demo preset or upload a local `.ifc` file.
+```
+The tiles needed to meet maximumScreenSpaceError would use more memory than allocated for this tileset.
+The tileset will be rendered with a larger screen space error (see memoryAdjustedScreenSpaceError).
+Consider using larger values for cacheBytes and maximumCacheOverflowBytes.
+```
 
-- **`THREE.WebGLRenderer: Context Lost`**  
-  The WebGL context was lost (e.g. tab in background, GPU busy, too many 3D tabs). We now:
-  - Listen for `webglcontextlost` / `webglcontextrestored` in the BIM viewer Canvas.
-  - Show an overlay: “WebGL context lost — refresh the page or close other heavy 3D tabs.”  
-  Refreshing the page or closing other 3D apps usually restores it.
+**Что это:** Cesium хочет подгрузить больше тайлов для заданной детализации, чем разрешено лимитом кэша. Он автоматически рисует тайлсет с чуть большим `screen space error` (меньше детализация), чтобы уложиться в память.
 
-### Zustand deprecation
-
-- **`[DEPRECATED] Default export is deprecated. Instead use import { create } from 'zustand'`**  
-  Our code already uses the named import: `import { create } from 'zustand'` in `platformStore.ts` and `collaborationStore.ts`. This warning comes from a **dependency** (e.g. `@react-three/fiber` or `@react-three/drei`) that still uses the old default export. It does not affect behavior and will go away when those packages update. No change needed in this repo.
-
-### React DevTools
-
-- **`Download the React DevTools for a better development experience`**  
-  Optional: install the React DevTools browser extension for easier debugging.
-
-## Summary
-
-| Message                         | Source        | Action                          |
-|---------------------------------|---------------|----------------------------------|
-| inject.js / lockdown-install   | Extensions    | Ignore                           |
-| LINEWRITER_BUFFER               | App (fixed)   | Use valid IFC or local demo      |
-| WebGL Context Lost             | App (handled) | Overlay shown; refresh if needed |
-| Zustand default export         | Dependency    | Ignore until deps update         |
-| React DevTools                 | React         | Optional: install extension      |
+**Нужно ли чинить:** Обычно нет. Визуально разница небольшая. Если хочется убрать предупреждение или дать больше детализации — в коде для этого тайлсета можно увеличить `maximumMemoryUsage` (в опциях `Cesium3DTileset` / Google Photorealistic). Уже сделано для глобуса и Digital Twin; при необходимости лимит можно поднять ещё.

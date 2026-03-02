@@ -1,4 +1,6 @@
 """Stress Test models - stress testing scenarios and their impacts."""
+from __future__ import annotations
+
 import enum
 import os
 from datetime import datetime
@@ -220,7 +222,12 @@ class StressTest(Base):
         back_populates="stress_test",
         cascade="all, delete-orphan",
     )
-    
+    recovery_plans: Mapped[list["RecoveryPlan"]] = relationship(
+        "RecoveryPlan",
+        back_populates="stress_test",
+        cascade="all, delete-orphan",
+    )
+
     def __repr__(self) -> str:
         return f"<StressTest {self.name} ({self.test_type})>"
 

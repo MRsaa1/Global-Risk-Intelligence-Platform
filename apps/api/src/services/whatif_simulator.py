@@ -450,13 +450,16 @@ class WhatIfSimulator:
             # Clean up temp scenario
             del self.scenarios[temp_scenario.id]
         
-        # Calculate elasticity (at base value)
+        # Calculate elasticity (at base value); avoid division by zero when base_value is 0
         base_idx = len(test_values) // 2
         if base_idx > 0 and base_idx < len(test_values) - 1:
-            delta_input = (test_values[base_idx + 1] - test_values[base_idx - 1]) / param.base_value
+            base_val_safe = param.base_value if abs(param.base_value) >= 1e-10 else 1.0
+            delta_input = (test_values[base_idx + 1] - test_values[base_idx - 1]) / base_val_safe
             delta_output = (output_values[base_idx + 1] - output_values[base_idx - 1])
-            base_output = output_values[base_idx] or 1
-            elasticity = (delta_output / base_output) / (delta_input or 1)
+            base_output = output_values[base_idx] if output_values[base_idx] is not None else 0
+            base_output_safe = base_output if abs(base_output) >= 1e-10 else 1.0
+            delta_input_safe = delta_input if abs(delta_input) >= 1e-10 else 1.0
+            elasticity = (delta_output / base_output_safe) / delta_input_safe
         else:
             elasticity = 0
         
@@ -559,61 +562,64 @@ class WhatIfSimulator:
     ) -> OptimizationResult:
         """
         Optimize mitigation strategy within budget.
-        
-        Args:
-            budget: Available budget for mitigation
-            base_exposure: Base portfolio exposure
-            
-        Returns:
-            OptimizationResult with optimal parameters
+        Baseline = expected loss at mitigation_level=0 from the same simulation.
+        Improvement = % reduction vs baseline. ROI = 100 * (loss_reduction / cost).
         """
-        # Simple gradient-based optimization
-        # In production, use scipy.optimize or similar
-        
-        best_params = {}
-        best_loss = float('inf')
-        
-        # Test different mitigation levels
+        best_params: Dict[str, float] = {}
+        best_loss = float("inf")
+        best_result: Optional[ScenarioResult] = None
+        baseline_loss: Optional[float] = None
+
         for mitigation in np.linspace(0, 1, 11):
-            # Estimate cost of mitigation
             mitigation_cost = budget * mitigation
-            
-            if mitigation_cost <= budget:
-                # Create scenario
-                scenario = self.create_scenario(
-                    name=f"Opt_{mitigation:.1f}",
-                    scenario_type=ScenarioType.CUSTOM,
-                    parameters={
-                        "event_severity": 0.5,
-                        "event_probability": 0.1,
-                        "portfolio_exposure": 1.0,
-                        "recovery_speed": 1.0,
-                        "mitigation_level": mitigation,
-                        "asset_correlation": 0.3,
-                    },
-                )
-                
-                result = await self.run_scenario(scenario.id, base_exposure, 5000)
-                
-                # Objective: minimize loss + cost
-                total_cost = result.expected_loss + mitigation_cost
-                
-                if total_cost < best_loss:
-                    best_loss = total_cost
-                    best_params = {"mitigation_level": mitigation}
-                    best_result = result
-                
-                del self.scenarios[scenario.id]
-        
-        # Calculate improvement
-        baseline_loss = base_exposure * 0.05  # Rough baseline estimate
-        improvement = (baseline_loss - best_result.expected_loss) / baseline_loss * 100
-        
-        # Calculate ROI
+            if mitigation_cost > budget:
+                continue
+            scenario = self.create_scenario(
+                name=f"Opt_{mitigation:.1f}",
+                scenario_type=ScenarioType.CUSTOM,
+                parameters={
+                    "event_severity": 0.5,
+                    "event_probability": 0.1,
+                    "portfolio_exposure": 1.0,
+                    "recovery_speed": 1.0,
+                    "mitigation_level": mitigation,
+                    "asset_correlation": 0.3,
+                },
+            )
+            result = await self.run_scenario(scenario.id, base_exposure, 5000)
+            if baseline_loss is None:
+                baseline_loss = result.expected_loss
+            total_cost = result.expected_loss + mitigation_cost
+            if total_cost < best_loss:
+                best_loss = total_cost
+                best_params = {"mitigation_level": float(mitigation)}
+                best_result = result
+            del self.scenarios[scenario.id]
+
+        if best_result is None or baseline_loss is None:
+            baseline_loss = baseline_loss or 0.0
+            best_result = best_result or ScenarioResult(
+                scenario_id="",
+                scenario_name="",
+                expected_loss=baseline_loss,
+                var_95=0,
+                var_99=0,
+                cvar=0,
+                probability_of_loss=0,
+                recovery_time_months=0,
+                risk_score=0,
+                key_metrics={},
+            )
+            best_params = best_params or {"mitigation_level": 0.0}
+
         mitigation_cost = budget * best_params.get("mitigation_level", 0)
         loss_reduction = baseline_loss - best_result.expected_loss
-        roi = (loss_reduction / mitigation_cost * 100) if mitigation_cost > 0 else 0
-        
+        if baseline_loss > 0:
+            improvement = (loss_reduction / baseline_loss) * 100
+        else:
+            improvement = 0.0
+        roi = (loss_reduction / mitigation_cost * 100) if mitigation_cost > 0 else 0.0
+
         return OptimizationResult(
             optimal_parameters=best_params,
             expected_improvement=round(improvement, 1),

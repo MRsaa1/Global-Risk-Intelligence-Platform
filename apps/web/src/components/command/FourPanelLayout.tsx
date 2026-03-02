@@ -58,6 +58,8 @@ interface FourPanelLayoutProps {
     }
   } | null
   onPanelExpand?: (panel: 'globe' | 'twin' | 'stress' | 'graph' | null) => void
+  completedStressTestId?: string | null
+  onPlayTimeline?: (url: string) => void
 }
 
 type PanelId = 'globe' | 'twin' | 'stress' | 'graph'
@@ -69,6 +71,8 @@ export default function FourPanelLayout({
   capitalImpact,
   selectedAsset,
   onPanelExpand,
+  completedStressTestId,
+  onPlayTimeline,
 }: FourPanelLayoutProps) {
   const [expandedPanel, setExpandedPanel] = useState<PanelId | null>(null)
   const [activeGlobeTab, setActiveGlobeTab] = useState('overview')
@@ -128,6 +132,8 @@ export default function FourPanelLayout({
               expectedLoss,
               capitalImpact,
             }}
+            completedStressTestId={completedStressTestId}
+            onPlayTimeline={onPlayTimeline}
           />
         )
       case 'graph':
@@ -148,12 +154,12 @@ export default function FourPanelLayout({
   }
 
   return (
-    <div className="h-full w-full bg-[#030810]">
+    <div className="h-full w-full bg-[#09090b]">
       {/* Expanded panel view */}
       <AnimatePresence>
         {expandedPanel && (
           <motion.div
-            className="absolute inset-0 z-50 bg-[#030810]"
+            className="absolute inset-0 z-50 bg-[#09090b]"
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
@@ -163,9 +169,9 @@ export default function FourPanelLayout({
               {/* Collapse button */}
               <button
                 onClick={() => handleExpand(expandedPanel)}
-                className="absolute top-4 right-4 z-10 p-2 bg-white/10 hover:bg-white/20 rounded-lg border border-white/10 transition-colors"
+                className="absolute top-4 right-4 z-10 p-2 bg-zinc-700 hover:bg-zinc-600 rounded-md border border-zinc-800 transition-colors"
               >
-                <ArrowsPointingInIcon className="w-5 h-5 text-white" />
+                <ArrowsPointingInIcon className="w-5 h-5 text-zinc-100" />
               </button>
               {renderPanelContent(expandedPanel)}
             </div>
@@ -174,10 +180,10 @@ export default function FourPanelLayout({
       </AnimatePresence>
 
       {/* Grid layout */}
-      <div className={`h-full grid grid-cols-2 grid-rows-2 gap-px bg-white/5 ${expandedPanel ? 'invisible' : ''}`}>
+      <div className={`h-full grid grid-cols-2 grid-rows-2 gap-px bg-zinc-800 ${expandedPanel ? 'invisible' : ''}`}>
         {/* Globe Panel - Top Left */}
         <motion.div
-          className="relative bg-[#0a0f18] overflow-hidden"
+          className="relative bg-[#09090b] overflow-hidden"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0 }}
@@ -187,14 +193,14 @@ export default function FourPanelLayout({
             onClick={() => handleExpand('globe')}
             className="absolute top-2 right-2 z-20 p-1.5 bg-black/40 hover:bg-black/60 rounded transition-colors"
           >
-            <ArrowsPointingOutIcon className="w-4 h-4 text-white/50 hover:text-white" />
+            <ArrowsPointingOutIcon className="w-4 h-4 text-zinc-500 hover:text-zinc-100" />
           </button>
           {renderPanelContent('globe')}
         </motion.div>
 
         {/* Digital Twin Panel - Top Right */}
         <motion.div
-          className="relative bg-[#0a0f18] overflow-hidden"
+          className="relative bg-[#09090b] overflow-hidden"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
@@ -203,14 +209,14 @@ export default function FourPanelLayout({
             onClick={() => handleExpand('twin')}
             className="absolute top-2 right-2 z-20 p-1.5 bg-black/40 hover:bg-black/60 rounded transition-colors"
           >
-            <ArrowsPointingOutIcon className="w-4 h-4 text-white/50 hover:text-white" />
+            <ArrowsPointingOutIcon className="w-4 h-4 text-zinc-500 hover:text-zinc-100" />
           </button>
           {renderPanelContent('twin')}
         </motion.div>
 
         {/* Stress Test Panel - Bottom Left */}
         <motion.div
-          className="relative bg-[#0a0f18] overflow-hidden"
+          className="relative bg-[#09090b] overflow-hidden"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
@@ -219,14 +225,14 @@ export default function FourPanelLayout({
             onClick={() => handleExpand('stress')}
             className="absolute top-2 right-2 z-20 p-1.5 bg-black/40 hover:bg-black/60 rounded transition-colors"
           >
-            <ArrowsPointingOutIcon className="w-4 h-4 text-white/50 hover:text-white" />
+            <ArrowsPointingOutIcon className="w-4 h-4 text-zinc-500 hover:text-zinc-100" />
           </button>
           {renderPanelContent('stress')}
         </motion.div>
 
         {/* Risk Graph Panel - Bottom Right */}
         <motion.div
-          className="relative bg-[#0a0f18] overflow-hidden"
+          className="relative bg-[#09090b] overflow-hidden"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
@@ -235,7 +241,7 @@ export default function FourPanelLayout({
             onClick={() => handleExpand('graph')}
             className="absolute top-2 right-2 z-20 p-1.5 bg-black/40 hover:bg-black/60 rounded transition-colors"
           >
-            <ArrowsPointingOutIcon className="w-4 h-4 text-white/50 hover:text-white" />
+            <ArrowsPointingOutIcon className="w-4 h-4 text-zinc-500 hover:text-zinc-100" />
           </button>
           {renderPanelContent('graph')}
         </motion.div>

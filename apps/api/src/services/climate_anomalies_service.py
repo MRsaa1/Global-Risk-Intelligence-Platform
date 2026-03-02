@@ -127,6 +127,13 @@ def _uv_to_risk(uv: float) -> str:
     return "normal"
 
 
+@dataclass
+class AnomaliesResult:
+    """Result for get_anomalies (dashboard today-card)."""
+    alerts: List[str]
+    heat_stress_active: bool
+
+
 class ClimateAnomaliesService:
     """CPU-only climate anomalies from Open-Meteo."""
 
@@ -253,6 +260,27 @@ class ClimateAnomaliesService:
             polygon=polygon,
             source="open_meteo",
         )
+
+    async def get_anomalies(
+        self,
+        latitude: float,
+        longitude: float,
+        days: int = 3,
+    ) -> AnomaliesResult:
+        """
+        Lightweight anomalies for dashboard: heat stress and optional alerts.
+        One Open-Meteo forecast call. Used by today-card.
+        """
+        try:
+            heat = await self.get_heat_forecast(latitude, longitude, days=min(days, 5), include_polygon=False)
+            alerts: List[str] = []
+            if heat.max_risk_level in ("high", "extreme"):
+                alerts.append(f"Heat stress {heat.max_risk_level}: max {heat.max_temp_c}°C")
+            heat_stress_active = heat.max_risk_level in ("elevated", "high", "extreme")
+            return AnomaliesResult(alerts=alerts, heat_stress_active=heat_stress_active)
+        except Exception as e:
+            logger.debug("get_anomalies failed: %s", e)
+            return AnomaliesResult(alerts=[], heat_stress_active=False)
 
 
 climate_anomalies_service = ClimateAnomaliesService()

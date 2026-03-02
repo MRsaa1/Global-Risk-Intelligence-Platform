@@ -113,7 +113,7 @@ export default function InteractiveTooltip({
             pointerEvents: 'none',
             zIndex: 100,
           }}
-          className="bg-[#1a1f2e] border border-white/10 rounded-lg shadow-xl backdrop-blur-sm min-w-[160px]"
+          className="bg-zinc-900 border border-zinc-800/60 rounded-md shadow-xl min-w-[160px]"
         >
           {/* Title */}
           {title && (

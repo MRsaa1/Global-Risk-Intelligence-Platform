@@ -6,6 +6,7 @@ import {
   BuildingOffice2Icon,
   ExclamationTriangleIcon,
   ArrowTrendingUpIcon,
+  ChartBarIcon,
   CubeTransparentIcon,
   ChevronDownIcon,
   CheckCircleIcon,
@@ -13,20 +14,36 @@ import {
   BeakerIcon,
   BoltIcon,
   SignalIcon,
-  BriefcaseIcon,
-  CurrencyDollarIcon,
-  ShieldExclamationIcon,
   LinkIcon,
+  GlobeAltIcon,
+  CloudIcon,
+  ShieldCheckIcon,
+  LockClosedIcon,
+  BanknotesIcon,
 } from '@heroicons/react/24/outline'
 import AlertPanel from '../components/AlertPanel'
+import QuickActionsCards from '../components/QuickActionsCards'
+import TodayCardWidget from '../components/dashboard/TodayCardWidget'
+import SentimentMeterWidget from '../components/dashboard/SentimentMeterWidget'
+import ClimateHavenCard from '../components/dashboard/ClimateHavenCard'
+import WarRoomCard from '../components/dashboard/WarRoomCard'
 import ClimateWidget from '../components/ClimateWidget'
 import RecentActivityPanel from '../components/dashboard/RecentActivityPanel'
 import SystemOverseerWidget from '../components/dashboard/SystemOverseerWidget'
+import FreshnessIndicator from '../components/dashboard/FreshnessIndicator'
+import LiveDataIndicatorBar from '../components/dashboard/LiveDataIndicatorBar'
+import ThreatIntelFeed from '../components/dashboard/ThreatIntelFeed'
+import DataSourcesPanel from '../components/dashboard/DataSourcesPanel'
+import CuRAGCard from '../components/dashboard/CuRAGCard'
+import MarketTicker from '../components/MarketTicker'
+import DataSourcePanel from '../components/dashboard/DataSourcePanel'
+import { ErrorBoundary } from '../components/ErrorBoundary'
 // Chart components (institutional-grade, no 3D)
 import TimeSeriesChart from '../components/charts/TimeSeriesChart'
 import PieChart from '../components/charts/PieChart'
 import ComparisonChart from '../components/charts/ComparisonChart'
 import ChartControls, { TimeRange } from '../components/charts/ChartControls'
+import EPCurveChart from '../components/charts/EPCurveChart'
 import { chartColors } from '../lib/chartColors'
 // Analytics API for real data
 import { 
@@ -38,7 +55,8 @@ import {
 } from '../services/analyticsApi'
 // Platform state management - synced with Command Center
 import { usePortfolio, useActiveStressTest, useRecentEvents, usePlatformStore } from '../store/platformStore'
-import { usePlatformWebSocket } from '../hooks/usePlatformWebSocket'
+import { formatEur } from '../lib/formatCurrency'
+import { getApiV1Base } from '../config/env'
 
 // Types for Platform Layers API
 interface LayerDetails {
@@ -67,44 +85,44 @@ interface PlatformStatus {
 // INSTITUTIONAL KPIs (Board-level, € denominated)
 // ============================================
 
-// Format billions for display
-function formatBillionsEur(value: number): string {
-  if (value >= 1000) return `€${(value / 1000).toFixed(1)}T`
-  if (value >= 1) return `€${value.toFixed(0)}M`
-  return `€${(value * 1000).toFixed(0)}K`
-}
-
 // Determine risk posture level
 function getRiskPosture(weightedRisk: number): { level: string; color: string; arrow: string } {
-  if (weightedRisk > 0.75) return { level: 'CRITICAL', color: 'text-red-400', arrow: '↑↑' }
-  if (weightedRisk > 0.6) return { level: 'ELEVATED', color: 'text-orange-400', arrow: '↑' }
-  if (weightedRisk > 0.4) return { level: 'MODERATE', color: 'text-amber-400', arrow: '→' }
-  return { level: 'STABLE', color: 'text-emerald-400', arrow: '↓' }
+  if (weightedRisk > 0.75) return { level: 'CRITICAL', color: 'text-red-400/80', arrow: '↑↑' }
+  if (weightedRisk > 0.6) return { level: 'ELEVATED', color: 'text-orange-400/80', arrow: '↑' }
+  if (weightedRisk > 0.4) return { level: 'MODERATE', color: 'text-amber-400/80', arrow: '→' }
+  return { level: 'STABLE', color: 'text-emerald-400/80', arrow: '↓' }
 }
 
 // Institutional KPIs - derived from platform store (synced with Command Center)
 function useInstitutionalKPIs() {
   const portfolio = usePortfolio()
-  
+
   return useMemo(() => {
-    // Calculate institutional metrics
-    const capitalAtRisk = portfolio.atRisk || 420 // €M
-    const stressLossP95 = Math.round(capitalAtRisk * 0.75) // P95 = ~75% of CaR
-    const riskVelocity = portfolio.weightedRisk > 0.6 ? 22 : portfolio.weightedRisk > 0.4 ? 8 : -5 // % MoM
+    const capitalAtRisk = portfolio.atRisk ?? 0
+    const modelExpectedLoss = typeof portfolio.totalExpectedLoss === 'number' && portfolio.totalExpectedLoss > 0
+      ? portfolio.totalExpectedLoss
+      : 0
+    // Keep board KPI in a realistic severe-loss range even when expected-loss model is conservative.
+    const severeProxyFromExposure = (portfolio.totalExposure ?? 0) * 0.33
+    const severeProxyFromAtRisk = capitalAtRisk > 0 ? capitalAtRisk * 0.75 : 0
+    const stressLossP95 = Math.round(Math.max(modelExpectedLoss, severeProxyFromExposure, severeProxyFromAtRisk))
+    // Estimated from weighted risk band (not from API)
     const mitigatedRatio = portfolio.weightedRisk < 0.5 ? 0.68 : portfolio.weightedRisk < 0.7 ? 0.45 : 0.28
-    
+    const mom = portfolio.riskVelocityMomPct
+    const riskVelocityLabel = typeof mom === 'number' ? `${mom >= 0 ? '+' : ''}${mom.toFixed(1)}% MoM` : '—'
+
     return {
       capitalAtRisk,
-      capitalAtRiskChange: '+€65M WoW',
+      capitalAtRiskChange: '—',
       stressLossP95,
-      stressLossP95Pct: '+11%',
-      riskVelocity,
-      riskVelocityLabel: riskVelocity > 0 ? `+${riskVelocity}%` : `${riskVelocity}%`,
+      stressLossP95Pct: '—',
+      riskVelocity: mom ?? null,
+      riskVelocityLabel,
       mitigatedRatio,
       mitigatedPct: `${Math.round(mitigatedRatio * 100)}%`,
       unmitigatedPct: `${Math.round((1 - mitigatedRatio) * 100)}%`,
       posture: getRiskPosture(portfolio.weightedRisk),
-      totalExposure: portfolio.totalExposure || 4200, // €M
+      totalExposure: portfolio.totalExposure ?? 0,
     }
   }, [portfolio])
 }
@@ -159,9 +177,11 @@ const item = {
   show: { opacity: 1, y: 0 },
 }
 
-// Fetch platform layers from API
+// Fetch platform layers from API (uses API base so it works on server / tunnel)
 async function fetchPlatformLayers(): Promise<PlatformStatus> {
-  const response = await fetch('/api/v1/platform/layers')
+  const base = getApiV1Base()
+  const url = base ? `${base}/platform/layers` : '/api/v1/platform/layers'
+  const response = await fetch(url)
   if (!response.ok) {
     throw new Error('Failed to fetch platform layers')
   }
@@ -230,102 +250,9 @@ function getDaysFromTimeRange(range: TimeRange): number {
   }
 }
 
-// Generate time series data for risk trends
-function generateRiskTrendData(timeRange: TimeRange = '1M') {
-  const now = new Date()
-  const days = getDaysFromTimeRange(timeRange)
-  const series = [
-    { id: 'climate', name: 'Climate Risk', color: chartColors.series.climate },
-    { id: 'physical', name: 'Physical Risk', color: chartColors.series.physical },
-    { id: 'network', name: 'Network Risk', color: chartColors.series.network },
-    { id: 'financial', name: 'Financial Risk', color: chartColors.series.financial },
-  ]
-  
-  // Adjust data points based on range
-  const dataPoints = Math.min(days, days <= 7 ? days * 24 : days) // Hourly for 1D/1W, daily otherwise
-  
-  return series.map(s => ({
-    ...s,
-    data: Array.from({ length: dataPoints }, (_, i) => {
-      const date = new Date(now)
-      if (days <= 7) {
-        date.setHours(date.getHours() - (dataPoints - 1 - i))
-      } else {
-        date.setDate(date.getDate() - (dataPoints - 1 - i))
-      }
-      // Different base values and volatility for each series
-      const baseValue = s.id === 'climate' ? 45 : s.id === 'physical' ? 28 : s.id === 'network' ? 62 : 35
-      const volatility = s.id === 'network' ? 15 : 10
-      return {
-        date,
-        value: Math.max(0, Math.min(100, baseValue + (Math.random() - 0.5) * volatility + Math.sin(i / 5) * 5)),
-      }
-    }),
-  }))
-}
+// No mock: empty when API has no assets (show empty state in UI)
 
-// Mock data for risk distribution pie chart
-function getRiskDistributionData() {
-  return [
-    { id: 'critical', label: 'Critical', value: 23, color: chartColors.risk.critical, risk: 0.9 },
-    { id: 'high', label: 'High', value: 45, color: chartColors.risk.high, risk: 0.7 },
-    { id: 'medium', label: 'Medium', value: 112, color: chartColors.risk.medium, risk: 0.5 },
-    { id: 'low', label: 'Low', value: 347, color: chartColors.risk.low, risk: 0.2 },
-  ]
-}
-
-// Mock data for top risk assets bar chart
-function getTopRiskAssetsData() {
-  return [
-    { label: 'Frankfurt Tower', value: 92, risk: 0.92 },
-    { label: 'London Bridge Offices', value: 87, risk: 0.87 },
-    { label: 'Tokyo Central', value: 78, risk: 0.78 },
-    { label: 'Singapore Marina', value: 72, risk: 0.72 },
-    { label: 'NYC Financial', value: 68, risk: 0.68 },
-    { label: 'Dubai Downtown', value: 65, risk: 0.65 },
-    { label: 'Sydney Harbor', value: 58, risk: 0.58 },
-    { label: 'Paris La Defense', value: 52, risk: 0.52 },
-  ]
-}
-
-// Mock data for scenario comparison
-function getScenarioComparisonData() {
-  return [
-    {
-      id: 'climate-stress',
-      name: 'Climate Stress',
-      description: 'Impact of extreme climate events on portfolio',
-      metrics: [
-        { id: 'portfolio', label: 'Portfolio Value', before: 4200000000, after: 3780000000, format: 'currency' as const, higherIsBetter: true },
-        { id: 'var', label: 'Value at Risk', before: 180000000, after: 520000000, format: 'currency' as const, higherIsBetter: false },
-        { id: 'avg-risk', label: 'Average Risk', before: 0.35, after: 0.58, format: 'percent' as const, higherIsBetter: false },
-        { id: 'critical', label: 'Critical Assets', before: 12, after: 34, format: 'number' as const, higherIsBetter: false },
-      ],
-    },
-    {
-      id: 'market-crash',
-      name: 'Market Crash',
-      description: '2008-style financial crisis scenario',
-      metrics: [
-        { id: 'portfolio', label: 'Portfolio Value', before: 4200000000, after: 2940000000, format: 'currency' as const, higherIsBetter: true },
-        { id: 'var', label: 'Value at Risk', before: 180000000, after: 890000000, format: 'currency' as const, higherIsBetter: false },
-        { id: 'avg-risk', label: 'Average Risk', before: 0.35, after: 0.72, format: 'percent' as const, higherIsBetter: false },
-        { id: 'critical', label: 'Critical Assets', before: 12, after: 89, format: 'number' as const, higherIsBetter: false },
-      ],
-    },
-    {
-      id: 'geopolitical',
-      name: 'Geopolitical',
-      description: 'Regional conflict impact analysis',
-      metrics: [
-        { id: 'portfolio', label: 'Portfolio Value', before: 4200000000, after: 3570000000, format: 'currency' as const, higherIsBetter: true },
-        { id: 'var', label: 'Value at Risk', before: 180000000, after: 410000000, format: 'currency' as const, higherIsBetter: false },
-        { id: 'avg-risk', label: 'Average Risk', before: 0.35, after: 0.51, format: 'percent' as const, higherIsBetter: false },
-        { id: 'critical', label: 'Critical Assets', before: 12, after: 28, format: 'number' as const, higherIsBetter: false },
-      ],
-    },
-  ]
-}
+// No mock: empty when no stress tests completed (show empty state in UI)
 
 // Layer icon based on layer number
 function getLayerIcon(layer: number) {
@@ -355,58 +282,65 @@ function LayerDetailPanel({ layer, onClose }: { layer: LayerMetrics; onClose: ()
       initial={{ opacity: 0, height: 0 }}
       animate={{ opacity: 1, height: 'auto' }}
       exit={{ opacity: 0, height: 0 }}
-      className="mt-3 p-3 bg-black/40 rounded-lg border border-white/10 text-left"
+      className="mt-3 p-3 bg-black/40 rounded-md border border-zinc-700 text-left"
     >
-      <p className="text-xs text-white/60 mb-2">{layer.description}</p>
+      <p className="text-xs text-zinc-400 mb-2">{layer.description}</p>
       
       {/* Layer-specific details */}
       {layer.layer === 0 && details && (
         <div className="space-y-1 text-xs">
           <div className="flex justify-between">
-            <span className="text-white/40">Provenance Records</span>
-            <span className="text-white/80">{details.provenance_records || 0}</span>
+            <span className="text-zinc-500">Provenance Records</span>
+            <span className="text-zinc-200">{details.provenance_records || 0}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-white/40">Verified</span>
-            <span className="text-emerald-400">{details.verified_records || 0}</span>
+            <span className="text-zinc-500">Verified</span>
+            <span className="text-emerald-400/80">{details.verified_records || 0}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-white/40">Assets</span>
-            <span className="text-white/80">{details.assets || 0}</span>
+            <span className="text-zinc-500">Assets</span>
+            <span className="text-zinc-200">{details.assets || 0}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-white/40">External Sources</span>
-            <span className="text-amber-400">{(details.external_sources || 0).toLocaleString()}</span>
+            <span className="text-zinc-500">External Sources</span>
+            <span className="text-zinc-400">{(details.external_sources || 0).toLocaleString()}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-white/40">Verification Rate</span>
-            <span className="text-white/80">{(details.verification_rate || 0).toFixed(1)}%</span>
+            <span className="text-zinc-500">Verification Rate</span>
+            <span className="text-zinc-200">{(details.verification_rate || 0).toFixed(1)}%</span>
           </div>
         </div>
       )}
       
       {layer.layer === 2 && details && (
         <div className="space-y-1 text-xs">
+          {details._note && (
+            <p className="text-zinc-400 text-[10px] mb-2">
+              {details._note.toLowerCase().includes('neo4j disabled') || details._note.toLowerCase().includes('graph unavailable') || details._note.toLowerCase().includes('graph empty')
+                ? 'Optional — enable Neo4j and seed graph for network metrics.'
+                : details._note}
+            </p>
+          )}
           <div className="flex justify-between">
-            <span className="text-white/40">Network Nodes</span>
-            <span className="text-white/80">{details.nodes || 0}</span>
+            <span className="text-zinc-500">Network Nodes</span>
+            <span className="text-zinc-200">{details.nodes ?? 0}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-white/40">Connections (Edges)</span>
-            <span className="text-amber-400">{details.edges || 0}</span>
+            <span className="text-zinc-500">Connections (Edges)</span>
+            <span className="text-zinc-400">{details.edges ?? 0}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-white/40">Risk Clusters</span>
-            <span className="text-amber-400">{details.risk_clusters || 0}</span>
+            <span className="text-zinc-500">Risk Clusters</span>
+            <span className="text-zinc-400">{details.risk_clusters ?? 0}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-white/40">Critical Paths</span>
-            <span className="text-red-400">{details.critical_paths || 0}</span>
+            <span className="text-zinc-500">Critical Paths</span>
+            <span className="text-red-400/80">{details.critical_paths ?? 0}</span>
           </div>
-          {details.sectors && (
-            <div className="pt-2 border-t border-white/10">
-              <span className="text-white/40">Sectors: </span>
-              <span className="text-white/60">{details.sectors.join(', ')}</span>
+          {details.sectors && details.sectors.length > 0 && (
+            <div className="pt-2 border-t border-zinc-700">
+              <span className="text-zinc-500">Sectors: </span>
+              <span className="text-zinc-400">{details.sectors.join(', ')}</span>
             </div>
           )}
         </div>
@@ -415,25 +349,28 @@ function LayerDetailPanel({ layer, onClose }: { layer: LayerMetrics; onClose: ()
       {layer.layer === 4 && details && (
         <div className="space-y-2 text-xs">
           {details.agents?.map((agent: any) => (
-            <div key={agent.id} className="p-2 bg-white/5 rounded">
+            <div key={agent.id} className="p-2 bg-zinc-800 rounded">
               <div className="flex items-center justify-between">
-                <span className="font-medium text-white/90">{agent.name}</span>
+                <span className="font-medium text-zinc-100">{agent.name}</span>
                 <span className={`px-1.5 py-0.5 rounded text-[10px] ${
-                  agent.status === 'active' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'
+                  agent.status === 'active' ? 'bg-emerald-500/15 text-emerald-400/80' : agent.status === 'error' ? 'bg-red-500/15 text-red-400/80' : 'bg-amber-500/15 text-amber-400/80'
                 }`}>
                   {agent.status}
                 </span>
               </div>
-              <p className="text-white/40 mt-1">{agent.role}</p>
-              {agent.active_alerts !== undefined && (
-                <p className="text-amber-400 mt-1">{agent.active_alerts} active alerts</p>
+              <p className="text-zinc-500 mt-1">{agent.role}</p>
+              {agent.status === 'error' && agent.error && (
+                <p className="text-red-400/90 mt-1 text-[10px]">{agent.error}</p>
+              )}
+              {agent.active_alerts !== undefined && agent.status !== 'error' && (
+                <p className="text-amber-400/80 mt-1">{agent.active_alerts} active alerts</p>
               )}
             </div>
           ))}
           {details.nvidia_llm_enabled && (
-            <div className="pt-2 border-t border-white/10 flex items-center gap-2">
-              <span className="text-[10px] px-1.5 py-0.5 bg-green-500/20 text-green-400 rounded">NVIDIA LLM</span>
-              <span className="text-white/40">Connected</span>
+            <div className="pt-2 border-t border-zinc-700 flex items-center gap-2">
+              <span className="text-[10px] px-1.5 py-0.5 bg-zinc-700 text-zinc-300 rounded">NVIDIA LLM</span>
+              <span className="text-zinc-500">Connected</span>
             </div>
           )}
         </div>
@@ -442,27 +379,27 @@ function LayerDetailPanel({ layer, onClose }: { layer: LayerMetrics; onClose: ()
       {layer.layer === 5 && details && (
         <div className="space-y-1 text-xs">
           <div className="flex justify-between">
-            <span className="text-white/40">Spec Version</span>
-            <span className="text-purple-400">{details.version}</span>
+            <span className="text-zinc-500">Spec Version</span>
+            <span className="text-zinc-400">{details.version}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-white/40">Total PARS IDs</span>
-            <span className="text-white/80">{(details.total_pars_ids || 0).toLocaleString()}</span>
+            <span className="text-zinc-500">Total PARS IDs</span>
+            <span className="text-zinc-200">{(details.total_pars_ids || 0).toLocaleString()}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-white/40">Status</span>
-            <span className="text-amber-400">{details.spec_status}</span>
+            <span className="text-zinc-500">Status</span>
+            <span className="text-zinc-400">{details.spec_status}</span>
           </div>
           {details.regions && (
-            <div className="pt-2 border-t border-white/10">
-              <span className="text-white/40">Regions: </span>
-              <span className="text-white/60">{details.regions.join(', ')}</span>
+            <div className="pt-2 border-t border-zinc-700">
+              <span className="text-zinc-500">Regions: </span>
+              <span className="text-zinc-400">{details.regions.join(', ')}</span>
             </div>
           )}
           {details.features && (
             <div className="pt-2">
-              <span className="text-white/40">Features:</span>
-              <ul className="mt-1 text-white/60 list-disc list-inside">
+              <span className="text-zinc-500">Features:</span>
+              <ul className="mt-1 text-zinc-400 list-disc list-inside">
                 {details.features.slice(0, 3).map((f: string, i: number) => (
                   <li key={i} className="text-[10px]">{f}</li>
                 ))}
@@ -474,7 +411,7 @@ function LayerDetailPanel({ layer, onClose }: { layer: LayerMetrics; onClose: ()
       
       <button
         onClick={onClose}
-        className="mt-3 w-full py-1 text-xs text-white/40 hover:text-white/60 transition-colors"
+        className="mt-3 w-full py-1 text-xs text-zinc-500 hover:text-zinc-400 transition-colors"
       >
         Close
       </button>
@@ -483,26 +420,139 @@ function LayerDetailPanel({ layer, onClose }: { layer: LayerMetrics; onClose: ()
 }
 
 export default function Dashboard() {
-  const [expandedLayer, setExpandedLayer] = useState<number | null>(null)
+  const [allLayersExpanded, setAllLayersExpanded] = useState(false)
   const [riskTrendTimeRange, setRiskTrendTimeRange] = useState<TimeRange>('1M')
   const [isRiskTrendFullscreen, setIsRiskTrendFullscreen] = useState(false)
   const [isRefreshingTrends, setIsRefreshingTrends] = useState(false)
+  const [topRiskApproved, setTopRiskApproved] = useState(false)
+  const [recentActivityOpen, setRecentActivityOpen] = useState(false)
+  const [isRefreshingRealtime, setIsRefreshingRealtime] = useState(false)
   const riskTrendChartRef = useRef<HTMLDivElement>(null)
   
   // Platform store - synced with Command Center
+  const portfolio = usePortfolio()
+  const setPortfolioConfirmed = usePlatformStore((s) => s.setPortfolioConfirmed)
+  const setLastRefresh = usePlatformStore((s) => s.setLastRefresh)
   const institutionalKPIs = useInstitutionalKPIs()
+
+  // Fetch portfolio summary (same source as Command Center). Use same API base so data matches Command Center.
+  useEffect(() => {
+    let cancelled = false
+    const apiBase = getApiV1Base()
+    const load = async () => {
+      try {
+        const res = await fetch(`${apiBase}/geodata/summary`)
+        if (res.ok && !cancelled) {
+          const data = await res.json()
+          const momFromSummary = data.risk_velocity_mom_pct ?? null
+          setPortfolioConfirmed({
+            totalExposure: data.total_exposure ?? 0,
+            atRisk: data.at_risk_exposure ?? 0,
+            totalExpectedLoss: data.total_expected_loss,
+            criticalCount: data.critical_count ?? 0,
+            highCount: data.high_count ?? 0,
+            mediumCount: data.medium_count ?? 0,
+            lowCount: data.low_count ?? 0,
+            weightedRisk: data.weighted_risk ?? 0,
+            riskVelocityMomPct: momFromSummary,
+            riskModelVersion: data.risk_model_version,
+            dataSourcesFreshness: data.data_sources_freshness,
+          })
+          if (momFromSummary == null) {
+            const velRes = await fetch(`${apiBase}/risk-engine/risk-velocity`)
+            if (velRes.ok && !cancelled) {
+              const velData = await velRes.json()
+              const momPct = velData?.risk_velocity?.mom_pct
+              if (typeof momPct === 'number') {
+                usePlatformStore.getState().updatePortfolio({ riskVelocityMomPct: momPct })
+              }
+            }
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    load()
+    const interval = setInterval(load, 5 * 60 * 1000) // every 5 min, same as Command Center
+    return () => { cancelled = true; clearInterval(interval) }
+  }, [setPortfolioConfirmed])
+
+  // Load last-refresh times for Real-Time Intelligence panels so data shows immediately (no "—" on first load)
+  useEffect(() => {
+    let cancelled = false
+    const apiBase = getApiV1Base()
+    const loadLastRefresh = async () => {
+      try {
+        const res = await fetch(`${apiBase}/ingestion/last-refresh`)
+        if (!res.ok || cancelled) return
+        const data = await res.json()
+        if (data && typeof data === 'object' && !cancelled) {
+          for (const [sourceId, ts] of Object.entries(data)) {
+            if (typeof ts === 'string' && sourceId) setLastRefresh(sourceId, ts)
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    loadLastRefresh()
+    // Retry once after 8s so we pick up data from API startup ingestion jobs
+    const t = setTimeout(() => {
+      if (!cancelled) loadLastRefresh()
+    }, 8000)
+    return () => {
+      cancelled = true
+      clearTimeout(t)
+    }
+  }, [setLastRefresh])
+
+  // If no ingestion data yet, run refresh once in background so panels get timestamps and threat feed fills
+  const lastRefreshBySource = usePlatformStore((s) => s.lastRefreshBySource)
+  const setLastSnapshotForSource = usePlatformStore((s) => s.setLastSnapshotForSource)
+  const hasAnyRefresh = Object.keys(lastRefreshBySource).length > 0
+  useEffect(() => {
+    if (hasAnyRefresh) return
+    let done = false
+    const runOnce = async () => {
+      try {
+        const base = getApiV1Base()
+        const refreshUrl = base ? `${base}/ingestion/refresh-all` : '/api/v1/ingestion/refresh-all'
+        const res = await fetch(refreshUrl, { method: 'POST' })
+        if (done) return
+        const payload = await res.json().catch(() => ({}))
+        const results = payload?.results
+        const finishedAt = payload?.finished_at
+        if (finishedAt && results && typeof results === 'object') {
+          for (const [sourceId, result] of Object.entries(results as Record<string, unknown>)) {
+            const r = result as { success?: boolean; summary?: { updated_at?: string }; last_events?: unknown[]; snapshot_updated_at?: string }
+            const ts = r?.summary?.updated_at ?? finishedAt
+            if (sourceId && typeof ts === 'string') setLastRefresh(sourceId, ts)
+            if (sourceId && Array.isArray(r?.last_events)) {
+              setLastSnapshotForSource(sourceId, {
+                last_events: r.last_events,
+                updated_at: r.snapshot_updated_at ?? r?.summary?.updated_at ?? finishedAt,
+              })
+            }
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    runOnce()
+    return () => { done = true }
+  }, [hasAnyRefresh, setLastRefresh, setLastSnapshotForSource])
+
   const activeStressTest = useActiveStressTest()
   const recentEvents = useRecentEvents(5)
   const { wsStatus } = usePlatformStore()
   
-  // Platform WebSocket - receives events from Command Center (including command_center for zones/twins)
-  usePlatformWebSocket(['dashboard', 'stress_tests', 'alerts', 'command_center'])
-  
-  // Fetch platform layers from API
-  const { data: platformData, isLoading, error } = useQuery({
+  // Fetch platform layers from API (no fallback — show loading/error so data source is clear)
+  const { data: platformData, isLoading: layersLoading, error: layersError, refetch: refetchLayers } = useQuery({
     queryKey: ['platformLayers'],
     queryFn: fetchPlatformLayers,
-    refetchInterval: 30000, // Refresh every 30 seconds
+    refetchInterval: 30000,
     staleTime: 10000,
   })
   
@@ -518,11 +568,10 @@ export default function Dashboard() {
     staleTime: 30000,
   })
   
-  // Transform API data for chart component
+  // Transform API data for chart component; empty when no data (show "Collecting data..." in UI)
   const riskTrendData = useMemo(() => {
-    if (!riskTrendsResponse?.series) {
-      // Fallback mock data if API fails
-      return generateRiskTrendData(riskTrendTimeRange)
+    if (!riskTrendsResponse?.series?.length) {
+      return []
     }
     return transformRiskTrendData(riskTrendsResponse.series)
   }, [riskTrendsResponse, riskTrendTimeRange])
@@ -555,75 +604,70 @@ export default function Dashboard() {
     setIsRefreshingTrends(false)
   }
   
-  // Financial impact annotations for the risk trend chart (institutional style)
+  // Annotations from real recent events (WebSocket)
   const riskTrendAnnotations = useMemo(() => {
-    const now = new Date()
-    const days = getDaysFromTimeRange(riskTrendTimeRange)
-    
-    // Generate auto-annotations with financial impact
     const annotations: Array<{ date: Date; label: string; type: 'stress-test' | 'alert' | 'event' }> = []
-    
-    if (days >= 5) {
-      const stressTestDate = new Date(now)
-      stressTestDate.setDate(stressTestDate.getDate() - 3)
-      annotations.push({
-        date: stressTestDate,
-        label: 'Flood risk ↑ → €32M exposure',
-        type: 'alert',
-      })
+    for (const ev of recentEvents.slice(0, 5)) {
+      const date = ev.timestamp ? new Date(ev.timestamp) : new Date()
+      const data = ev.data ?? {}
+      let label = ''
+      let type: 'stress-test' | 'alert' | 'event' = 'event'
+      if (ev.event_type === 'stress_test.completed') {
+        type = 'stress-test'
+        label = data.name ?? 'Stress test completed'
+        if (data.total_expected_loss != null) label += ` → €${Math.round(Number(data.total_expected_loss))}M`
+      } else if (ev.event_type?.includes('alert') || ev.event_type === 'zone.risk_updated') {
+        type = 'alert'
+        label = data.message ?? data.alert_type ?? 'Risk update'
+        if (data.exposure != null) label += ` → €${Math.round(Number(data.exposure))}M`
+      } else {
+        label = data.message ?? ev.event_type ?? 'Event'
+      }
+      if (label) annotations.push({ date, label, type })
     }
-    
-    if (days >= 7) {
-      const stressTestDate = new Date(now)
-      stressTestDate.setDate(stressTestDate.getDate() - 5)
-      annotations.push({
-        date: stressTestDate,
-        label: 'Network risk spike → Supplier X',
-        type: 'stress-test',
-      })
-    }
-    
-    if (days >= 14) {
-      const alertDate = new Date(now)
-      alertDate.setDate(alertDate.getDate() - 12)
-      annotations.push({
-        date: alertDate,
-        label: 'Heat stress → €48M at risk',
-        type: 'alert',
-      })
-    }
-    
-    if (days >= 21) {
-      const eventDate = new Date(now)
-      eventDate.setDate(eventDate.getDate() - 18)
-      annotations.push({
-        date: eventDate,
-        label: 'Mitigation deployed → €12M saved',
-        type: 'event',
-      })
-    }
-    
     return annotations
-  }, [riskTrendTimeRange])
-  // Fetch risk distribution from API
-  const { data: riskDistributionResponse } = useQuery({
+  }, [recentEvents])
+  // Fetch risk distribution from API only (no fallback to estimated portfolio data)
+  const {
+    data: riskDistributionResponse,
+    isError: riskDistributionError,
+    isLoading: riskDistributionLoading,
+    refetch: refetchRiskDistribution,
+  } = useQuery({
     queryKey: ['riskDistribution'],
     queryFn: getRiskDistribution,
     refetchInterval: 60000,
     staleTime: 30000,
   })
-  
-  const riskDistributionData = useMemo(() => {
-    if (!riskDistributionResponse?.distribution) {
-      return getRiskDistributionData() // Fallback
+
+  const { riskDistributionData, riskDistributionSource, riskDistributionMessage } = useMemo(() => {
+    if (riskDistributionLoading) {
+      return {
+        riskDistributionData: [] as { id: string; label: string; value: number; color: string; risk: number }[],
+        riskDistributionSource: 'loading' as const,
+        riskDistributionMessage: 'Loading…',
+      }
     }
+    if (riskDistributionError || !riskDistributionResponse) {
+      return {
+        riskDistributionData: [] as { id: string; label: string; value: number; color: string; risk: number }[],
+        riskDistributionSource: 'error' as const,
+        riskDistributionMessage: 'Unable to load distribution from server.',
+      }
+    }
+    const dist = riskDistributionResponse.distribution ?? []
     const total = riskDistributionResponse.total_assets ?? 0
-    const allZero = riskDistributionResponse.distribution.every((d) => (d.value ?? 0) === 0)
-    if (total === 0 || allZero) {
-      return getRiskDistributionData() // Fallback when DB has no assets
+    return {
+      riskDistributionData: dist.length ? dist : [
+        { id: 'critical', label: 'Critical', value: 0, color: '#ef4444', risk: 0.9 },
+        { id: 'high', label: 'High', value: 0, color: '#f97316', risk: 0.7 },
+        { id: 'medium', label: 'Medium', value: 0, color: '#eab308', risk: 0.5 },
+        { id: 'low', label: 'Low', value: 0, color: '#22c55e', risk: 0.2 },
+      ],
+      riskDistributionSource: 'api' as const,
+      riskDistributionMessage: total === 0 ? 'No active assets' : 'All active assets in system (real portfolio)',
     }
-    return riskDistributionResponse.distribution
-  }, [riskDistributionResponse])
+  }, [riskDistributionResponse, riskDistributionLoading, riskDistributionError])
   
   // Fetch top risk assets from API
   const { data: topRiskAssetsResponse } = useQuery({
@@ -634,10 +678,7 @@ export default function Dashboard() {
   })
   
   const topRiskAssetsData = useMemo(() => {
-    if (!topRiskAssetsResponse?.assets?.length) {
-      return getTopRiskAssetsData() // Fallback when DB has no assets
-    }
-    return topRiskAssetsResponse.assets
+    return topRiskAssetsResponse?.assets ?? []
   }, [topRiskAssetsResponse])
   
   // Fetch scenario comparison from API
@@ -649,26 +690,47 @@ export default function Dashboard() {
   })
   
   const scenarioComparisonData = useMemo(() => {
-    if (!scenarioComparisonResponse?.scenarios) {
-      return getScenarioComparisonData() // Fallback
-    }
-    return scenarioComparisonResponse.scenarios
+    return scenarioComparisonResponse?.scenarios ?? []
   }, [scenarioComparisonResponse])
   
-  // Fallback data if API fails
-  const fallbackLayers = [
-    { layer: 0, name: 'Verified Truth', status: 'active', count: '12.4K', count_raw: 12400, description: 'Cryptographic data provenance', details: {} },
-    { layer: 1, name: 'Digital Twins', status: 'active', count: '1,156', count_raw: 1156, description: '3D asset representations', details: {} },
-    { layer: 2, name: 'Network Intelligence', status: 'active', count: '8.2K', count_raw: 8200, description: 'Risk graph connections', details: {} },
-    { layer: 3, name: 'Simulation Engine', status: 'active', count: '234', count_raw: 234, description: 'Monte Carlo simulations', details: {} },
-    { layer: 4, name: 'Autonomous Agents', status: 'beta', count: '3', count_raw: 3, description: 'AI agents', details: {} },
-    { layer: 5, name: 'Protocol (PARS)', status: 'dev', count: 'v0.1', count_raw: 0, description: 'Asset reference protocol', details: {} },
-  ]
-  
-  const layers = platformData?.layers || fallbackLayers
+  // Real data only — no fake fallback; loading/error shown in UI
+  const layers = platformData?.layers ?? []
+
+  const handleRefreshRealtime = async () => {
+    if (isRefreshingRealtime) return
+    setIsRefreshingRealtime(true)
+    try {
+      const base = getApiV1Base()
+      const refreshUrl = base ? `${base}/ingestion/refresh-all` : '/api/v1/ingestion/refresh-all'
+      const res = await fetch(refreshUrl, { method: 'POST' })
+      const payload = await res.json().catch(() => ({}))
+      const finishedAt = payload?.finished_at
+      const results = payload?.results
+      if (res.ok && typeof finishedAt === 'string') {
+        const sourceIds = results && typeof results === 'object'
+          ? Object.keys(results)
+          : ['market_data', 'natural_hazards', 'threat_intelligence', 'weather', 'biosecurity', 'cyber_threats', 'economic', 'social_media']
+        for (const sourceId of sourceIds) {
+          const r = results?.[sourceId] as { summary?: { updated_at?: string }; last_events?: unknown[]; snapshot_updated_at?: string } | undefined
+          const ts = r?.summary?.updated_at ?? finishedAt
+          if (sourceId && typeof ts === 'string') setLastRefresh(sourceId, ts)
+          if (sourceId && r && Array.isArray(r.last_events)) {
+            setLastSnapshotForSource(sourceId, {
+              last_events: r.last_events,
+              updated_at: r.snapshot_updated_at ?? r?.summary?.updated_at ?? finishedAt,
+            })
+          }
+        }
+      }
+    } catch {
+      // ignore - regular scheduler/WS updates continue
+    } finally {
+      setIsRefreshingRealtime(false)
+    }
+  }
   
   return (
-    <div className="h-full overflow-auto p-8">
+    <div className="min-h-full bg-zinc-950 p-8 pb-16 font-sans" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
       {/* ============================================ */}
       {/* EXECUTIVE RISK SNAPSHOT (Above the Fold) */}
       {/* ============================================ */}
@@ -681,34 +743,46 @@ export default function Dashboard() {
       >
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-display font-bold text-white/90 tracking-wide">
+            <h1 className="text-2xl font-display font-bold text-zinc-100 tracking-wide">
               PHYSICAL-FINANCIAL RISK COMMAND CENTER
             </h1>
-            <p className="text-white/40 text-sm mt-1">
+            <p className="text-zinc-500 text-sm mt-1">
               Strategic Intelligence for the Physical Economy
             </p>
           </div>
           
-          {/* Live sync + status indicators */}
-          <div className="flex items-center gap-4">
+          {/* Data freshness + Live sync */}
+          <div className="flex items-center gap-4 flex-wrap">
+            {portfolio.dataSourcesFreshness && (
+              <span className="text-[10px] text-zinc-500" title="Data refresh cadence">
+                {portfolio.dataSourcesFreshness}
+              </span>
+            )}
             {activeStressTest && (
               <motion.div 
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-lg"
+                className="flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-md"
               >
-                <BoltIcon className="w-4 h-4 text-amber-400 animate-pulse" />
+                <BoltIcon className="w-4 h-4 text-amber-400/80 animate-pulse" />
                 <span className="text-xs text-amber-300">
                   {activeStressTest.name}
                   {activeStressTest.progress !== undefined && (
                     <span className="ml-2 text-amber-400/70">{activeStressTest.progress}%</span>
                   )}
                 </span>
+                <Link
+                  to="/command"
+                  className="ml-2 text-[10px] text-amber-400/80 hover:text-amber-300 underline whitespace-nowrap"
+                  title="View in Command Center"
+                >
+                  Open in Command Center
+                </Link>
               </motion.div>
             )}
             <div className="flex items-center gap-1.5 text-xs">
-              <SignalIcon className={`w-4 h-4 ${wsStatus === 'connected' ? 'text-emerald-400' : wsStatus === 'connecting' ? 'text-amber-400 animate-pulse' : 'text-white/30'}`} />
-              <span className={wsStatus === 'connected' ? 'text-emerald-400' : wsStatus === 'connecting' ? 'text-amber-400' : 'text-white/30'}>
+              <SignalIcon className={`w-4 h-4 ${wsStatus === 'connected' ? 'text-emerald-400/80' : wsStatus === 'connecting' ? 'text-amber-400/80 animate-pulse' : 'text-zinc-600'}`} />
+              <span className={wsStatus === 'connected' ? 'text-emerald-400/80' : wsStatus === 'connecting' ? 'text-amber-400/80' : 'text-zinc-600'}>
                 {wsStatus === 'connected' ? 'Live' : wsStatus === 'connecting' ? 'Connecting...' : 'Offline'}
               </span>
             </div>
@@ -716,27 +790,61 @@ export default function Dashboard() {
         </div>
       </motion.div>
 
-      {/* GLOBAL RISK POSTURE - Hero Line */}
+      {/* Forward-looking disclaimer (Gap X4) */}
+      <p className="text-xs text-zinc-500 mb-4">
+        Projections and risk metrics are indicative and for internal use only. Not for regulatory submission.
+      </p>
+      <p className="text-xs text-zinc-500 mb-2" title="Data refresh cadence / risk model">
+        Data: {portfolio.dataSourcesFreshness ?? '—'}
+        {' • '}
+        Risk model v{portfolio.riskModelVersion ?? 1}
+        {portfolio.riskModelVersion === 2 && ' (GDELT, World Bank, OFAC, hysteresis)'}
+      </p>
+
+      {/* GLOBAL RISK POSTURE — corporate card */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="glass rounded-2xl p-5 border border-white/10 mb-6"
+        className="rounded-md bg-zinc-900 border border-zinc-800 mb-6 overflow-hidden"
       >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="text-white/40 text-xs uppercase tracking-widest">Global Risk Posture</div>
-            <div className={`text-2xl font-bold tracking-wide ${institutionalKPIs.posture.color}`}>
-              {institutionalKPIs.posture.level} {institutionalKPIs.posture.arrow}
+        <div className="rounded-md p-5 relative">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Global Risk Posture</div>
+              <div
+                className={`text-2xl font-bold tracking-wide ${institutionalKPIs.posture.color}`}
+                style={{
+                  textShadow:
+                    institutionalKPIs.posture.level === 'CRITICAL'
+                      ? '0 0 12px rgba(239,68,68,0.4)'
+                      : institutionalKPIs.posture.level === 'ELEVATED'
+                        ? '0 0 12px rgba(249,115,22,0.4)'
+                        : institutionalKPIs.posture.level === 'MODERATE'
+                          ? '0 0 12px rgba(234,179,8,0.4)'
+                          : '0 0 12px rgba(34,197,94,0.4)',
+                }}
+              >
+                {institutionalKPIs.posture.level} {institutionalKPIs.posture.arrow}
+              </div>
             </div>
           </div>
-          <div className="text-right">
-            <div className="text-white/40 text-[10px] uppercase tracking-wider mb-1">Capital at Risk (30d)</div>
-            <div className="text-white text-xl font-light">
-              €{institutionalKPIs.capitalAtRisk}M 
-              <span className="text-red-400/80 text-sm ml-2">{institutionalKPIs.capitalAtRiskChange}</span>
-            </div>
-          </div>
+          <motion.div
+            className="absolute bottom-0 left-0 h-0.5 bg-gradient-to-r from-current to-transparent"
+            style={{
+              background:
+                institutionalKPIs.posture.level === 'CRITICAL'
+                  ? 'linear-gradient(90deg, #ef4444, transparent)'
+                  : institutionalKPIs.posture.level === 'ELEVATED'
+                    ? 'linear-gradient(90deg, #f97316, transparent)'
+                    : institutionalKPIs.posture.level === 'MODERATE'
+                      ? 'linear-gradient(90deg, #eab308, transparent)'
+                      : 'linear-gradient(90deg, #22c55e, transparent)',
+            }}
+            initial={{ width: 0 }}
+            animate={{ width: '100%' }}
+            transition={{ duration: 0.8, delay: 0.2, ease: [0.22, 0.61, 0.36, 1] }}
+          />
         </div>
       </motion.div>
 
@@ -748,207 +856,206 @@ export default function Dashboard() {
         className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8"
       >
         {/* Capital at Risk (VaR/CaR) */}
-        <motion.div variants={item} className="glass rounded-xl p-5 border border-white/5">
-          <div className="text-white/40 text-[10px] uppercase tracking-widest mb-2">Capital at Risk</div>
-          <div className="text-white text-2xl font-light">€{institutionalKPIs.capitalAtRisk}M</div>
-          <div className="text-red-400/70 text-xs mt-1">{institutionalKPIs.capitalAtRiskChange}</div>
-          <div className="text-white/30 text-[10px] mt-2">30-day VaR equivalent</div>
+        <motion.div variants={item} className="rounded-md bg-zinc-900 border border-zinc-800 hover-glow">
+          <div className="rounded-md p-5 relative">
+            {institutionalKPIs.capitalAtRisk > 0 && (
+              <span className="absolute top-4 left-4 w-2 h-2 rounded-full bg-red-500 animate-pulse" aria-hidden />
+            )}
+            <div className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-2">Capital at Risk</div>
+            <div className="gradient-text text-2xl font-light">{formatEur(institutionalKPIs.capitalAtRisk, 'millions')}</div>
+            {institutionalKPIs.capitalAtRiskChange !== '—' && (
+              <div className="text-red-400/70 text-xs mt-1">{institutionalKPIs.capitalAtRiskChange}</div>
+            )}
+            <div className="text-zinc-600 text-[10px] mt-2" title={`90% CI: ${formatEur(institutionalKPIs.capitalAtRisk * 0.93, 'millions')}–${formatEur(institutionalKPIs.capitalAtRisk * 1.07, 'millions')} (illustrative)`}>30-day VaR equivalent · ± ~7% interval</div>
+          </div>
         </motion.div>
         
         {/* Stress Loss (P95) */}
-        <motion.div variants={item} className="glass rounded-xl p-5 border border-white/5">
-          <div className="text-white/40 text-[10px] uppercase tracking-widest mb-2">Stress Loss (P95)</div>
-          <div className="text-white text-2xl font-light">€{institutionalKPIs.stressLossP95}M</div>
-          <div className="text-orange-400/70 text-xs mt-1">{institutionalKPIs.stressLossP95Pct}</div>
-          <div className="text-white/30 text-[10px] mt-2">Severe scenario loss</div>
+        <motion.div variants={item} className="rounded-md bg-zinc-900 border border-zinc-800 hover-glow">
+          <div className="rounded-md p-5 relative">
+            <span className="absolute top-4 left-4 w-2 h-2 rounded-full bg-orange-500" aria-hidden />
+            <div className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-2">Stress Loss (P95)</div>
+            <div className="gradient-text text-2xl font-light">{formatEur(institutionalKPIs.stressLossP95, 'millions')}</div>
+            {institutionalKPIs.stressLossP95Pct !== '—' && (
+              <div className="text-orange-400/70 text-xs mt-1">{institutionalKPIs.stressLossP95Pct}</div>
+            )}
+            <div className="text-zinc-600 text-[10px] mt-2" title={`90% CI: ${formatEur(institutionalKPIs.stressLossP95 * 0.9, 'millions')}–${formatEur(institutionalKPIs.stressLossP95 * 1.1, 'millions')} (illustrative)`}>Severe scenario loss · ± ~10% interval</div>
+          </div>
         </motion.div>
         
         {/* Risk Velocity */}
-        <motion.div variants={item} className="glass rounded-xl p-5 border border-white/5">
-          <div className="text-white/40 text-[10px] uppercase tracking-widest mb-2">Risk Velocity</div>
-          <div className={`text-2xl font-light ${institutionalKPIs.riskVelocity > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
-            {institutionalKPIs.riskVelocityLabel}
+        <motion.div variants={item} className="rounded-md bg-zinc-900 border border-zinc-800 hover-glow">
+          <div className="rounded-md p-5">
+            <div className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-2">Risk Velocity</div>
+            <div
+              className={`text-2xl font-light flex items-center gap-1 ${institutionalKPIs.riskVelocity != null ? (institutionalKPIs.riskVelocity > 0 ? 'text-red-400/80' : 'text-emerald-400/80') : 'text-zinc-500'}`}
+              style={{
+                textShadow:
+                  institutionalKPIs.riskVelocity != null
+                    ? institutionalKPIs.riskVelocity > 0
+                      ? '0 0 8px rgba(239,68,68,0.3)'
+                      : '0 0 8px rgba(34,197,94,0.3)'
+                    : undefined,
+              }}
+            >
+              {institutionalKPIs.riskVelocityLabel === '—' ? (
+                <span className="inline-flex gap-0.5">
+                  <span className="w-1 h-3 bg-zinc-500 rounded-full animate-pulse" style={{ animationDelay: '0ms' }} />
+                  <span className="w-1 h-4 bg-zinc-500 rounded-full animate-pulse" style={{ animationDelay: '150ms' }} />
+                  <span className="w-1 h-2 bg-zinc-500 rounded-full animate-pulse" style={{ animationDelay: '300ms' }} />
+                </span>
+              ) : (
+                institutionalKPIs.riskVelocityLabel
+              )}
+            </div>
+            <div className="text-zinc-500 text-xs mt-1">
+              vs last month
+              {institutionalKPIs.riskVelocity === 0 && <span className="text-zinc-600 ml-1">(no change)</span>}
+            </div>
+            {institutionalKPIs.riskVelocityLabel === '—' && (
+              <div className="text-zinc-600 text-[10px] mt-2">Run stress tests or save posture to see change vs last month.</div>
+            )}
           </div>
-          <div className="text-white/50 text-xs mt-1">vs last month</div>
-          <div className="text-white/30 text-[10px] mt-2">Rate of risk change</div>
         </motion.div>
         
-        {/* Mitigated vs Unmitigated */}
-        <motion.div variants={item} className="glass rounded-xl p-5 border border-white/5">
-          <div className="text-white/40 text-[10px] uppercase tracking-widest mb-2">Risk Coverage</div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-emerald-400 text-2xl font-light">{institutionalKPIs.mitigatedPct}</span>
-            <span className="text-white/30 text-sm">mitigated</span>
-          </div>
-          <div className="text-red-400/60 text-xs mt-1">{institutionalKPIs.unmitigatedPct} unmitigated</div>
-          <div className="mt-2 h-1.5 bg-white/10 rounded-full overflow-hidden">
-            <div 
-              className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full"
-              style={{ width: institutionalKPIs.mitigatedPct }}
-            />
+        {/* Mitigated vs Unmitigated — Estimated from weighted risk band */}
+        <motion.div variants={item} className="rounded-md bg-zinc-900 border border-zinc-800 hover-glow">
+          <div className="rounded-md p-5">
+            <div className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-2">
+              Risk Coverage
+              <span title="Estimated from weighted risk band (not from coverage API)" className="cursor-help text-zinc-600 hover:text-zinc-400">ⓘ</span>
+            </div>
+            <p className="text-[10px] text-zinc-600 mb-1.5">Estimated from risk band (not measured coverage).</p>
+            <div className="flex items-baseline gap-2">
+              <motion.span
+                className="text-emerald-400/80 text-2xl font-light"
+                initial={{ opacity: 0.5 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.5 }}
+              >
+                {institutionalKPIs.mitigatedPct}
+              </motion.span>
+              <span className="text-zinc-600 text-sm">mitigated</span>
+            </div>
+            <div className="text-red-400/60 text-xs mt-1">{institutionalKPIs.unmitigatedPct} unmitigated</div>
+            <div className="mt-2 h-1.5 bg-zinc-700 rounded-full overflow-hidden">
+              <motion.div
+                className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400"
+                style={{ boxShadow: '0 0 8px rgba(34,197,94,0.3)' }}
+                initial={{ width: 0 }}
+                animate={{ width: institutionalKPIs.mitigatedPct }}
+                transition={{ duration: 0.8, delay: 0.2, ease: [0.22, 0.61, 0.36, 1] }}
+              />
+            </div>
           </div>
         </motion.div>
       </motion.div>
 
-      {/* Quick Actions - 3D + AI Fintech Strategy */}
+      {/* Today Card + Sentiment Meter + Quick Actions */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.35 }}
-        className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8"
+        className="mb-8"
       >
-        <Link to="/projects" className="block group">
-          <div className="glass rounded-2xl p-5 border border-amber-500/20 hover:border-amber-500/50 transition-all hover:bg-amber-500/5">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <BriefcaseIcon className="w-5 h-5 text-amber-400" />
-                  <p className="text-sm font-semibold text-white/90">Project Finance</p>
-                </div>
-                <p className="text-xs text-white/50">IRR/NPV, Phases, CAPEX/OPEX</p>
-              </div>
-              <ArrowTrendingUpIcon className="w-6 h-6 text-amber-400/50 group-hover:text-amber-400 transition-colors" />
-            </div>
-          </div>
-        </Link>
-        <Link to="/portfolios" className="block group">
-          <div className="glass rounded-2xl p-5 border border-emerald-500/20 hover:border-emerald-500/50 transition-all hover:bg-emerald-500/5">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <CurrencyDollarIcon className="w-5 h-5 text-emerald-400" />
-                  <p className="text-sm font-semibold text-white/90">Portfolios & REIT</p>
-                </div>
-                <p className="text-xs text-white/50">NAV, FFO, Yield, Stress Tests</p>
-              </div>
-              <ArrowTrendingUpIcon className="w-6 h-6 text-emerald-400/50 group-hover:text-emerald-400 transition-colors" />
-            </div>
-          </div>
-        </Link>
-        <Link to="/fraud" className="block group">
-          <div className="glass rounded-2xl p-5 border border-red-500/20 hover:border-red-500/50 transition-all hover:bg-red-500/5">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <ShieldExclamationIcon className="w-5 h-5 text-red-400" />
-                  <p className="text-sm font-semibold text-white/90">Fraud Detection</p>
-                </div>
-                <p className="text-xs text-white/50">Claims, 3D Compare, Verification</p>
-              </div>
-              <ArrowTrendingUpIcon className="w-6 h-6 text-red-400/50 group-hover:text-red-400 transition-colors" />
-            </div>
-          </div>
-        </Link>
-        <Link to="/action-plans" className="block group">
-          <div className="glass rounded-2xl p-5 border border-amber-500/20 hover:border-amber-500/50 transition-all hover:bg-amber-500/5">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <BeakerIcon className="w-5 h-5 text-amber-400" />
-                  <p className="text-sm font-semibold text-white/90">STRESS TEST ACTION PLAN</p>
-                </div>
-                <p className="text-xs text-white/50">Template: 5 sectors, phases, metrics, step-by-step</p>
-              </div>
-              <ArrowTrendingUpIcon className="w-6 h-6 text-amber-400/50 group-hover:text-amber-400 transition-colors" />
-            </div>
-          </div>
-        </Link>
-        <Link to="/stress-planner" className="block group">
-          <div className="glass rounded-2xl p-5 border border-amber-500/20 hover:border-amber-500/50 transition-all hover:bg-amber-500/5">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <BeakerIcon className="w-5 h-5 text-amber-400" />
-                  <p className="text-sm font-semibold text-white/90">Stress Planner</p>
-                </div>
-                <p className="text-xs text-white/50">All scenario types, Monte Carlo, real API</p>
-              </div>
-              <ArrowTrendingUpIcon className="w-6 h-6 text-amber-400/50 group-hover:text-amber-400 transition-colors" />
-            </div>
-          </div>
-        </Link>
-        {/* Institutional Modes */}
-        <Link to="/board-mode" className="block group">
-          <div className="glass rounded-2xl p-5 border border-purple-500/20 hover:border-purple-500/50 transition-all hover:bg-purple-500/5">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <CubeTransparentIcon className="w-5 h-5 text-purple-400" />
-                  <p className="text-sm font-semibold text-white/90">Board Mode</p>
-                </div>
-                <p className="text-xs text-white/50">5-slide executive presentation</p>
-              </div>
-              <ArrowTrendingUpIcon className="w-6 h-6 text-purple-400/50 group-hover:text-purple-400 transition-colors" />
-            </div>
-          </div>
-        </Link>
-        <Link to="/regulator-mode" className="block group">
-          <div className="glass rounded-2xl p-5 border border-slate-500/20 hover:border-slate-500/50 transition-all hover:bg-slate-500/5">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <CheckCircleIcon className="w-5 h-5 text-slate-400" />
-                  <p className="text-sm font-semibold text-white/90">Regulator Mode</p>
-                </div>
-                <p className="text-xs text-white/50">ECB / DORA / ISO 22301 view</p>
-              </div>
-              <ArrowTrendingUpIcon className="w-6 h-6 text-slate-400/50 group-hover:text-slate-400 transition-colors" />
-            </div>
-          </div>
-        </Link>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+          <TodayCardWidget />
+          <WarRoomCard compact />
+          <SentimentMeterWidget />
+          <ClimateHavenCard latitude={53.55} longitude={9.99} />
+        </div>
+        <QuickActionsCards />
+      </motion.div>
+
+      {/* EP Curve — Exceedance Probability from Monte Carlo (synthetic portfolio; count may differ from real assets below) */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.38 }}
+        className="mb-8"
+      >
+        <p className="text-[10px] text-zinc-500 mb-2">Synthetic portfolio for simulation; asset count may differ from real portfolio below.</p>
+        <EPCurveChart
+          totalExposure={institutionalKPIs.totalExposure || 500}
+          scenario="climate"
+          severity={portfolio.weightedRisk ?? 0.5}
+        />
       </motion.div>
 
       {/* Four Column Layout: Alerts, Climate, Risk Distribution, System Overseer */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {/* SENTINEL Real-time Alerts - height matches Climate Risk Monitor */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* SENTINEL Real-time Alerts */}
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.4 }}
-          className="h-full flex flex-col min-h-0"
+          className="self-start"
         >
-          <AlertPanel maxAlerts={5} compact={true} fillHeight />
+          <AlertPanel maxAlerts={5} compact={true} />
         </motion.div>
 
-        {/* Climate Risk Monitor - LIVE DATA */}
+        {/* Climate Risk Monitor — height by content only (no stretch) */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.45 }}
-          className="h-full min-h-0"
+          className="self-start"
         >
           <ClimateWidget />
         </motion.div>
 
-        {/* Risk Distribution — by risk level across all active assets (not portfolio-scoped) */}
+        {/* Risk Distribution — corporate card */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5 }}
-          className="glass rounded-2xl p-6 border border-white/5"
+          className="self-start rounded-md bg-zinc-900 border border-zinc-800 p-6"
         >
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-sm font-display font-semibold text-white/80">Asset Risk Distribution</h2>
-              <p className="text-[10px] text-white/40 mt-0.5">All active assets in system</p>
+          <div className="rounded-md">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-base font-display font-semibold gradient-text">Asset Risk Distribution</h2>
+                  <p className="text-[10px] text-zinc-500 mt-0.5">
+                    {riskDistributionSource === 'api' && <span className="text-emerald-500/80">API · </span>}
+                    {riskDistributionMessage}
+                    {riskDistributionSource === 'error' && (
+                      <button
+                        type="button"
+                        onClick={() => refetchRiskDistribution()}
+                        className="ml-1 text-amber-400/80 hover:text-amber-300 underline"
+                      >
+                        Retry
+                      </button>
+                    )}
+                  </p>
+                </div>
+                <Link
+                  to="/risk-zones-analysis"
+                  className="p-1.5 rounded-md hover:bg-zinc-800 transition-colors"
+                  title="View Zone Dependencies Analysis"
+                >
+                  <LinkIcon className="w-4 h-4 text-zinc-500 hover:text-zinc-400" />
+                </Link>
+              </div>
+              <div className="flex items-center gap-4">
+                {riskDistributionLoading ? (
+                  <div className="h-[260px] w-[260px] rounded-full bg-zinc-800/50 animate-pulse flex items-center justify-center text-zinc-500 text-sm">
+                    Loading…
+                  </div>
+                ) : (
+                <PieChart
+                  data={riskDistributionData}
+                  size={260}
+                  innerRadius={0.6}
+                  showLegend={true}
+                  showValues={true}
+                  valueFormat="number"
+                  title=""
+                  variant="hero"
+                />
+                )}
+              </div>
             </div>
-            <Link 
-              to="/risk-zones-analysis"
-              className="p-1.5 rounded-lg hover:bg-white/5 transition-colors"
-              title="View Zone Dependencies Analysis"
-            >
-              <LinkIcon className="w-4 h-4 text-cyan-400/60 hover:text-cyan-400" />
-            </Link>
-          </div>
-          <PieChart
-            data={riskDistributionData}
-            size={200}
-            innerRadius={0.55}
-            showLegend={true}
-            showValues={true}
-            valueFormat="number"
-            title=""
-          />
         </motion.div>
 
         {/* System Overseer - health, executive summary, system alerts */}
@@ -973,24 +1080,21 @@ export default function Dashboard() {
         
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           {/* Risk Trends Over Time */}
-          <div 
+            <div
             ref={riskTrendChartRef}
-            className={`glass rounded-2xl p-6 border border-white/5 transition-all ${
-              isRiskTrendFullscreen 
-                ? 'fixed inset-4 z-50 bg-dark-card' 
-                : ''
-            }`}
+            className={`rounded-md bg-zinc-900 border border-zinc-800 transition-all ${isRiskTrendFullscreen ? 'fixed inset-4 z-50' : ''}`}
           >
+            <div className={`rounded-md p-6 ${isRiskTrendFullscreen ? 'bg-zinc-900 h-full' : ''}`}>
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-3">
-                <h3 className="text-white/80 text-sm font-medium">
+                <h3 className="gradient-text-shimmer text-sm font-medium">
                   Risk Trends & Financial Impact ({riskTrendTimeRange === '1D' ? '24 Hours' : 
                                riskTrendTimeRange === '1W' ? '7 Days' : 
                                riskTrendTimeRange === '1M' ? '30 Days' : 
                                riskTrendTimeRange === '3M' ? '90 Days' : 
                                riskTrendTimeRange === '1Y' ? '1 Year' : 'All Time'})
                 </h3>
-                <span className="text-[10px] text-white/30 flex items-center gap-1">
+                <span className="text-[10px] text-zinc-600 flex items-center gap-1">
                   {wsStatus === 'connected' && (
                     <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
                   )}
@@ -1016,20 +1120,21 @@ export default function Dashboard() {
             {/* Trend Indicators */}
             <div className="flex flex-wrap gap-3 mb-4">
               {riskTrends.map(trend => (
-                <div 
+                <div
                   key={trend.id}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-white/5 rounded-lg"
+                  className="hover-glow flex items-center gap-2 px-3 py-1.5 bg-zinc-800 rounded-md border-l-2"
+                  style={{ borderLeftColor: trend.color, boxShadow: `0 0 6px ${trend.color}40` }}
                 >
-                  <div 
+                  <div
                     className="w-2 h-2 rounded-full"
                     style={{ backgroundColor: trend.color }}
                   />
-                  <span className="text-xs text-white/70">{trend.name}</span>
-                  <span className="text-xs font-medium text-white/90">{trend.current}</span>
+                  <span className="text-xs text-zinc-300">{trend.name}</span>
+                  <span className="text-xs font-medium text-zinc-100">{trend.current}</span>
                   <span className={`flex items-center text-xs font-medium ${
-                    trend.direction === 'up' ? 'text-red-400' : 
-                    trend.direction === 'down' ? 'text-emerald-400' : 
-                    'text-white/50'
+                    trend.direction === 'up' ? 'text-red-400/80' : 
+                    trend.direction === 'down' ? 'text-emerald-400/80' : 
+                    'text-zinc-500'
                   }`}>
                     {trend.direction === 'up' && (
                       <svg className="w-3 h-3 mr-0.5" fill="currentColor" viewBox="0 0 20 20">
@@ -1048,6 +1153,12 @@ export default function Dashboard() {
               ))}
             </div>
             
+            {isLoadingTrends ? (
+              <div className="flex flex-col items-center justify-center h-[350px] gap-2 text-zinc-500 text-sm">
+                <div className="w-8 h-8 border-2 border-zinc-500 border-t-amber-500 rounded-full animate-spin" />
+                Loading risk trends from API…
+              </div>
+            ) : riskTrendData.length > 0 ? (
             <TimeSeriesChart
               series={riskTrendData}
               height={isRiskTrendFullscreen ? 500 : 350}
@@ -1066,62 +1177,87 @@ export default function Dashboard() {
               ]}
               annotations={riskTrendAnnotations}
             />
+            ) : (
+              <div className="flex flex-col items-center justify-center h-[350px] gap-2 text-zinc-500 text-sm text-center px-4">
+                <ChartBarIcon className="w-10 h-10 text-zinc-600 pie-glow-pulse" aria-hidden />
+                <p>Add assets and run stress tests to see risk trends over time.</p>
+                <p className="text-zinc-600 text-xs">Chart will show weighted risk and exposure for the selected period.</p>
+              </div>
+            )}
+            </div>
           </div>
           
           {/* Top Risk Assets - Ranked Decision Table (Institutional) */}
-          <div className="glass rounded-2xl p-6 border border-white/5">
+          <div className="rounded-md bg-zinc-900 border border-zinc-800">
+          <div className="rounded-md p-6">
+            {(() => {
+              const displayed = topRiskAssetsData.slice(0, 5)
+              const totalExposure = displayed.reduce((sum, a) => sum + (a.value ?? 0), 0)
+              return (
+                <>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-white/80 text-sm font-medium">TOP RISK ASSETS</h3>
-              <span className="text-amber-400 text-lg font-light">€221M ↗</span>
+              <h3 className="gradient-text-shimmer text-sm font-medium">TOP RISK ASSETS</h3>
+              <span className="gradient-text text-lg font-light">{displayed.length ? formatEur(totalExposure, 'millions') : '—'}</span>
             </div>
             <div className="overflow-x-auto">
+              {displayed.length === 0 ? (
+                <div className="py-12 flex flex-col items-center justify-center gap-2 text-zinc-500 text-sm">
+                  <BuildingOffice2Icon className="w-10 h-10 text-zinc-600 pie-glow-pulse" />
+                  No assets in database. Add assets to see top risk list.
+                </div>
+              ) : (
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-white/10">
-                    <th className="text-left text-white/40 text-[10px] uppercase tracking-wider py-2 px-2">Rank</th>
-                    <th className="text-left text-white/40 text-[10px] uppercase tracking-wider py-2 px-2">Assets</th>
-                    <th className="text-left text-white/40 text-[10px] uppercase tracking-wider py-2 px-2">Risk/Vet</th>
-                    <th className="text-right text-white/40 text-[10px] uppercase tracking-wider py-2 px-2">Exposure</th>
-                    <th className="text-left text-white/40 text-[10px] uppercase tracking-wider py-2 px-2">Action</th>
+                  <tr className="border-b border-zinc-700">
+                    <th className="text-left font-mono text-[10px] uppercase tracking-widest text-zinc-500 py-2 px-2">Rank</th>
+                    <th className="text-left font-mono text-[10px] uppercase tracking-widest text-zinc-500 py-2 px-2">Assets</th>
+                    <th className="text-left font-mono text-[10px] uppercase tracking-widest text-zinc-500 py-2 px-2">Risk/Driver</th>
+                    <th className="text-right font-mono text-[10px] uppercase tracking-widest text-zinc-500 py-2 px-2">Exposure</th>
+                    <th className="text-left font-mono text-[10px] uppercase tracking-widest text-zinc-500 py-2 px-2">Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {topRiskAssetsData.slice(0, 5).map((asset, idx) => {
+                  {displayed.map((asset, idx) => {
                     const riskLevel = asset.risk > 0.8 ? 'critical' : asset.risk > 0.6 ? 'high' : 'medium'
-                    const riskDriver = asset.risk > 0.85 ? 'Flood' : asset.risk > 0.75 ? 'Heat' : asset.risk > 0.65 ? 'Network' : 'Heat'
-                    const owner = asset.risk > 0.8 ? 'Infra' : asset.risk > 0.7 ? 'Ops' : 'Risk'
+                    const riskDriverLabel = asset.risk_driver ? asset.risk_driver.charAt(0).toUpperCase() + asset.risk_driver.slice(1) : (asset.risk > 0.85 ? 'Climate' : asset.risk > 0.65 ? 'Physical' : 'Network')
                     const action = asset.risk > 0.85 ? 'Relocate' : asset.risk > 0.75 ? 'Capex' : asset.risk > 0.65 ? 'Backup' : 'Monitor'
-                    const expectedLoss = Math.round(asset.value * 0.52)
-                    
+                    const expectedLoss = asset.expected_loss != null ? asset.expected_loss : (asset.value * asset.risk)
                     return (
-                      <tr key={asset.label} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                      <tr
+                        key={asset.id || asset.label}
+                        className={`border-b border-zinc-800 hover:bg-gradient-to-r hover:from-zinc-800/50 hover:to-transparent transition-colors ${
+                          riskLevel === 'critical' ? 'border-l-4 border-l-red-500' :
+                          riskLevel === 'high' ? 'border-l-4 border-l-orange-500' :
+                          'border-l-4 border-l-amber-500'
+                        }`}
+                      >
                         <td className="py-3 px-2">
                           <span className={`inline-flex items-center justify-center w-6 h-6 rounded text-xs font-medium ${
-                            riskLevel === 'critical' ? 'bg-red-500/20 text-red-400' :
-                            riskLevel === 'high' ? 'bg-orange-500/20 text-orange-400' :
-                            'bg-amber-500/20 text-amber-400'
+                            riskLevel === 'critical' ? 'bg-red-500/15 text-red-400/80' :
+                            riskLevel === 'high' ? 'bg-orange-500/15 text-orange-400/80' :
+                            'bg-amber-500/15 text-amber-400/80'
                           }`}>
                             {idx + 1}
                           </span>
                         </td>
                         <td className="py-3 px-2">
-                          <div className="text-white/90 font-medium">{asset.label}</div>
-                          <div className="text-white/40 text-[10px]">{riskDriver}</div>
+                          <div className="text-zinc-100 font-medium">{asset.label}</div>
+                          <div className="text-zinc-500 text-[10px]">{riskDriverLabel}</div>
                         </td>
                         <td className="py-3 px-2">
                           <span className={`text-xs ${
-                            riskLevel === 'critical' ? 'text-red-400' :
-                            riskLevel === 'high' ? 'text-orange-400' :
-                            'text-amber-400'
+                            riskLevel === 'critical' ? 'text-red-400/80' :
+                            riskLevel === 'high' ? 'text-orange-400/80' :
+                            'text-amber-400/80'
                           }`}>
-                            {riskDriver}
+                            {riskDriverLabel}
                           </span>
                         </td>
                         <td className="py-3 px-2 text-right">
-                          <span className="text-white/90">€{expectedLoss}M</span>
+                          <span className="text-zinc-100">{formatEur(expectedLoss, 'millions')}</span>
                         </td>
                         <td className="py-3 px-2">
-                          <span className="inline-flex items-center px-2 py-1 rounded text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                          <span className="inline-flex items-center px-2 py-1 rounded text-[10px] font-medium bg-zinc-700 text-zinc-400 border border-zinc-600">
                             {action}
                           </span>
                         </td>
@@ -1130,25 +1266,56 @@ export default function Dashboard() {
                   })}
                 </tbody>
               </table>
+              )}
             </div>
-            <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-xs">
-              <div className="text-white/40">
-                TOTAL COST: <span className="text-white/80">€221M</span> <span className="text-white/30">last 7 days</span>
+            <div className="mt-4 pt-3 border-t border-zinc-700 flex items-center justify-between text-xs">
+              <div className="text-zinc-500">
+                TOTAL EXPOSURE: <span className="text-zinc-200">{displayed.length ? formatEur(totalExposure, 'millions') : '—'}</span>
+                {displayed.length > 0 && <span className="text-zinc-600 ml-1">(top 5)</span>}
               </div>
-              <button className="px-3 py-1.5 bg-amber-500 text-black text-xs font-medium rounded hover:bg-amber-400 transition-colors">
-                APPROVE
+              <button
+                type="button"
+                onClick={() => setTopRiskApproved(true)}
+                disabled={topRiskApproved}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded transition-colors ${
+                  topRiskApproved
+                    ? 'bg-emerald-500/15 text-emerald-400/80 border border-emerald-500/30 cursor-default'
+                    : 'hover-glow bg-gradient-to-r from-zinc-600 to-zinc-500 text-zinc-100 hover:from-zinc-500 hover:to-zinc-400'
+                }`}
+              >
+                {topRiskApproved ? (
+                  <>
+                    <CheckCircleIcon className="w-4 h-4" />
+                    Approved
+                  </>
+                ) : (
+                  'APPROVE'
+                )}
               </button>
             </div>
+                </>
+              )
+            })()}
           </div>
         </div>
         
         {/* Scenario Comparison - Full Width */}
-        <div className="glass rounded-2xl p-6 border border-white/5 mt-10">
-          <ComparisonChart
-            scenarios={scenarioComparisonData}
-            title="Stress Test Scenario Comparison"
-            showDelta={true}
-          />
+        <div className="rounded-md bg-zinc-900 border border-zinc-800 mt-10">
+          <div className="rounded-md p-6">
+          {scenarioComparisonData.length > 0 ? (
+            <ComparisonChart
+              scenarios={scenarioComparisonData}
+              title="Stress Test Scenario Comparison"
+              showDelta={true}
+            />
+          ) : (
+            <div className="py-12 flex flex-col items-center justify-center gap-2 text-zinc-500 text-sm">
+              <BeakerIcon className="w-10 h-10 text-zinc-600 pie-glow-pulse" />
+              No stress tests completed yet. Run a stress test to see scenario comparison.
+            </div>
+          )}
+          </div>
+        </div>
         </div>
       </motion.div>
 
@@ -1157,61 +1324,107 @@ export default function Dashboard() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.6 }}
-        className="mt-8 glass rounded-2xl p-6"
+        className="mt-8 rounded-md bg-zinc-900 border border-zinc-800"
       >
+        <div className="rounded-md p-6">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-display font-semibold">Platform Layers</h2>
-          {isLoading && (
-            <span className="text-xs text-white/40 flex items-center gap-2">
-              <div className="w-3 h-3 border border-white/40 border-t-transparent rounded-full animate-spin" />
-              Updating...
-            </span>
-          )}
-          {error && (
-            <span className="text-xs text-red-400">Using cached data</span>
-          )}
-          {platformData && (
-            <span className="text-xs text-emerald-400 flex items-center gap-1">
-              <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
-              Live
-            </span>
-          )}
+          <h2 className="text-xl font-display font-semibold gradient-text-shimmer">Platform Layers</h2>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setAllLayersExpanded(!allLayersExpanded)}
+              className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors flex items-center gap-1"
+            >
+              {allLayersExpanded ? (
+                <>
+                  <ChevronDownIcon className="w-3 h-3 rotate-180" />
+                  Collapse all
+                </>
+              ) : (
+                <>
+                  <ChevronDownIcon className="w-3 h-3" />
+                  Expand all
+                </>
+              )}
+            </button>
+            {layersLoading && (
+              <span className="text-xs text-zinc-500 flex items-center gap-2">
+                <div className="w-3 h-3 border border-zinc-500 border-t-transparent rounded-full animate-spin" />
+                Loading…
+              </span>
+            )}
+            {layersError && (
+              <span className="text-xs text-red-400/80 flex items-center gap-2">
+                Failed to load layers.
+                <button type="button" onClick={() => refetchLayers()} className="text-amber-400/80 hover:text-amber-300 underline">Retry</button>
+              </span>
+            )}
+            {platformData && !layersError && (
+              <span className="text-xs text-emerald-400/80 flex items-center gap-1">
+                <div
+                  className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"
+                  style={{ boxShadow: '0 0 6px rgba(34,197,94,0.4)' }}
+                />
+                Live
+              </span>
+            )}
+          </div>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          {layers.map((l) => (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {layersLoading && (
+            [...Array(6)].map((_, i) => (
+              <div key={i} className="p-4 bg-zinc-900/80 rounded-md animate-pulse h-32" />
+            ))
+          )}
+          {layersError && !layersLoading && (
+            <div className="col-span-full py-8 text-center text-zinc-500">
+              <p className="text-sm">Platform layers could not be loaded.</p>
+              <button type="button" onClick={() => refetchLayers()} className="mt-2 text-amber-400/80 hover:text-amber-300 underline text-sm">Retry</button>
+            </div>
+          )}
+          {!layersLoading && !layersError && layers.length === 0 && (
+            <div className="col-span-full py-8 text-center text-zinc-500 text-sm">No layer data from API.</div>
+          )}
+          {!layersLoading && layers.length > 0 && layers.map((l) => (
             <div
               key={l.layer}
-              className={`p-4 bg-dark-bg rounded-xl text-center cursor-pointer transition-all hover:bg-dark-bg/80 ${
-                expandedLayer === l.layer ? 'ring-1 ring-primary-500/50' : ''
+              className={`hover-glow p-4 bg-gradient-to-b from-zinc-900 to-zinc-950 rounded-md text-center transition-all ${
+                allLayersExpanded ? 'ring-1 ring-zinc-500/50' : 'cursor-pointer hover:from-zinc-800 hover:to-zinc-900'
               }`}
-              onClick={() => setExpandedLayer(expandedLayer === l.layer ? null : l.layer)}
+              onClick={() => !allLayersExpanded && setAllLayersExpanded(true)}
+              onKeyDown={(e) => e.key === 'Enter' && !allLayersExpanded && setAllLayersExpanded(true)}
+              role="button"
+              tabIndex={0}
             >
               <div className="flex items-center justify-center gap-1 text-xs text-dark-muted mb-1">
                 {getLayerIcon(l.layer)}
                 <span>Layer {l.layer}</span>
               </div>
               <div className="font-medium text-sm mb-2">{l.name}</div>
-              <div className="text-2xl font-display font-bold gradient-text">{l.count}</div>
-              <div className="flex items-center justify-center gap-1 mt-2">
+              <div className="text-3xl font-display font-bold gradient-text">{l.count}</div>
+              <div className="flex items-center justify-center gap-1 mt-2 flex-wrap">
                 <span className={`inline-block text-xs px-2 py-1 rounded-full ${
-                  l.status === 'active' ? 'bg-risk-low/20 text-risk-low' :
-                  l.status === 'beta' ? 'bg-amber-500/20 text-amber-400' :
-                  'bg-primary-500/20 text-primary-400'
+                  l.status === 'active' ? 'bg-gradient-to-r from-emerald-600 to-emerald-500 text-white' :
+                  l.status === 'beta' ? 'bg-gradient-to-r from-amber-600 to-amber-500 text-zinc-100' :
+                  'bg-gradient-to-r from-zinc-600 to-zinc-500 text-zinc-100'
                 }`}>
                   {l.status}
                 </span>
-                <ChevronDownIcon className={`w-3 h-3 text-white/40 transition-transform ${
-                  expandedLayer === l.layer ? 'rotate-180' : ''
+                {l.layer === 2 && l.status === 'offline' && (
+                  <span className="inline-block text-[10px] px-2 py-0.5 rounded-full bg-zinc-700 text-zinc-400">
+                    Optional
+                  </span>
+                )}
+                <ChevronDownIcon className={`w-3 h-3 text-zinc-500 transition-transform ${
+                  allLayersExpanded ? 'rotate-180' : ''
                 }`} />
               </div>
-              
-              {/* Expandable details */}
               <AnimatePresence>
-                {expandedLayer === l.layer && (
+                {allLayersExpanded && (
                   <LayerDetailPanel 
                     layer={l as LayerMetrics} 
-                    onClose={() => setExpandedLayer(null)} 
+                    onClose={() => setAllLayersExpanded(false)} 
                   />
                 )}
               </AnimatePresence>
@@ -1221,15 +1434,15 @@ export default function Dashboard() {
         
         {/* System health indicator */}
         {platformData && (
-          <div className="mt-4 pt-4 border-t border-white/5 flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2 text-white/40">
+          <div className="mt-4 pt-4 border-t border-zinc-800 flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2 text-zinc-500">
               <span>Total Records:</span>
-              <span className="text-white/80">{platformData.total_records.toLocaleString()}</span>
+              <span className="gradient-text">{platformData.total_records.toLocaleString()}</span>
             </div>
-            <div className="flex items-center gap-2 text-white/40">
+            <div className="flex items-center gap-2 text-zinc-500">
               <span>System Health:</span>
               <span className={`flex items-center gap-1 ${
-                platformData.system_health === 'healthy' ? 'text-emerald-400' : 'text-amber-400'
+                platformData.system_health === 'healthy' ? 'text-emerald-400/80' : 'text-amber-400/80'
               }`}>
                 <div className={`w-1.5 h-1.5 rounded-full ${
                   platformData.system_health === 'healthy' ? 'bg-emerald-400' : 'bg-amber-400'
@@ -1237,21 +1450,144 @@ export default function Dashboard() {
                 {platformData.system_health}
               </span>
             </div>
-            <div className="text-white/40">
-              Last sync: {new Date(platformData.last_sync).toLocaleTimeString()}
-            </div>
+            <FreshnessIndicator timestamp={platformData.last_sync} ttlMinutes={60} label="Last sync" />
           </div>
         )}
+        </div>
       </motion.div>
-      
-      {/* Recent Activity from Command Center */}
+
+      {/* Real-Time Intelligence Widgets */}
+      {platformData && !layersError && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.65 }}
+          className="mt-8"
+        >
+          <div className="flex items-center justify-between gap-3 mb-6">
+            <h2 className="text-xl font-display font-semibold gradient-text-shimmer">Real-Time Intelligence</h2>
+            <button
+              type="button"
+              onClick={handleRefreshRealtime}
+              disabled={isRefreshingRealtime}
+              className={`text-xs px-3 py-1.5 rounded-md border transition-colors ${
+                isRefreshingRealtime
+                  ? 'border-zinc-700 text-zinc-500 cursor-not-allowed'
+                  : 'border-zinc-600 text-zinc-300 hover:bg-zinc-800'
+              }`}
+            >
+              {isRefreshingRealtime ? 'Refreshing...' : 'Refresh now'}
+            </button>
+          </div>
+
+          {/* Live Data Freshness Bar */}
+          <ErrorBoundary>
+            <LiveDataIndicatorBar />
+          </ErrorBoundary>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+            {/* Market Ticker */}
+            <ErrorBoundary>
+              <MarketTicker />
+            </ErrorBoundary>
+
+            {/* Threat Intelligence Feed */}
+            <ErrorBoundary>
+              <ThreatIntelFeed />
+            </ErrorBoundary>
+
+            {/* Data Sources (Natural Hazards, Weather, Biosecurity, Cyber) — last events by channel */}
+            <ErrorBoundary>
+              <DataSourcesPanel />
+            </ErrorBoundary>
+            {/* Document RAG (cuRAG) — status and index documents */}
+            <ErrorBoundary>
+              <CuRAGCard />
+            </ErrorBoundary>
+          </div>
+
+          {/* More real-time sources: last refresh per source */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mt-6">
+            <ErrorBoundary>
+              <DataSourcePanel
+                sourceId="natural_hazards"
+                title="Natural Hazards"
+                description="USGS earthquakes, NASA FIRMS fires, NWS alerts"
+                icon={<GlobeAltIcon className="w-4 h-4 text-amber-400/80" />}
+              />
+            </ErrorBoundary>
+            <ErrorBoundary>
+              <DataSourcePanel
+                sourceId="weather"
+                title="Weather"
+                description="Open-Meteo / OpenWeather"
+                icon={<CloudIcon className="w-4 h-4 text-sky-400" />}
+              />
+            </ErrorBoundary>
+            <ErrorBoundary>
+              <DataSourcePanel
+                sourceId="biosecurity"
+                title="Biosecurity"
+                description="WHO outbreak monitoring"
+                icon={<ShieldCheckIcon className="w-4 h-4 text-emerald-400/80" />}
+              />
+            </ErrorBoundary>
+            <ErrorBoundary>
+              <DataSourcePanel
+                sourceId="cyber_threats"
+                title="Cyber Threats"
+                description="CISA KEV, vulnerability alerts"
+                icon={<LockClosedIcon className="w-4 h-4 text-violet-400" />}
+              />
+            </ErrorBoundary>
+            <ErrorBoundary>
+              <DataSourcePanel
+                sourceId="economic"
+                title="Economic"
+                description="World Bank, IMF, OFAC sanctions"
+                icon={<BanknotesIcon className="w-4 h-4 text-zinc-400" />}
+              />
+            </ErrorBoundary>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Recent Activity — collapsible footer to save space */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.7 }}
-        className="mt-8"
+        className="mt-8 pt-4"
       >
-        <RecentActivityPanel events={recentEvents} maxItems={5} />
+        <div className="h-px bg-gradient-to-r from-transparent via-zinc-700 to-transparent mb-4" />
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setRecentActivityOpen(!recentActivityOpen)}
+            className="hover-glow flex items-center gap-2 text-left text-zinc-500 hover:text-zinc-300 text-sm py-2 rounded-md transition-colors"
+          >
+            <ChevronDownIcon className={`w-4 h-4 transition-transform ${recentActivityOpen ? 'rotate-180' : ''}`} />
+            Recent Activity
+            {recentEvents.length > 0 && (
+              <span className="px-1.5 py-0.5 rounded text-xs bg-gradient-to-r from-zinc-600 to-zinc-500 text-zinc-100">
+                {recentEvents.length}
+              </span>
+            )}
+          </button>
+          <Link
+            to="/command"
+            className="inline-flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+            title="Open Command Center (same store, shared events)"
+          >
+            <GlobeAltIcon className="w-3.5 h-3.5" />
+            Open in Command Center
+          </Link>
+        </div>
+        {recentActivityOpen && (
+          <div className="mt-2">
+            <RecentActivityPanel events={recentEvents} maxItems={5} />
+          </div>
+        )}
       </motion.div>
     </div>
   )

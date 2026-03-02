@@ -16,6 +16,9 @@ from fastapi import APIRouter, File, UploadFile, HTTPException, Depends, Backgro
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.core.security import get_current_user
+from src.models.user import User
 import io
 import json
 
@@ -205,6 +208,7 @@ async def import_assets_csv(
     skip_errors: bool = False,
     calculate_risks: bool = True,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Bulk import assets from CSV file (alias for /assets/upload).
@@ -212,7 +216,7 @@ async def import_assets_csv(
     Same as /assets/upload but with additional option to calculate risk scores
     automatically after import.
     """
-    return await upload_assets_csv(file, skip_errors, calculate_risks, db)
+    return await upload_assets_csv(file, skip_errors, calculate_risks, db, current_user)
 
 
 @router.post("/assets/upload", response_model=BulkOperationResult)
@@ -221,6 +225,7 @@ async def upload_assets_csv(
     skip_errors: bool = False,
     calculate_risks: bool = True,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Bulk upload assets from CSV file.
@@ -391,6 +396,7 @@ async def run_bulk_stress_test(
 async def bulk_delete_assets(
     request: BulkDeleteRequest,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Delete multiple assets at once.
@@ -454,6 +460,7 @@ async def recalculate_asset_risks(
     asset_ids: Optional[List[str]] = None,
     all_assets: bool = False,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Recalculate risk scores for assets using real data.
@@ -556,6 +563,7 @@ async def recalculate_asset_risks(
 async def bulk_update_assets(
     request: BulkUpdateRequest,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Update multiple assets at once.

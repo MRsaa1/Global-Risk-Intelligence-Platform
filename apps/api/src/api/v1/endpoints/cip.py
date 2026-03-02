@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.database import get_db
 from src.modules.cip.service import CIPService
 from src.modules.cip.models import InfrastructureType, CriticalityLevel, OperationalStatus
+from src.services.module_audit import log_module_action
 
 router = APIRouter()
 
@@ -189,8 +190,8 @@ async def register_infrastructure(
         extra_data=data.extra_data,
     )
     
+    await log_module_action(db, "cip", "create", entity_type="infrastructure", entity_id=infra.id, details={"cip_id": infra.cip_id, "name": infra.name})
     await db.commit()
-    
     return _infrastructure_to_response(infra)
 
 
@@ -251,8 +252,8 @@ async def update_infrastructure(
     if not infra:
         raise HTTPException(status_code=404, detail="Infrastructure not found")
     
+    await log_module_action(db, "cip", "update", entity_type="infrastructure", entity_id=infrastructure_id, details=updates)
     await db.commit()
-    
     return _infrastructure_to_response(infra)
 
 
@@ -269,8 +270,8 @@ async def delete_infrastructure(
     if not success:
         raise HTTPException(status_code=404, detail="Infrastructure not found")
     
+    await log_module_action(db, "cip", "delete", entity_type="infrastructure", entity_id=infrastructure_id)
     await db.commit()
-    
     return {"status": "deleted", "id": infrastructure_id}
 
 
@@ -307,8 +308,8 @@ async def add_dependency(
         description=data.description,
     )
     
+    await log_module_action(db, "cip", "create", entity_type="dependency", entity_id=dep.id, details={"source_id": dep.source_id, "target_id": dep.target_id})
     await db.commit()
-    
     return DependencyResponse(
         id=dep.id,
         source_id=dep.source_id,
@@ -378,9 +379,22 @@ async def remove_dependency(
     if not success:
         raise HTTPException(status_code=404, detail="Dependency not found")
     
+    await log_module_action(db, "cip", "delete", entity_type="dependency", entity_id=dependency_id)
     await db.commit()
-    
     return {"status": "deleted", "id": dependency_id}
+
+
+@router.get("/dependencies/graph")
+async def get_dependencies_graph(
+    limit: int = Query(500, ge=1, le=2000),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get full dependency graph for visualization.
+    Returns nodes (infrastructure) and edges (dependencies) for map/graph UI.
+    """
+    service = CIPService(db)
+    return await service.get_graph(limit=limit)
 
 
 # ==================== RISK ASSESSMENT ====================
@@ -472,3 +486,64 @@ async def get_operational_statuses():
             for s in OperationalStatus
         ]
     }
+
+
+# ==================== CASCADE SIMULATIONS (FR-CIP-006, FR-CIP-007) ====================
+
+class CascadeSimulationRequest(BaseModel):
+    """Request to run cascade simulation."""
+    initial_failure_ids: List[str] = Field(..., min_length=1)
+    time_horizon_hours: int = Field(default=72, ge=1, le=720)
+    name: Optional[str] = None
+
+
+@router.post("/simulations/cascade", summary="Run cascade simulation")
+async def run_cascade_simulation(
+    data: CascadeSimulationRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Run cascade simulation: BFS + probabilistic propagation.
+    Returns timeline, affected_assets, impact_score, recovery_time.
+    """
+    try:
+        service = CIPService(db)
+        result = await service.run_cascade_simulation(
+            initial_failure_ids=data.initial_failure_ids,
+            time_horizon_hours=data.time_horizon_hours,
+            name=data.name,
+        )
+        if "error" in result:
+            raise HTTPException(status_code=400, detail=result["error"])
+        try:
+            await db.commit()
+        except Exception:
+            await db.rollback()
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/simulations", summary="List cascade simulations")
+async def list_cascade_simulations(
+    limit: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+):
+    """List recent cascade simulations."""
+    service = CIPService(db)
+    return await service.list_cascade_simulations(limit=limit)
+
+
+@router.get("/simulations/{simulation_id}", summary="Get cascade simulation by ID")
+async def get_cascade_simulation(
+    simulation_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get cascade simulation result by ID."""
+    service = CIPService(db)
+    result = await service.get_cascade_simulation(simulation_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Simulation not found")
+    return result

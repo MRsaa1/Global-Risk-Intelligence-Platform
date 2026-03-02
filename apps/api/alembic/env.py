@@ -3,6 +3,7 @@ import asyncio
 import os
 import sys
 from logging.config import fileConfig
+from pathlib import Path
 
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
@@ -11,7 +12,20 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 
 # Add src to path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_api_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _api_dir)
+
+# Load .env from apps/api so DATABASE_URL / USE_SQLITE are set (server uses SQLite, not PostgreSQL)
+_env_file = Path(_api_dir) / ".env"
+if _env_file.exists():
+    with open(_env_file, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, _, v = line.partition("=")
+                k, v = k.strip(), v.strip().strip('"').strip("'")
+                if k and os.environ.get(k) is None:
+                    os.environ[k] = v
 
 # Import models to ensure they're registered with Base
 from src.core.database import Base
@@ -43,9 +57,15 @@ target_metadata = Base.metadata
 
 
 def get_url() -> str:
-    """Get database URL from environment or config."""
-    # Priority: environment variable > alembic.ini
+    """Get database URL from .env (loaded above), then alembic.ini."""
     url = os.environ.get("DATABASE_URL")
+    use_sqlite = os.environ.get("USE_SQLITE", "true").lower() == "true"
+    if use_sqlite and not url:
+        # Default SQLite path (same as app): apps/api/prod.db or dev.db
+        default_path = os.path.join(_api_dir, "prod.db")
+        if not os.path.exists(default_path):
+            default_path = os.path.join(_api_dir, "dev.db")
+        url = f"sqlite:///{default_path}"
     if url:
         # Convert postgresql:// to postgresql+asyncpg:// for async engine
         if url.startswith("postgresql://"):
@@ -55,7 +75,7 @@ def get_url() -> str:
             url = url.replace("sqlite://", "sqlite+aiosqlite://", 1)
         return url
 
-    # Fallback to alembic.ini
+    # Fallback to alembic.ini (PostgreSQL)
     return config.get_main_option("sqlalchemy.url")
 
 
@@ -81,14 +101,14 @@ def run_migrations_offline() -> None:
 
 def do_run_migrations(connection: Connection) -> None:
     """Run migrations with given connection."""
+    is_sqlite = str(connection.engine.url).startswith("sqlite")
     context.configure(
         connection=connection,
         target_metadata=target_metadata,
         compare_type=True,
         compare_server_default=True,
-        # PostGIS support
         include_schemas=True,
-        render_as_batch=False,
+        render_as_batch=is_sqlite,
     )
 
     with context.begin_transaction():

@@ -1,0 +1,12 @@
+# NeMo Customizer fine-tuning config (Phase C2).
+# Used by scripts/run_nemo_finetune.py and nemo_customizer service.
+
+base_model: "nemotron-4-340b"
+epochs: 3
+task: "risk_analysis"
+
+datasets:
+  default_path: "data/finetune"
+
+output_dir: "data/finetune_output"
+result_file: "data/finetune_output/last_run.json"

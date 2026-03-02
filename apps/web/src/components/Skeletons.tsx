@@ -17,7 +17,7 @@ export function Skeleton({ className = '', animate = true }: SkeletonProps) {
   return (
     <div 
       className={`
-        bg-white/5 rounded
+        bg-zinc-800 rounded
         ${animate ? 'animate-pulse' : ''}
         ${className}
       `}
@@ -34,12 +34,12 @@ interface ChartSkeletonProps {
 
 export function ChartSkeleton({ height = 300, title }: ChartSkeletonProps) {
   return (
-    <div className="glass rounded-2xl p-6 border border-white/5">
+    <div className="glass rounded-md p-6 border border-zinc-800">
       {title && (
         <Skeleton className="h-5 w-48 mb-4" />
       )}
       <div 
-        className="relative bg-white/5 rounded-lg overflow-hidden"
+        className="relative bg-zinc-800 rounded-lg overflow-hidden"
         style={{ height }}
       >
         {/* Fake chart lines */}
@@ -67,7 +67,7 @@ export function ChartSkeleton({ height = 300, title }: ChartSkeletonProps) {
         {/* Loading indicator */}
         <div className="absolute inset-0 flex items-center justify-center">
           <motion.div
-            className="w-8 h-8 border-2 border-white/20 border-t-white/60 rounded-full"
+            className="w-8 h-8 border-2 border-zinc-600 border-t-zinc-400 rounded-full"
             animate={{ rotate: 360 }}
             transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
           />
@@ -86,7 +86,7 @@ export function ChartSkeleton({ height = 300, title }: ChartSkeletonProps) {
 
 export function PieChartSkeleton({ title }: { title?: string }) {
   return (
-    <div className="glass rounded-2xl p-6 border border-white/5">
+    <div className="glass rounded-md p-6 border border-zinc-800">
       {title && (
         <Skeleton className="h-5 w-40 mb-4" />
       )}
@@ -117,7 +117,7 @@ export function PieChartSkeleton({ title }: { title?: string }) {
           {/* Loading indicator in center */}
           <div className="absolute inset-0 flex items-center justify-center">
             <motion.div
-              className="w-6 h-6 border-2 border-white/20 border-t-white/60 rounded-full"
+              className="w-6 h-6 border-2 border-zinc-600 border-t-zinc-400 rounded-full"
               animate={{ rotate: 360 }}
               transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
             />
@@ -138,12 +138,12 @@ export function PieChartSkeleton({ title }: { title?: string }) {
 
 export function BarChart3DSkeleton({ title, height = 400 }: ChartSkeletonProps) {
   return (
-    <div className="glass rounded-2xl p-6 border border-white/5">
+    <div className="glass rounded-md p-6 border border-zinc-800">
       {title && (
         <Skeleton className="h-5 w-36 mb-4" />
       )}
       <div 
-        className="relative bg-black/30 rounded-lg overflow-hidden"
+        className="relative bg-zinc-900/30 rounded-lg overflow-hidden"
         style={{ height }}
       >
         {/* Fake 3D bars */}
@@ -159,7 +159,7 @@ export function BarChart3DSkeleton({ title, height = 400 }: ChartSkeletonProps) 
         {/* Loading indicator */}
         <div className="absolute inset-0 flex items-center justify-center">
           <motion.div
-            className="w-8 h-8 border-2 border-white/20 border-t-white/60 rounded-full"
+            className="w-8 h-8 border-2 border-zinc-600 border-t-zinc-400 rounded-full"
             animate={{ rotate: 360 }}
             transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
           />
@@ -178,9 +178,9 @@ interface TableSkeletonProps {
 
 export function TableSkeleton({ rows = 5, columns = 4 }: TableSkeletonProps) {
   return (
-    <div className="glass rounded-xl overflow-hidden">
+    <div className="glass rounded-md overflow-hidden">
       {/* Header */}
-      <div className="flex gap-4 p-4 bg-white/5 border-b border-white/5">
+      <div className="flex gap-4 p-4 bg-zinc-800 border-b border-zinc-800">
         {Array.from({ length: columns }).map((_, i) => (
           <Skeleton key={i} className="h-4 flex-1" />
         ))}
@@ -190,7 +190,7 @@ export function TableSkeleton({ rows = 5, columns = 4 }: TableSkeletonProps) {
       {Array.from({ length: rows }).map((_, rowIdx) => (
         <div 
           key={rowIdx}
-          className="flex gap-4 p-4 border-b border-white/5 last:border-0"
+          className="flex gap-4 p-4 border-b border-zinc-800 last:border-0"
         >
           {Array.from({ length: columns }).map((_, colIdx) => (
             <Skeleton 
@@ -208,7 +208,7 @@ export function TableSkeleton({ rows = 5, columns = 4 }: TableSkeletonProps) {
 
 export function StatCardSkeleton() {
   return (
-    <div className="glass rounded-xl p-4 border border-white/5">
+    <div className="glass rounded-md p-4 border border-zinc-800">
       <div className="flex items-center gap-3">
         <Skeleton className="w-10 h-10 rounded-lg" />
         <div className="flex-1">
@@ -222,7 +222,7 @@ export function StatCardSkeleton() {
 
 export function AssetCardSkeleton() {
   return (
-    <div className="glass rounded-xl p-4 border border-white/5">
+    <div className="glass rounded-md p-4 border border-zinc-800">
       <div className="flex items-start gap-4">
         <Skeleton className="w-16 h-16 rounded-lg flex-shrink-0" />
         <div className="flex-1 min-w-0">
@@ -243,14 +243,14 @@ export function AssetCardSkeleton() {
 export function MapSkeleton({ height = 500 }: { height?: number }) {
   return (
     <div 
-      className="relative bg-gradient-to-b from-[#0a0f18] to-[#1a1f2e] rounded-xl overflow-hidden"
+      className="relative bg-gradient-to-b from-[#09090b] to-[#18181b] rounded-md overflow-hidden"
       style={{ height }}
     >
       {/* Fake map grid */}
       <div className="absolute inset-0 opacity-20">
         <div className="grid grid-cols-8 grid-rows-6 h-full w-full">
           {Array.from({ length: 48 }).map((_, i) => (
-            <div key={i} className="border border-white/10" />
+            <div key={i} className="border border-zinc-700" />
           ))}
         </div>
       </div>
@@ -264,13 +264,13 @@ export function MapSkeleton({ height = 500 }: { height?: number }) {
       
       {/* Loading indicator */}
       <div className="absolute inset-0 flex items-center justify-center">
-        <div className="bg-black/60 rounded-lg px-4 py-2 flex items-center gap-2">
+        <div className="bg-zinc-900/60 rounded-lg px-4 py-2 flex items-center gap-2">
           <motion.div
-            className="w-4 h-4 border-2 border-white/20 border-t-white/60 rounded-full"
+            className="w-4 h-4 border-2 border-zinc-600 border-t-zinc-400 rounded-full"
             animate={{ rotate: 360 }}
             transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
           />
-          <span className="text-sm text-white/60">Loading map...</span>
+          <span className="text-sm text-zinc-400">Loading map...</span>
         </div>
       </div>
     </div>
@@ -280,20 +280,20 @@ export function MapSkeleton({ height = 500 }: { height?: number }) {
 export function GlobeSkeleton({ height = 600 }: { height?: number }) {
   return (
     <div 
-      className="relative bg-gradient-radial from-[#1a2035] to-[#0a0f18] rounded-xl overflow-hidden"
+      className="relative bg-gradient-radial from-[#18181b] to-[#09090b] rounded-md overflow-hidden"
       style={{ height }}
     >
       {/* Fake globe */}
       <div className="absolute inset-0 flex items-center justify-center">
         <div className="relative w-64 h-64">
-          <div className="absolute inset-0 rounded-full border-2 border-white/10 animate-pulse" />
-          <div className="absolute inset-4 rounded-full border border-white/5" />
-          <div className="absolute inset-8 rounded-full border border-white/5" />
+          <div className="absolute inset-0 rounded-full border-2 border-zinc-700 animate-pulse" />
+          <div className="absolute inset-4 rounded-full border border-zinc-800" />
+          <div className="absolute inset-8 rounded-full border border-zinc-800" />
           
           {/* Loading indicator */}
           <div className="absolute inset-0 flex items-center justify-center">
             <motion.div
-              className="w-8 h-8 border-2 border-white/20 border-t-blue-400 rounded-full"
+              className="w-8 h-8 border-2 border-zinc-600 border-t-zinc-400 rounded-full"
               animate={{ rotate: 360 }}
               transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
             />
@@ -303,7 +303,7 @@ export function GlobeSkeleton({ height = 600 }: { height?: number }) {
       
       {/* Status text */}
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
-        <span className="text-xs text-white/40">Loading 3D globe...</span>
+        <span className="text-xs text-zinc-500">Loading 3D globe...</span>
       </div>
     </div>
   )

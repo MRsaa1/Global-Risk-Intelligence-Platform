@@ -441,6 +441,51 @@ async def check_duplicates(
 ):
     """Check for potential duplicate claims."""
     service = BeforeAfterComparisonService(db)
-    
+
     duplicates = await service.check_duplicates(claim_id)
     return duplicates
+
+
+# ==================== Fraud detector (rules + SENTINEL alerts) ====================
+
+class FraudRuleCreate(BaseModel):
+    """Create fraud detection rule."""
+    name: str
+    rule_type: str = Field(default="amount_threshold")
+    field_name: Optional[str] = None
+    threshold_value: Optional[float] = None
+    window_hours: Optional[int] = None
+
+
+@router.get("/detection-rules", response_model=list)
+async def list_detection_rules(db: AsyncSession = Depends(get_db)):
+    """List fraud detection rules (amount threshold, frequency per claimant)."""
+    from src.services import fraud_detector_service
+    return await fraud_detector_service.list_rules(db)
+
+
+@router.post("/detection-rules", response_model=dict)
+async def create_detection_rule(
+    body: FraudRuleCreate,
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a fraud detection rule. When rule fires, SENTINEL alert is created."""
+    from src.services import fraud_detector_service
+    rule = await fraud_detector_service.create_rule(
+        db,
+        name=body.name,
+        rule_type=body.rule_type,
+        field_name=body.field_name,
+        threshold_value=body.threshold_value,
+        window_hours=body.window_hours,
+    )
+    await db.commit()
+    return {"id": rule.id, "name": rule.name, "rule_type": rule.rule_type}
+
+
+@router.post("/run-detection", response_model=dict)
+async def run_fraud_detection(db: AsyncSession = Depends(get_db)):
+    """Run active fraud rules against claims; create SENTINEL alerts when rules fire."""
+    from src.services import fraud_detector_service
+    result = await fraud_detector_service.run_detection(db)
+    return result

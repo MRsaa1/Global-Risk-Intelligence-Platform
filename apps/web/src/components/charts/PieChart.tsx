@@ -7,8 +7,8 @@
  * - Animated transitions
  * - Interactive legend
  */
-import { useMemo, useRef, useState, useCallback } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { useMemo, useRef, useState, useCallback, useId, useEffect } from 'react'
+import { motion, AnimatePresence, useMotionValue, useTransform, animate } from 'framer-motion'
 import * as d3 from 'd3'
 import { chartColors, pieColors, getRiskColor } from '../../lib/chartColors'
 import InteractiveTooltip, { useTooltip } from './InteractiveTooltip'
@@ -19,6 +19,14 @@ export interface PieDataPoint {
   value: number
   color?: string
   risk?: number
+}
+
+/** Gradient stop pairs for hero variant (id -> [light, dark]) */
+const HERO_GRADIENTS: Record<string, [string, string]> = {
+  critical: ['#ef4444', '#b91c1c'],
+  high: ['#f97316', '#c2410c'],
+  medium: ['#eab308', '#a16207'],
+  low: ['#22c55e', '#15803d'],
 }
 
 interface PieChartProps {
@@ -33,6 +41,7 @@ interface PieChartProps {
   valueFormat?: 'number' | 'currency' | 'percent'
   onSegmentClick?: (segment: PieDataPoint) => void
   colorByRisk?: boolean
+  variant?: 'default' | 'hero'
 }
 
 export default function PieChart({
@@ -47,15 +56,19 @@ export default function PieChart({
   valueFormat = 'number',
   onSegmentClick,
   colorByRisk = false,
+  variant = 'default',
 }: PieChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const [hoveredSegment, setHoveredSegment] = useState<string | null>(null)
   const [selectedSegment, setSelectedSegment] = useState<string | null>(null)
   const tooltip = useTooltip()
+  const isHero = variant === 'hero'
+  const uid = useId().replace(/:/g, '')
   
   const outerRadius = size / 2 - 10
   const innerRadiusValue = outerRadius * innerRadius
+  const hoverOuterOffset = isHero ? 12 : 8
   
   // Process data with colors
   const processedData = useMemo(() => {
@@ -71,6 +84,37 @@ export default function PieChart({
   const total = useMemo(() => {
     return processedData.reduce((sum, d) => sum + d.value, 0)
   }, [processedData])
+  
+  // Hero: animated center counter (0 -> total)
+  const countMotion = useMotionValue(0)
+  const displayCount = useTransform(countMotion, (v) => Math.round(v))
+  const prevTotalRef = useRef(0)
+  useEffect(() => {
+    if (!isHero) return
+    prevTotalRef.current = total
+    const ctrl = animate(countMotion, total, {
+      type: 'tween',
+      duration: 0.8,
+      ease: [0.22, 0.61, 0.36, 1],
+    })
+    return () => ctrl.stop()
+  }, [isHero, total, countMotion])
+  
+  // Hero: dominant risk (largest segment by value)
+  const dominantRisk = useMemo(() => {
+    if (!isHero || processedData.length === 0) return null
+    const max = processedData.reduce((a, b) => (a.value >= b.value ? a : b))
+    return max.value > 0 ? max : null
+  }, [isHero, processedData])
+  
+  // Subscribe to animated count for SVG text
+  const [displayCountVal, setDisplayCountVal] = useState(0)
+  useEffect(() => {
+    if (!isHero) return
+    const unsub = displayCount.on('change', (v) => setDisplayCountVal(Math.round(v)))
+    setDisplayCountVal(Math.round(countMotion.get()))
+    return unsub
+  }, [isHero, displayCount, countMotion])
   
   // Pie generator
   const pieGenerator = useMemo(() => {
@@ -88,13 +132,13 @@ export default function PieChart({
       .cornerRadius(4)
   }, [innerRadiusValue, outerRadius])
   
-  // Hover arc (slightly larger)
+  // Hover arc (slightly larger; hero uses 12px expansion)
   const hoverArcGenerator = useMemo(() => {
     return d3.arc<d3.PieArcDatum<PieDataPoint>>()
       .innerRadius(innerRadiusValue)
-      .outerRadius(outerRadius + 8)
+      .outerRadius(outerRadius + hoverOuterOffset)
       .cornerRadius(4)
-  }, [innerRadiusValue, outerRadius])
+  }, [innerRadiusValue, outerRadius, hoverOuterOffset])
   
   // Label arc
   const labelArcGenerator = useMemo(() => {
@@ -108,6 +152,20 @@ export default function PieChart({
     return pieGenerator(processedData)
   }, [pieGenerator, processedData])
   
+  // Hero: background track ring (full circle)
+  const trackRingPath = useMemo(() => {
+    if (!isHero) return null
+    const arc = d3.arc<{ startAngle: number; endAngle: number }>()
+      .innerRadius(innerRadiusValue)
+      .outerRadius(outerRadius)
+      .startAngle(0)
+      .endAngle(2 * Math.PI)
+    return arc({ startAngle: 0, endAngle: 2 * Math.PI } as d3.PieArcDatum<PieDataPoint>)
+  }, [isHero, innerRadiusValue, outerRadius])
+  
+  // Safe percentage for display (avoids NaN when total is 0)
+  const safePct = useCallback((val: number, tot: number) =>
+    tot > 0 && Number.isFinite(val) ? ((val / tot) * 100).toFixed(1) : '0', [])
   // Format value
   const formatValue = useCallback((value: number) => {
     switch (valueFormat) {
@@ -117,11 +175,11 @@ export default function PieChart({
         if (value >= 1_000) return `€${(value / 1_000).toFixed(0)}K`
         return `€${value.toFixed(0)}`
       case 'percent':
-        return `${((value / total) * 100).toFixed(1)}%`
+        return `${safePct(value, total)}%`
       default:
         return value.toFixed(0)
     }
-  }, [valueFormat, total])
+  }, [valueFormat, total, safePct])
   
   // Handle segment hover
   const handleSegmentHover = useCallback((
@@ -131,7 +189,7 @@ export default function PieChart({
     const rect = svgRef.current?.getBoundingClientRect()
     if (!rect) return
     
-    const percentage = ((d.data.value / total) * 100).toFixed(1)
+    const percentage = total > 0 ? ((d.data.value / total) * 100).toFixed(1) : '0'
     
     tooltip.show(
       { x: e.clientX - rect.left, y: e.clientY - rect.top },
@@ -170,13 +228,57 @@ export default function PieChart({
           onMouseLeave={() => { tooltip.hide(); setHoveredSegment(null) }}
           className="overflow-visible"
         >
+          <defs>
+            {isHero && (
+              <>
+                {Object.entries(HERO_GRADIENTS).map(([id, [light, dark]]) => (
+                  <linearGradient key={id} id={`grad-${uid}-${id}`} x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor={light} />
+                    <stop offset="100%" stopColor={dark} />
+                  </linearGradient>
+                ))}
+                <linearGradient id={`grad-${uid}-fallback`} x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#64748b" />
+                  <stop offset="100%" stopColor="#475569" />
+                </linearGradient>
+                <filter id={`glow-${uid}`} x="-50%" y="-50%" width="200%" height="200%">
+                  <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur" />
+                  <feComposite in="SourceGraphic" in2="blur" operator="over" result="comp" />
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="comp" />
+                  </feMerge>
+                </filter>
+                <filter id={`glow-hover-${uid}`} x="-50%" y="-50%" width="200%" height="200%">
+                  <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="blur" />
+                  <feComposite in="SourceGraphic" in2="blur" operator="over" result="comp" />
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="comp" />
+                  </feMerge>
+                </filter>
+              </>
+            )}
+          </defs>
           <g transform={`translate(${size / 2},${size / 2})`}>
+            {/* Hero: background track ring */}
+            {isHero && trackRingPath && (
+              <path
+                d={trackRingPath}
+                fill="rgba(255,255,255,0.03)"
+                stroke="rgba(255,255,255,0.06)"
+                strokeWidth={1}
+                style={{ pointerEvents: 'none' }}
+              />
+            )}
             {/* Segments */}
             <AnimatePresence>
               {pieData.map((d, i) => {
                 const isHovered = hoveredSegment === d.data.id
                 const isSelected = selectedSegment === d.data.id
                 const arc = isHovered ? hoverArcGenerator(d) : arcGenerator(d)
+                const gradId = isHero && (HERO_GRADIENTS[d.data.id] ? `grad-${uid}-${d.data.id}` : `grad-${uid}-fallback`)
+                const filterId = isHero ? (isHovered ? `url(#glow-hover-${uid})` : `url(#glow-${uid})`) : undefined
                 
                 // Ensure arc is a valid string
                 const pathData = (arc && typeof arc === 'string') ? arc : ''
@@ -186,12 +288,13 @@ export default function PieChart({
                   <motion.path
                     key={`${d.data.id}-${isHovered}`}
                     d={pathData}
-                    fill={d.data.color}
+                    fill={isHero && gradId ? `url(#${gradId})` : (d.data.color ?? '')}
                     fillOpacity={
                       selectedSegment === null || isSelected
                         ? isHovered ? 1 : 0.9
                         : 0.3
                     }
+                    filter={filterId}
                     stroke={chartColors.background.dark}
                     strokeWidth={2}
                     initial={{ scale: 0, opacity: 0 }}
@@ -216,9 +319,12 @@ export default function PieChart({
               })}
             </AnimatePresence>
             
-            {/* Labels */}
-            {showLabels && pieData.map((d, i) => {
+            {/* Labels: hero = percentage on arc (>=5%); default = segment label */}
+            {(showLabels || isHero) && pieData.map((d) => {
               const [x, y] = labelArcGenerator.centroid(d)
+              const pct = total > 0 ? (d.data.value / total) * 100 : 0
+              if (isHero && pct < 5) return null
+              const labelText = isHero ? `${pct.toFixed(1)}%` : d.data.label
               return (
                 <text
                   key={`label-${d.data.id}`}
@@ -226,36 +332,98 @@ export default function PieChart({
                   y={y}
                   textAnchor="middle"
                   dominantBaseline="middle"
-                  fill={chartColors.text.primary}
-                  fontSize={10}
-                  fontWeight={500}
-                  style={{ pointerEvents: 'none' }}
+                  fill="#fff"
+                  fontSize={isHero ? 11 : 10}
+                  fontWeight={600}
+                  style={{ pointerEvents: 'none', textShadow: '0 0 4px rgba(0,0,0,0.8), 0 1px 2px rgba(0,0,0,0.5)' }}
                 >
-                  {d.data.label}
+                  {labelText}
                 </text>
               )
             })}
+            {/* Hero: pulse circle on hovered segment */}
+            {isHero && hoveredSegment && (() => {
+              const d = pieData.find((p) => p.data.id === hoveredSegment)
+              if (!d) return null
+              const [cx, cy] = labelArcGenerator.centroid(d)
+              return (
+                <motion.circle
+                  cx={cx}
+                  cy={cy}
+                  r={8}
+                  fill="none"
+                  stroke="rgba(255,255,255,0.4)"
+                  strokeWidth={2}
+                  initial={{ r: 8, opacity: 0.8 }}
+                  animate={{ r: 24, opacity: 0 }}
+                  transition={{ duration: 1, repeat: Infinity, ease: 'easeOut' }}
+                  style={{ pointerEvents: 'none' }}
+                />
+              )
+            })()}
             
             {/* Center content */}
             {innerRadius > 0 && (
-              <g className="center-content">
-                <text
-                  y={-8}
-                  textAnchor="middle"
-                  fill={chartColors.text.muted}
-                  fontSize={11}
-                >
-                  Total
-                </text>
-                <text
-                  y={12}
-                  textAnchor="middle"
-                  fill={chartColors.text.primary}
-                  fontSize={18}
-                  fontWeight={600}
-                >
-                  {formatValue(total)}
-                </text>
+              <g className="center-content" style={{ pointerEvents: 'none' }}>
+                {isHero ? (
+                  <>
+                    <text y={-14} textAnchor="middle" fill={chartColors.text.muted} fontSize={10}>
+                      Total
+                    </text>
+                    <text
+                      y={8}
+                      textAnchor="middle"
+                      fill={chartColors.text.primary}
+                      fontSize={24}
+                      fontWeight={700}
+                    >
+                      {displayCountVal}
+                    </text>
+                    {dominantRisk && (
+                      <text
+                        y={28}
+                        textAnchor="middle"
+                        fill={dominantRisk.color ?? chartColors.text.secondary}
+                        fontSize={9}
+                        fontWeight={600}
+                        style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}
+                      >
+                        {dominantRisk.label} RISK
+                      </text>
+                    )}
+                    {/* Thin animated ring around center */}
+                    <motion.circle
+                      r={innerRadiusValue - 4}
+                      fill="none"
+                      stroke="rgba(255,255,255,0.12)"
+                      strokeWidth={2}
+                      strokeDasharray={2 * Math.PI * (innerRadiusValue - 4)}
+                      initial={{ strokeDashoffset: 2 * Math.PI * (innerRadiusValue - 4) }}
+                      animate={{ strokeDashoffset: 0 }}
+                      transition={{ duration: 1, delay: 0.2, ease: [0.22, 0.61, 0.36, 1] }}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <text
+                      y={-8}
+                      textAnchor="middle"
+                      fill={chartColors.text.muted}
+                      fontSize={11}
+                    >
+                      Total
+                    </text>
+                    <text
+                      y={12}
+                      textAnchor="middle"
+                      fill={chartColors.text.primary}
+                      fontSize={18}
+                      fontWeight={600}
+                    >
+                      {formatValue(total)}
+                    </text>
+                  </>
+                )}
               </g>
             )}
           </g>
@@ -263,10 +431,55 @@ export default function PieChart({
         
         {/* Legend */}
         {showLegend && (
+          isHero ? (
+            <div className="w-full mt-4 space-y-2 max-w-[280px]">
+              {processedData.map((d) => {
+                const pct = total > 0 && Number.isFinite(d.value) ? (d.value / total) * 100 : 0
+                const percentageStr = pct.toFixed(1)
+                const isSelected = selectedSegment === d.id
+                const isHovered = hoveredSegment === d.id
+                const [gradStart, gradEnd] = HERO_GRADIENTS[d.id] ?? [d.color ?? '#64748b', '#475569']
+                return (
+                  <button
+                    key={d.id}
+                    type="button"
+                    className={`flex items-center gap-2 w-full text-left rounded-lg px-2 py-1.5 transition-all ${
+                      selectedSegment === null || isSelected ? 'opacity-100' : 'opacity-40'
+                    } ${isHovered ? 'bg-white/10' : 'hover:bg-white/5'}`}
+                    onClick={() => {
+                      setSelectedSegment((prev) => (prev === d.id ? null : d.id))
+                      onSegmentClick?.(d)
+                    }}
+                    onMouseEnter={() => setHoveredSegment(d.id)}
+                    onMouseLeave={() => setHoveredSegment(null)}
+                  >
+                    <div
+                      className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: d.color }}
+                    />
+                    <span className="text-xs font-medium text-zinc-200 w-16 flex-shrink-0">{d.label}</span>
+                    <div className="flex-1 h-2 rounded-full bg-zinc-800 overflow-hidden min-w-[60px]">
+                      <motion.div
+                        className="h-full rounded-full"
+                        style={{
+                          background: `linear-gradient(90deg, ${gradStart}, ${gradEnd})`,
+                        }}
+                        initial={{ width: 0 }}
+                        animate={{ width: `${pct}%` }}
+                        transition={{ duration: 0.8, delay: 0.1, ease: [0.22, 0.61, 0.36, 1] }}
+                      />
+                    </div>
+                    <span className="text-xs text-zinc-400 w-10 text-right">{percentageStr}%</span>
+                    <span className="text-xs text-zinc-300 font-medium w-6 text-right">{d.value}</span>
+                  </button>
+                )
+              })}
+            </div>
+          ) : (
           <div className="flex flex-wrap gap-3 mt-4 justify-center max-w-[300px]">
             {processedData.map(d => {
               const isSelected = selectedSegment === d.id
-              const percentage = ((d.value / total) * 100).toFixed(1)
+              const percentage = total > 0 && Number.isFinite(d.value) ? ((d.value / total) * 100).toFixed(1) : '0'
               
               return (
                 <button
@@ -295,6 +508,7 @@ export default function PieChart({
               )
             })}
           </div>
+          )
         )}
       </div>
       

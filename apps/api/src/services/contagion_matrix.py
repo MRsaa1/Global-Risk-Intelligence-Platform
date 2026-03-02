@@ -406,20 +406,57 @@ def identify_critical_path(
 
 def get_infrastructure_cascade_path(
     event_type: str,
-    severity: float
+    severity: float,
+    city_name: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Get typical infrastructure cascade path based on event type.
     
     Returns realistic cascade paths for common stress events.
+    When city_name contains "Montreal" and event_type is flood, returns
+    Montreal-specific nodes (Hydro P43, Pierrefonds WTP, Lakeshore Hospital, etc.).
     
     Args:
         event_type: Type of stress event
         severity: Severity level
+        city_name: Optional city name for city-specific cascade path
     
     Returns:
         Dict with cascade path and critical nodes
     """
+    city = (city_name or "").strip()
+    event_lower = event_type.lower()
+    is_montreal_flood = "montreal" in city.lower() and (
+        event_lower == "flood" or "flood" in event_lower or "climate" in event_lower
+    )
+
+    # Montreal-specific flood cascade path
+    if is_montreal_flood:
+        cascade_info = {
+            "path": "Hydro P43 → WTP Pierrefonds → Lakeshore Hospital → Galipeault Bridge",
+            "critical_nodes": [
+                {"name": "Hydro-Québec Sub-Station P43", "centrality": 0.89, "affected_people": 340000},
+                {"name": "Pierrefonds Water Treatment Plant", "centrality": 0.82, "dependent_entities": 156},
+                {"name": "Lakeshore General Hospital", "centrality": 0.75, "affected_people": 85000}
+            ],
+            "spof": ["Hydro-Québec Sub-Station P43", "Pierrefonds Water Treatment Plant", "Galipeault Bridge"]
+        }
+        scaled_nodes = []
+        for node in cascade_info["critical_nodes"]:
+            scaled_node = node.copy()
+            for key in ["affected_people", "dependent_entities", "daily_crossings", "connected_users",
+                        "subscribers", "transactions_daily", "merchants", "users", "daily_volume_bn",
+                        "counterparties", "cedants", "containers_monthly", "daily_shipments", "daily_cars"]:
+                if key in scaled_node:
+                    scaled_node[key] = int(scaled_node[key] * (0.5 + severity * 0.5))
+            scaled_nodes.append(scaled_node)
+        return {
+            "cascade_path": cascade_info["path"],
+            "critical_nodes": scaled_nodes,
+            "single_points_of_failure": cascade_info["spof"],
+            "contagion_velocity_hours": int(4 + (1 - severity) * 20)
+        }
+
     # Predefined cascade paths by event type
     cascade_paths = {
         "flood": {

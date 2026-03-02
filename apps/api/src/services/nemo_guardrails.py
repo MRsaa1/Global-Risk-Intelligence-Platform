@@ -26,6 +26,7 @@ class GuardrailViolation(str, Enum):
     FEASIBILITY = "feasibility"  # Not actionable
     GEOGRAPHIC = "geographic"  # Invalid geographic bounds
     FINANCIAL = "financial"  # Invalid financial data
+    MORPHEUS = "morpheus"  # Morpheus validation failed (data leak / hallucination)
 
 
 @dataclass
@@ -135,6 +136,24 @@ class NeMoGuardrailsService:
         if not financial_result.passed:
             violations.append(GuardrailViolation.FINANCIAL)
             warnings.extend(financial_result.warnings)
+        
+        # 7. Morpheus (optional): data leak / hallucination detection
+        if getattr(settings, "enable_morpheus", False) and (getattr(settings, "morpheus_validation_url", "") or "").strip():
+            try:
+                from src.services.morpheus_validator import validate_agent_io
+                morpheus_result = await validate_agent_io(
+                    context.get("input", ""),
+                    response,
+                    context,
+                )
+                if not morpheus_result.passed:
+                    violations.append(GuardrailViolation.MORPHEUS)
+                    if morpheus_result.detail:
+                        warnings.append(f"Morpheus: {morpheus_result.detail}")
+                    if morpheus_result.flags:
+                        warnings.extend(str(f) for f in morpheus_result.flags[:5])
+            except Exception as e:
+                logger.debug("Morpheus validation skipped: %s", e)
         
         passed = len(violations) == 0
         

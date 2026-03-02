@@ -1,4 +1,4 @@
-import { Suspense, useRef, useState, useEffect, useMemo } from 'react'
+import { Component, Suspense, useRef, useState, useEffect, useMemo } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import {
   OrbitControls,
@@ -13,6 +13,52 @@ import {
 import * as THREE from 'three'
 import { motion } from 'framer-motion'
 import AnnotationMarker from './scene/AnnotationMarker'
+
+/** Fallback when the DB has a stale/missing GLB path (e.g. after replacing building set). */
+const FALLBACK_MODEL_URL = '/models/buildings/beautiful_city.glb'
+
+/** Old Kenney/demo paths that are no longer in public/ — avoid 404 (HTML) and use fallback. */
+const KNOWN_MISSING_PATTERNS = [
+  'facility-a.glb', 'facility-b.glb', 'facility-c.glb', 'skyscraper-a.glb', 'skyscraper-b.glb',
+  'skyscraper-c.glb', 'skyscraper-d.glb', 'industrial-a.glb', 'residential-a.glb',
+]
+
+function normalizeModelUrl(url: string | undefined): string | undefined {
+  if (!url) return url
+  const lower = url.toLowerCase()
+  if (KNOWN_MISSING_PATTERNS.some((p) => lower.includes(p))) return FALLBACK_MODEL_URL
+  return url
+}
+
+class GltfModelErrorBoundary extends Component<
+  {
+    url: string
+    fallbackUrl: string
+    stressResult?: { eventName: string; impactLevel: 'low' | 'medium' | 'high' | 'critical'; totalLoss?: number; currency?: string }
+    onObjectSelect?: (id: string) => void
+    onWorldClick?: (p: { x: number; y: number; z: number }) => void
+    children: React.ReactNode
+  },
+  { useFallback: boolean }
+> {
+  state = { useFallback: false }
+  static getDerivedStateFromError() {
+    return { useFallback: true }
+  }
+  render() {
+    if (this.state.useFallback) {
+      return (
+        <GltfModel
+          url={this.props.fallbackUrl}
+          stressResult={this.props.stressResult}
+          onObjectSelect={this.props.onObjectSelect}
+          onWorldClick={this.props.onWorldClick}
+        />
+      )
+    }
+    return this.props.children
+  }
+}
 
 interface Viewer3DProps {
   modelUrl?: string
@@ -32,6 +78,13 @@ interface Viewer3DProps {
   onWorldClick?: (point: { x: number; y: number; z: number }) => void
   annotations?: Array<{ id: string; text: string; position: { x: number; y: number; z: number } }>
   peers?: Array<{ id: string; position?: { x: number; y: number; z: number }; focus_asset_id?: string | null }>
+  /** Result of a stress test run for this asset: shown as overlay and, for procedural building, tint */
+  stressResult?: {
+    eventName: string
+    impactLevel: 'low' | 'medium' | 'high' | 'critical'
+    totalLoss?: number
+    currency?: string
+  }
 }
 
 // Risk color helper
@@ -41,10 +94,20 @@ function getRiskColor(score: number): string {
   return '#22c55e' // green
 }
 
+function getStressImpactColor(level: 'low' | 'medium' | 'high' | 'critical'): string {
+  switch (level) {
+    case 'critical': return '#dc2626'
+    case 'high': return '#ef4444'
+    case 'medium': return '#f59e0b'
+    default: return '#22c55e'
+  }
+}
+
 // Building component with risk visualization (scales by floors and area when provided)
 function Building({
   riskScores = { climate: 30, physical: 20, network: 50 },
   showRiskOverlay = false,
+  stressResult,
   floorsAboveGround,
   grossFloorAreaM2,
   onObjectSelect,
@@ -52,6 +115,7 @@ function Building({
 }: {
   riskScores?: { climate: number; physical: number; network: number }
   showRiskOverlay?: boolean
+  stressResult?: { eventName: string; impactLevel: 'low' | 'medium' | 'high' | 'critical'; totalLoss?: number; currency?: string }
   floorsAboveGround?: number
   grossFloorAreaM2?: number
   onObjectSelect?: (objectId: string) => void
@@ -75,9 +139,12 @@ function Building({
   const buildingWidth = Math.max(1.5, Math.min(6, baseSize * 2))
   const buildingDepth = Math.max(1, Math.min(5, baseSize * 1.5))
   
-  // Calculate composite risk for building color
+  // Calculate composite risk for building color (stress result overrides when present)
   const compositeRisk = (riskScores.climate + riskScores.physical + riskScores.network) / 3
-  const buildingColor = showRiskOverlay ? getRiskColor(compositeRisk) : '#0056e6'
+  const useStressColor = !!stressResult
+  const buildingColor = useStressColor
+    ? getStressImpactColor(stressResult!.impactLevel)
+    : (showRiskOverlay ? getRiskColor(compositeRisk) : '#0056e6')
   
   return (
     <group
@@ -118,7 +185,7 @@ function Building({
               onPointerOut={() => setHovered(null)}
             >
               <meshStandardMaterial
-                color={showRiskOverlay ? getRiskColor(floorRisk) : '#334155'}
+                color={useStressColor ? buildingColor : (showRiskOverlay ? getRiskColor(floorRisk) : '#334155')}
                 opacity={hovered === `floor-${i}` ? 1 : 0.9}
                 transparent
               />
@@ -131,7 +198,7 @@ function Building({
               position={[0, 0, buildingDepth / 2]}
             >
               <meshStandardMaterial
-                color={showRiskOverlay ? getRiskColor(floorRisk) : buildingColor}
+                color={useStressColor ? buildingColor : (showRiskOverlay ? getRiskColor(floorRisk) : buildingColor)}
                 metalness={0.3}
                 roughness={0.7}
               />
@@ -178,30 +245,49 @@ function Building({
       </Box>
       
       {/* Risk indicators (floating labels) */}
-      {showRiskOverlay && (
+      {showRiskOverlay && !stressResult && (
         <>
           <Html position={[buildingWidth / 2 + 0.5, floors * floorHeight * 0.7, 0]} center>
             <div className="glass px-2 py-1 rounded text-xs whitespace-nowrap">
-              <span className={`font-bold ${getRiskColor(riskScores.climate) === '#ef4444' ? 'text-red-400' : getRiskColor(riskScores.climate) === '#f59e0b' ? 'text-amber-400' : 'text-green-400'}`}>
+              <span className={`font-bold ${getRiskColor(riskScores.climate) === '#ef4444' ? 'text-red-400/80/80' : getRiskColor(riskScores.climate) === '#f59e0b' ? 'text-amber-400/80' : 'text-green-400/80'}`}>
                 Climate: {riskScores.climate}
               </span>
             </div>
           </Html>
           <Html position={[buildingWidth / 2 + 0.5, floors * floorHeight * 0.5, 0]} center>
             <div className="glass px-2 py-1 rounded text-xs whitespace-nowrap">
-              <span className={`font-bold ${getRiskColor(riskScores.physical) === '#ef4444' ? 'text-red-400' : getRiskColor(riskScores.physical) === '#f59e0b' ? 'text-amber-400' : 'text-green-400'}`}>
+              <span className={`font-bold ${getRiskColor(riskScores.physical) === '#ef4444' ? 'text-red-400/80/80' : getRiskColor(riskScores.physical) === '#f59e0b' ? 'text-amber-400/80' : 'text-green-400/80'}`}>
                 Physical: {riskScores.physical}
               </span>
             </div>
           </Html>
           <Html position={[buildingWidth / 2 + 0.5, floors * floorHeight * 0.3, 0]} center>
             <div className="glass px-2 py-1 rounded text-xs whitespace-nowrap">
-              <span className={`font-bold ${getRiskColor(riskScores.network) === '#ef4444' ? 'text-red-400' : getRiskColor(riskScores.network) === '#f59e0b' ? 'text-amber-400' : 'text-green-400'}`}>
+              <span className={`font-bold ${getRiskColor(riskScores.network) === '#ef4444' ? 'text-red-400/80/80' : getRiskColor(riskScores.network) === '#f59e0b' ? 'text-amber-400/80' : 'text-green-400/80'}`}>
                 Network: {riskScores.network}
               </span>
             </div>
           </Html>
         </>
+      )}
+      {/* Stress test result label */}
+      {stressResult && (
+        <Html position={[buildingWidth / 2 + 0.6, floors * floorHeight + 0.4, 0]} center>
+          <div
+            className="glass px-3 py-2 rounded-md text-xs border whitespace-nowrap"
+            style={{ borderColor: getStressImpactColor(stressResult.impactLevel) }}
+          >
+            <div className="font-semibold text-zinc-100">{stressResult.eventName}</div>
+            <div className="capitalize" style={{ color: getStressImpactColor(stressResult.impactLevel) }}>
+              Impact: {stressResult.impactLevel}
+            </div>
+            {stressResult.totalLoss != null && (
+              <div className="text-zinc-400 mt-0.5">
+                Loss: {stressResult.currency || ''} {stressResult.totalLoss.toLocaleString()}
+              </div>
+            )}
+          </div>
+        </Html>
       )}
     </group>
   )
@@ -228,7 +314,7 @@ function Ground() {
         receiveShadow
       >
         <planeGeometry args={[100, 100]} />
-        <meshStandardMaterial color="#0a0f1a" transparent opacity={0.8} />
+        <meshStandardMaterial color="#09090b" transparent opacity={0.8} />
       </mesh>
     </group>
   )
@@ -280,7 +366,7 @@ function PeerMarker({
         <meshStandardMaterial color="#22c55e" emissive="#22c55e" emissiveIntensity={0.6} />
       </mesh>
       <Html position={[0, 0.25, 0]} center>
-        <div className="px-2 py-0.5 rounded bg-black/70 border border-white/10 text-[10px] text-white/70">
+        <div className="px-2 py-0.5 rounded bg-black/70 border border-zinc-700 text-[10px] text-zinc-300">
           peer:{id}
         </div>
       </Html>
@@ -290,60 +376,94 @@ function PeerMarker({
 
 function GltfModel({
   url,
+  stressResult,
   onObjectSelect,
   onWorldClick,
 }: {
   url: string
+  stressResult?: { eventName: string; impactLevel: 'low' | 'medium' | 'high' | 'critical'; totalLoss?: number; currency?: string }
   onObjectSelect?: (objectId: string) => void
   onWorldClick?: (point: { x: number; y: number; z: number }) => void
 }) {
   const gltf = useGLTF(url)
   const ref = useRef<THREE.Group>(null)
+  const originalMaterialsRef = useRef<Map<THREE.Mesh, THREE.Material | THREE.Material[]>>(new Map())
 
   useEffect(() => {
-    // Defensive: some GLB/GLTF assets can contain invalid index buffers that trigger
-    // WebGL errors like "Vertex buffer is not big enough for the draw call".
-    // We disable only the broken meshes to keep the scene usable.
     const scene = gltf?.scene
     if (!scene) return
-
     let disabled = 0
     scene.traverse((obj) => {
       const mesh = obj as THREE.Mesh
       if (!mesh || !(mesh as any).isMesh) return
       const geom = mesh.geometry as THREE.BufferGeometry | undefined
       if (!geom) return
-
       const pos = geom.getAttribute('position') as THREE.BufferAttribute | undefined
       const idx = geom.getIndex()
       if (!pos || !idx) return
-
-      // Find max index (fast path for typed arrays)
       const arr = idx.array as ArrayLike<number>
       let max = -1
       for (let i = 0; i < arr.length; i++) {
         const v = Number(arr[i])
         if (v > max) max = v
       }
-
       if (max >= pos.count) {
         disabled += 1
         mesh.visible = false
       }
     })
-
     if (disabled > 0) {
       console.warn(`[Viewer3D] Disabled ${disabled} invalid mesh(es) in model: ${url}`)
     }
   }, [gltf, url])
 
   useEffect(() => {
+    const scene = gltf?.scene
+    if (!scene) return
+
+    const impactColor = stressResult ? new THREE.Color(getStressImpactColor(stressResult.impactLevel)) : null
+
+    scene.traverse((obj) => {
+      const mesh = obj as THREE.Mesh
+      if (!mesh || !(mesh as any).isMesh || !mesh.material) return
+      if (impactColor) {
+        const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
+        if (!originalMaterialsRef.current.has(mesh)) originalMaterialsRef.current.set(mesh, mesh.material)
+        const clones = materials.map((mat) => {
+          const m = (mat as THREE.MeshStandardMaterial).clone()
+          if (m.color) m.color.copy(impactColor)
+          if (m.emissive) {
+            m.emissive.copy(impactColor)
+            m.emissiveIntensity = 0.2
+          }
+          return m
+        })
+        mesh.material = clones.length === 1 ? clones[0] : clones
+      } else {
+        const orig = originalMaterialsRef.current.get(mesh)
+        if (orig) {
+          mesh.material = orig
+          originalMaterialsRef.current.delete(mesh)
+        }
+      }
+    })
+  }, [gltf, url, stressResult])
+
+  useEffect(() => {
     const g = ref.current
     if (!g) return
-    // center the loaded scene near origin (best-effort)
     const box = new THREE.Box3().setFromObject(g)
+    const size = box.getSize(new THREE.Vector3())
+    const maxDim = Math.max(size.x, size.y, size.z, 1)
+    // Scale so the model fits in view (max dimension ~25 units); large city GLBs become manageable
+    const targetSize = 25
+    g.scale.setScalar(targetSize / maxDim)
+    box.setFromObject(g)
     const center = box.getCenter(new THREE.Vector3())
-    g.position.sub(center)
+    // Center X and Z; put bottom on ground (y=0)
+    g.position.x = -center.x
+    g.position.y = -box.min.y
+    g.position.z = -center.z
   }, [url])
 
   return (
@@ -377,6 +497,7 @@ export default function Viewer3D({
   onWorldClick,
   annotations = [],
   peers = [],
+  stressResult,
 }: Viewer3DProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [gl, setGl] = useState<THREE.WebGLRenderer | null>(null)
@@ -413,10 +534,10 @@ export default function Viewer3D({
     return () => {
       canvas.removeEventListener('webglcontextlost', onContextLost)
       canvas.removeEventListener('webglcontextrestored', onContextRestored)
-      // Explicitly dispose WebGL context to free up resources
       try {
         gl.dispose()
-        gl.forceContextLoss()
+        // Do not call forceContextLoss() — it throws INVALID_OPERATION if the context is already lost
+        // (e.g. tab in background, GPU reset). dispose() is enough for cleanup.
       } catch {
         // Ignore disposal errors
       }
@@ -450,19 +571,19 @@ export default function Viewer3D({
   }
   
   return (
-    <div className="relative w-full h-full bg-dark-bg rounded-xl overflow-hidden">
+    <div className="relative w-full h-full bg-dark-bg rounded-md overflow-hidden">
       {contextLost && (
-        <div className="absolute inset-0 flex items-center justify-center bg-dark-bg/95 z-30 rounded-xl">
-          <div className="text-center px-6 py-4 rounded-xl bg-white/5 border border-white/10 text-sm text-white/90">
+        <div className="absolute inset-0 flex items-center justify-center bg-dark-bg/95 z-30 rounded-md">
+          <div className="text-center px-6 py-4 rounded-md bg-zinc-800 border border-zinc-700 text-sm text-zinc-100">
             <p className="font-medium mb-1">3D view unavailable</p>
-            <p className="text-white/60">WebGL context was lost. Refresh the page to restore.</p>
+            <p className="text-zinc-400">WebGL context was lost. Refresh the page to restore.</p>
           </div>
         </div>
       )}
       {isLoading && !contextLost && (
         <div className="absolute inset-0 flex items-center justify-center bg-dark-bg z-10">
           <motion.div
-            className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500"
+            className="w-12 h-12 rounded-md bg-zinc-600"
             animate={{ rotate: 360 }}
             transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
           />
@@ -475,16 +596,16 @@ export default function Viewer3D({
           {vrSupported ? (
             <button
               onClick={vrSession ? stopVr : startVr}
-              className={`px-3 py-2 rounded-xl border text-xs font-medium backdrop-blur-md transition-colors ${
+              className={`px-3 py-2 rounded-md border text-xs font-medium transition-colors ${
                 vrSession
                   ? 'bg-red-500/20 border-red-500/30 text-red-200 hover:bg-red-500/30'
-                  : 'bg-white/10 border-white/15 text-white/80 hover:bg-white/15'
+                  : 'bg-zinc-700 border-zinc-700 text-zinc-200 hover:bg-zinc-700'
               }`}
             >
               {vrSession ? 'Exit VR' : 'Enter VR'}
             </button>
           ) : (
-            <div className="px-3 py-2 rounded-xl border bg-white/5 border-white/10 text-xs text-white/50">
+            <div className="px-3 py-2 rounded-md border bg-zinc-800 border-zinc-700 text-xs text-zinc-400">
               VR not supported
             </div>
           )}
@@ -514,14 +635,28 @@ export default function Viewer3D({
         
         {/* Scene */}
         {modelUrl ? (
-          <Suspense fallback={null}>
-            <GltfModel url={modelUrl} onObjectSelect={onObjectSelect} onWorldClick={onWorldClick} />
+            <Suspense fallback={null}>
+            <GltfModelErrorBoundary
+              url={normalizeModelUrl(modelUrl) ?? modelUrl}
+              fallbackUrl={FALLBACK_MODEL_URL}
+              stressResult={stressResult}
+              onObjectSelect={onObjectSelect}
+              onWorldClick={onWorldClick}
+            >
+              <GltfModel
+                url={normalizeModelUrl(modelUrl) ?? modelUrl}
+                stressResult={stressResult}
+                onObjectSelect={onObjectSelect}
+                onWorldClick={onWorldClick}
+              />
+            </GltfModelErrorBoundary>
           </Suspense>
         ) : (
           <Float speed={1} rotationIntensity={0.1} floatIntensity={0.1}>
             <Building
               riskScores={riskScores}
               showRiskOverlay={showRiskOverlay}
+              stressResult={stressResult}
               floorsAboveGround={floorsAboveGround}
               grossFloorAreaM2={grossFloorAreaM2}
               onObjectSelect={onObjectSelect}
@@ -565,8 +700,8 @@ export default function Viewer3D({
           enablePan={true}
           enableZoom={true}
           enableRotate={true}
-          minDistance={5}
-          maxDistance={30}
+          minDistance={2}
+          maxDistance={200}
           minPolarAngle={0.2}
           maxPolarAngle={Math.PI / 2 - 0.1}
           target={[0, 2, 0]}
@@ -574,11 +709,11 @@ export default function Viewer3D({
         
         {/* Environment */}
         <Environment preset="city" />
-        <fog attach="fog" args={['#0a0f1a', 20, 50]} />
+        <fog attach="fog" args={['#09090b', 20, 50]} />
       </Canvas>
       
       {/* Controls overlay */}
-      <div className="absolute bottom-4 left-4 glass rounded-lg px-3 py-2 text-xs text-dark-muted">
+      <div className="absolute bottom-4 left-4 glass rounded-md px-3 py-2 text-xs text-dark-muted">
         <div className="flex gap-4">
           <span>🖱️ Drag to rotate</span>
           <span>⚡ Scroll to zoom</span>
@@ -588,8 +723,8 @@ export default function Viewer3D({
       </div>
       
       {/* Legend */}
-      {showRiskOverlay && (
-        <div className="absolute top-4 right-4 glass rounded-lg p-3">
+      {showRiskOverlay && !stressResult && (
+        <div className="absolute top-4 right-4 glass rounded-md p-3">
           <p className="text-xs font-medium mb-2">Risk Legend</p>
           <div className="space-y-1 text-xs">
             <div className="flex items-center gap-2">
@@ -604,6 +739,25 @@ export default function Viewer3D({
               <div className="w-3 h-3 rounded bg-red-500" />
               <span>High (70-100)</span>
             </div>
+          </div>
+        </div>
+      )}
+      {/* Stress test result overlay (for GLB or when user wants to see summary) */}
+      {stressResult && (
+        <div className="absolute top-4 right-4 glass rounded-md p-3 min-w-[180px] border-l-4" style={{ borderLeftColor: getStressImpactColor(stressResult.impactLevel) }}>
+          <p className="text-xs font-medium mb-2 text-zinc-300">
+            {/flood|heat|climate|wind|storm|drought|precipitation|temperature/i.test(stressResult.eventName) ? 'Climate impact' : 'Stress test result'}
+          </p>
+          <div className="space-y-1 text-xs">
+            <div className="font-medium text-zinc-100">{stressResult.eventName}</div>
+            <div className="capitalize" style={{ color: getStressImpactColor(stressResult.impactLevel) }}>
+              Impact: {stressResult.impactLevel}
+            </div>
+            {stressResult.totalLoss != null && (
+              <div className="text-zinc-400 mt-1">
+                Est. loss: {stressResult.currency ? `${stressResult.currency} ` : ''}{stressResult.totalLoss.toLocaleString()}
+              </div>
+            )}
           </div>
         </div>
       )}

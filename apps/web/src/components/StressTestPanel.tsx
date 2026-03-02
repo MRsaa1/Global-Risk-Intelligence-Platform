@@ -63,7 +63,7 @@ export default function StressTestPanel({ isOpen, onClose, totalExposure }: Stre
           average_lgd: 0.45,
           scenario_type: selectedScenario,
           severity: severity,
-          num_simulations: 10000,
+          num_simulations: 100000,
         }),
       })
 
@@ -92,12 +92,12 @@ export default function StressTestPanel({ isOpen, onClose, totalExposure }: Stre
           exit={{ opacity: 0, y: -50, scale: 0.95 }}
           transition={{ duration: 0.3 }}
         >
-          <div className="bg-black/80 backdrop-blur-xl rounded-2xl border border-white/10 p-6 w-[500px] shadow-2xl">
+          <div className="bg-black/80 rounded-md border border-white/10 p-6 w-[500px] shadow-2xl">
             {/* Header */}
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h2 className="text-white font-medium text-lg">Stress Testing</h2>
-                <p className="text-white/40 text-xs">Monte Carlo simulation with {(10000).toLocaleString()} paths</p>
+                <p className="text-white/40 text-xs">Monte Carlo simulation with 100,000 paths</p>
               </div>
               <button
                 onClick={onClose}
@@ -120,7 +120,7 @@ export default function StressTestPanel({ isOpen, onClose, totalExposure }: Stre
                   <button
                     key={scenario.id}
                     onClick={() => setSelectedScenario(scenario.id)}
-                    className={`p-2 rounded-lg border text-left transition-all ${
+                    className={`p-2 rounded-md border text-left transition-all ${
                       selectedScenario === scenario.id
                         ? 'bg-white/10 border-amber-500/50'
                         : 'bg-white/5 border-white/10 hover:bg-white/10'
@@ -153,7 +153,7 @@ export default function StressTestPanel({ isOpen, onClose, totalExposure }: Stre
                 onChange={(e) => setSeverity(parseFloat(e.target.value))}
                 className="w-full h-2 bg-white/10 rounded-full appearance-none cursor-pointer
                   [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 
-                  [&::-webkit-slider-thumb]:bg-amber-500 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:cursor-pointer"
+                  [&::-webkit-slider-thumb]:bg-amber-500/80 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:cursor-pointer"
               />
               <div className="flex justify-between text-[10px] text-white/30 mt-1">
                 <span>Mild</span>
@@ -166,8 +166,8 @@ export default function StressTestPanel({ isOpen, onClose, totalExposure }: Stre
             <button
               onClick={runStressTest}
               disabled={isRunning}
-className="w-full py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-xl font-medium
-                hover:from-amber-400 hover:to-amber-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed
+className="w-full py-3 bg-gradient-to-r from-amber-500/80 to-amber-600/80 text-white rounded-md font-medium
+                hover:from-amber-400/80 hover:to-amber-500/80 transition-all disabled:opacity-50 disabled:cursor-not-allowed
                 flex items-center justify-center gap-2"
             >
               {isRunning ? (
@@ -191,7 +191,7 @@ className="w-full py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-white r
 
             {/* Error */}
             {error && (
-              <div className="mt-4 p-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm">
+              <div className="mt-4 p-3 bg-red-500/20 border border-red-500/30 rounded-md text-red-400/80 text-sm">
                 {error}
               </div>
             )}
@@ -211,33 +211,33 @@ className="w-full py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-white r
                   
                   <div className="grid grid-cols-2 gap-4">
                     {/* VaR 99% */}
-                    <div className="p-3 bg-white/5 rounded-lg">
+                    <div className="p-3 bg-white/5 rounded-md">
                       <div className="text-white/40 text-[10px] uppercase">VaR 99%</div>
-                      <div className="text-red-400 text-xl font-light">
+                      <div className="text-red-400/80 text-xl font-light">
                         ${(result.var_99 / 1e9).toFixed(2)}<span className="text-sm">B</span>
                       </div>
                     </div>
                     
                     {/* Expected Shortfall */}
-                    <div className="p-3 bg-white/5 rounded-lg">
+                    <div className="p-3 bg-white/5 rounded-md">
                       <div className="text-white/40 text-[10px] uppercase">CVaR (ES)</div>
-                      <div className="text-orange-400 text-xl font-light">
+                      <div className="text-orange-400/80 text-xl font-light">
                         ${(result.expected_shortfall / 1e9).toFixed(2)}<span className="text-sm">B</span>
                       </div>
                     </div>
                     
                     {/* Max Loss */}
-                    <div className="p-3 bg-white/5 rounded-lg">
+                    <div className="p-3 bg-white/5 rounded-md">
                       <div className="text-white/40 text-[10px] uppercase">Max Loss</div>
-                      <div className="text-red-500 text-xl font-light">
+                      <div className="text-red-500/80 text-xl font-light">
                         ${(result.max_loss / 1e9).toFixed(2)}<span className="text-sm">B</span>
                       </div>
                     </div>
                     
                     {/* Recovery Time */}
-                    <div className="p-3 bg-white/5 rounded-lg">
+                    <div className="p-3 bg-white/5 rounded-md">
                       <div className="text-white/40 text-[10px] uppercase">Recovery</div>
-                      <div className="text-yellow-400 text-xl font-light">
+                      <div className="text-yellow-400/80 text-xl font-light">
                         {result.recovery_time_years.toFixed(1)}<span className="text-sm"> yrs</span>
                       </div>
                     </div>

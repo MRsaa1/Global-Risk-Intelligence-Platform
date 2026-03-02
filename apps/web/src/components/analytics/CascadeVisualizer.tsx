@@ -84,12 +84,13 @@ interface FGLink extends LinkObject {
   isActive?: boolean
 }
 
-// Format currency
-function formatCurrency(value: number): string {
-  if (value >= 1_000_000_000) return `$${(value / 1_000_000_000).toFixed(1)}B`
-  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`
-  if (value >= 1_000) return `$${(value / 1_000).toFixed(1)}K`
-  return `$${value.toFixed(0)}`
+// Format currency (report-consistent when currency prop provided)
+function formatCurrency(value: number, currency: string = 'USD'): string {
+  const sym = currency === 'EUR' ? '€' : '$'
+  if (value >= 1_000_000_000) return `${sym}${(value / 1_000_000_000).toFixed(1)}B`
+  if (value >= 1_000_000) return `${sym}${(value / 1_000_000).toFixed(1)}M`
+  if (value >= 1_000) return `${sym}${(value / 1_000).toFixed(1)}K`
+  return `${sym}${value.toFixed(0)}`
 }
 
 // Sector configuration with professional MUTED colors
@@ -232,9 +233,11 @@ export interface CascadeVisualizerProps {
   height?: number
   /** Callback when user clicks "Add to Report" - receives current simulation result */
   onAddToReport?: (data: CascadeResult) => void
+  /** Report currency for loss display (e.g. EUR for stress reports); default USD */
+  currency?: string
 }
 
-export default function CascadeVisualizer({ cityId, scenarioId, embed = false, height: embedHeight = 500, onAddToReport }: CascadeVisualizerProps = {}) {
+export default function CascadeVisualizer({ cityId, scenarioId, embed = false, height: embedHeight = 500, onAddToReport, currency: reportCurrency = 'USD' }: CascadeVisualizerProps = {}) {
   const graphRef = useRef<ForceGraphMethods>()
   const containerRef = useRef<HTMLDivElement>(null)
   const [dimensions, setDimensions] = useState({ width: 1200, height: 896 })
@@ -324,8 +327,18 @@ export default function CascadeVisualizer({ cityId, scenarioId, embed = false, h
   // Vulnerability analysis
   const vulnerabilityMutation = useMutation({
     mutationFn: async () => {
-      const res = await fetch('/api/v1/whatif/cascade/vulnerability')
-      if (!res.ok) throw new Error('Failed to analyze vulnerability')
+      const res = await fetch('/api/v1/whatif/cascade/vulnerability', { method: 'GET' })
+      if (!res.ok) {
+        let msg = 'Failed to analyze vulnerability'
+        try {
+          const body = await res.json()
+          if (body?.detail) msg = typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail)
+        } catch {
+          const text = await res.text()
+          if (text) msg = text.slice(0, 200)
+        }
+        throw new Error(msg)
+      }
       return res.json() as Promise<VulnerabilityResult>
     },
   })
@@ -461,7 +474,7 @@ export default function CascadeVisualizer({ cityId, scenarioId, embed = false, h
     // Label with background - just number
     const label = node.id.replace('asset_', '')
     const labelFontSize = 11
-    ctx.font = `600 ${labelFontSize}px "Space Grotesk", system-ui, sans-serif`
+    ctx.font = `600 ${labelFontSize}px "JetBrains Mono", monospace`
     const textWidth = ctx.measureText(label).width
     const padding = 6
     const labelY = y + size + 18
@@ -480,7 +493,7 @@ export default function CascadeVisualizer({ cityId, scenarioId, embed = false, h
     ctx.fill()
     
     // Pill background
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.95)'
+    ctx.fillStyle = 'rgba(24, 24, 27, 0.95)'
     ctx.beginPath()
     roundRect(ctx, pillX, pillY, pillWidth, pillHeight, radius)
     ctx.fill()
@@ -521,7 +534,7 @@ export default function CascadeVisualizer({ cityId, scenarioId, embed = false, h
       ctx.strokeStyle = 'rgba(138, 74, 74, 0.7)'
       ctx.lineWidth = 1.5
     } else {
-      ctx.strokeStyle = 'rgba(100, 116, 139, 0.2)'
+      ctx.strokeStyle = 'rgba(113, 113, 122, 0.2)'
       ctx.lineWidth = 1
     }
     ctx.stroke()
@@ -544,7 +557,7 @@ export default function CascadeVisualizer({ cityId, scenarioId, embed = false, h
       arrowY - arrowLen * Math.sin(angle + Math.PI / 7)
     )
     ctx.closePath()
-    ctx.fillStyle = isActive ? 'rgba(138, 74, 74, 0.7)' : 'rgba(100, 116, 139, 0.3)'
+    ctx.fillStyle = isActive ? 'rgba(138, 74, 74, 0.7)' : 'rgba(113, 113, 122, 0.3)'
     ctx.fill()
   }, [])
   
@@ -559,17 +572,30 @@ export default function CascadeVisualizer({ cityId, scenarioId, embed = false, h
     }
   }, [])
   
+  const cascadeError =
+    createGraphMutation.error ||
+    buildFromContextMutation.error ||
+    simulateMutation.error ||
+    vulnerabilityMutation.error
+  const cascadeErrorMessage =
+    cascadeError instanceof Error ? cascadeError.message : cascadeError ? String(cascadeError) : null
+
   return (
     <div className="space-y-4">
+      {cascadeErrorMessage && (
+        <div className="p-3 rounded-md bg-red-500/10 border border-red-500/30 text-red-300/80 text-sm" role="alert">
+          {cascadeErrorMessage}
+        </div>
+      )}
       {/* Graph Container - FULL WIDTH */}
-      <div className="glass rounded-2xl p-4">
+      <div className="rounded-md border border-zinc-800/60 bg-zinc-900/50 p-4">
         {/* Header - hidden in embed */}
         {!embed && (
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <ShareIcon className="w-5 h-5 text-purple-400" />
-            <h2 className="text-lg font-display font-semibold">Cascade Analysis</h2>
-            <span className="text-[10px] px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded-full">
+            <ShareIcon className="w-5 h-5 text-zinc-400" />
+            <h2 className="text-lg font-display font-semibold text-zinc-100 tracking-tight">Cascade Analysis</h2>
+            <span className="font-mono text-[10px] uppercase tracking-widest px-2 py-0.5 bg-zinc-900/80 border border-zinc-800/60 text-zinc-400 rounded-full">
               Force-Directed Graph
             </span>
           </div>
@@ -577,8 +603,9 @@ export default function CascadeVisualizer({ cityId, scenarioId, embed = false, h
           <div className="flex items-center gap-2">
             <button
               onClick={() => vulnerabilityMutation.mutate()}
-              disabled={vulnerabilityMutation.isPending}
-              className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-sm text-white/60 flex items-center gap-2 transition-colors"
+              disabled={vulnerabilityMutation.isPending || graphData.nodes.length === 0}
+              title={graphData.nodes.length === 0 ? 'Load or reset the graph first' : 'Analyze network vulnerability'}
+              className="px-4 py-2 bg-zinc-800 border border-zinc-800/60 hover:bg-zinc-700 rounded-md text-sm text-zinc-300 flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <ShieldCheckIcon className="w-4 h-4" />
               Analyze Vulnerability
@@ -593,7 +620,7 @@ export default function CascadeVisualizer({ cityId, scenarioId, embed = false, h
                 }
               }}
               disabled={createGraphMutation.isPending || buildFromContextMutation.isPending}
-              className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-sm text-white/60 flex items-center gap-2 transition-colors"
+              className="px-4 py-2 bg-zinc-800 border border-zinc-800/60 hover:bg-zinc-700 rounded-md text-sm text-zinc-300 flex items-center gap-2 transition-colors"
             >
               <ArrowPathIcon className={`w-4 h-4 ${(createGraphMutation.isPending || buildFromContextMutation.isPending) ? 'animate-spin' : ''}`} />
               Reset Graph
@@ -605,7 +632,7 @@ export default function CascadeVisualizer({ cityId, scenarioId, embed = false, h
         {/* Main Graph - LARGER; fixed height in embed */}
         <div 
           ref={containerRef}
-          className="bg-[#050a12] rounded-xl border border-white/10 overflow-hidden relative"
+          className="bg-[#09090b] rounded-md border border-zinc-800/60 overflow-hidden relative"
           style={{ height: embed ? embedHeight : dimensions.height }}
         >
           {/* Grid background */}
@@ -613,8 +640,8 @@ export default function CascadeVisualizer({ cityId, scenarioId, embed = false, h
             className="absolute inset-0 opacity-30"
             style={{
               backgroundImage: `
-                linear-gradient(rgba(59, 130, 246, 0.08) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(59, 130, 246, 0.08) 1px, transparent 1px)
+                linear-gradient(rgba(113, 113, 122, 0.06) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(113, 113, 122, 0.06) 1px, transparent 1px)
               `,
               backgroundSize: '50px 50px',
             }}
@@ -624,7 +651,7 @@ export default function CascadeVisualizer({ cityId, scenarioId, embed = false, h
           <div 
             className="absolute inset-0 pointer-events-none"
             style={{
-              background: 'radial-gradient(ellipse at center, transparent 30%, rgba(5, 10, 18, 0.8) 100%)',
+              background: 'radial-gradient(ellipse at center, transparent 30%, rgba(9, 9, 11, 0.8) 100%)',
             }}
           />
           
@@ -663,17 +690,17 @@ export default function CascadeVisualizer({ cityId, scenarioId, embed = false, h
           
           {/* Loading overlay */}
           {(createGraphMutation.isPending || buildFromContextMutation.isPending) && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <div className="absolute inset-0 flex items-center justify-center bg-black/60">
               <div className="flex flex-col items-center gap-3">
-                <div className="w-10 h-10 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
-                <span className="text-sm text-white/60">Generating network...</span>
+                <div className="w-10 h-10 border-2 border-zinc-500 border-t-transparent rounded-full animate-spin" />
+                <span className="text-sm text-zinc-400">Generating network...</span>
               </div>
             </div>
           )}
         </div>
         
         {/* Legend */}
-        <div className="mt-4 flex flex-wrap items-center gap-6 text-xs text-white/50">
+        <div className="mt-4 flex flex-wrap items-center gap-6 text-xs text-zinc-400">
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#8a4a4a' }} />
             <span>Trigger Node</span>
@@ -686,7 +713,7 @@ export default function CascadeVisualizer({ cityId, scenarioId, embed = false, h
             <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#4a7a5a' }} />
             <span>Containment Point</span>
           </div>
-          <div className="w-px h-4 bg-white/20" />
+          <div className="w-px h-4 bg-zinc-800" />
           {Object.entries(sectorConfig).slice(0, 6).map(([sector, config]) => (
             <div key={sector} className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full" style={{ backgroundColor: config.color }} />
@@ -698,59 +725,59 @@ export default function CascadeVisualizer({ cityId, scenarioId, embed = false, h
         {/* Embed: metrics and tables (from simulate / vulnerability) */}
         {embed && simulateMutation.data && (
           <div className="mt-4 space-y-4">
-            <p className="text-white/40 text-[10px]">Cascade metrics from simulation. Critical nodes and containment from Cascade simulate/vulnerability.</p>
+            <p className="text-zinc-500 text-[10px]">Cascade metrics from simulation. Critical nodes and containment from Cascade simulate/vulnerability.</p>
             <div className="grid grid-cols-4 gap-3">
-              <div className="bg-white/5 rounded-lg p-3 border border-white/10">
-                <div className="text-white/50 text-[10px] uppercase">Affected nodes</div>
-                <div className="text-white text-lg font-medium">{simulateMutation.data.affected_count}</div>
+              <div className="bg-zinc-900/50 rounded-md p-3 border border-zinc-800/60">
+                <div className="text-zinc-400 text-[10px] uppercase">Affected nodes</div>
+                <div className="text-zinc-100 text-lg font-medium">{simulateMutation.data.affected_count}</div>
               </div>
-              <div className="bg-white/5 rounded-lg p-3 border border-white/10">
-                <div className="text-white/50 text-[10px] uppercase">Est. cascade loss</div>
-                <div className="text-amber-400 text-lg font-medium">{formatCurrency(simulateMutation.data.total_loss)}</div>
+              <div className="bg-zinc-900/50 rounded-md p-3 border border-zinc-800/60">
+                <div className="text-zinc-400 text-[10px] uppercase">Est. cascade loss</div>
+                <div className="text-amber-400/80 text-lg font-medium">{formatCurrency(simulateMutation.data.total_loss, reportCurrency)}</div>
               </div>
-              <div className="bg-white/5 rounded-lg p-3 border border-white/10">
-                <div className="text-white/50 text-[10px] uppercase">Critical path</div>
+              <div className="bg-zinc-900/50 rounded-md p-3 border border-zinc-800/60">
+                <div className="text-zinc-400 text-[10px] uppercase">Critical path</div>
                 <div className="text-red-400/90 text-lg font-medium">{simulateMutation.data.critical_nodes?.length ?? 0}</div>
               </div>
-              <div className="bg-white/5 rounded-lg p-3 border border-white/10">
-                <div className="text-white/50 text-[10px] uppercase">Containment points</div>
+              <div className="bg-zinc-900/50 rounded-md p-3 border border-zinc-800/60">
+                <div className="text-zinc-400 text-[10px] uppercase">Containment points</div>
                 <div className="text-green-400/90 text-lg font-medium">{simulateMutation.data.containment_points?.length ?? 0}</div>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="bg-white/5 rounded-lg border border-white/10 overflow-hidden">
-                <div className="text-white/70 text-xs uppercase tracking-wider px-3 py-2 border-b border-white/10">Critical nodes</div>
+              <div className="bg-zinc-900/50 rounded-md border border-zinc-800/60 overflow-hidden">
+                <div className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 px-3 py-2 border-b border-zinc-800/60">Critical nodes</div>
                 <div className="max-h-32 overflow-y-auto">
                   {(simulateMutation.data.critical_nodes?.length ? simulateMutation.data.critical_nodes : (vulnerabilityMutation.data?.most_critical_nodes?.slice(0, 5).map(x => x.node_id) ?? [])).map((id) => {
                     const n = graphData.nodes.find(nn => nn.id === id)
                     const imp = simulateMutation.data?.node_impacts?.[id]
                     const crit = vulnerabilityMutation.data?.most_critical_nodes?.find(m => m.node_id === id)?.criticality
                     return (
-                      <div key={id} className="px-3 py-1.5 flex justify-between text-xs border-b border-white/5">
-                        <span className="text-white/80">{n?.name ?? id}</span>
-                        <span className="text-white/50">{(imp != null ? `${(imp * 100).toFixed(0)}%` : crit != null ? `${(crit * 100).toFixed(0)}%` : '—')} · {n?.sector ?? '—'}</span>
+                      <div key={id} className="px-3 py-1.5 flex justify-between text-xs border-b border-zinc-800/60">
+                        <span className="text-zinc-300">{n?.name ?? id}</span>
+                        <span className="text-zinc-400">{(imp != null ? `${(imp * 100).toFixed(0)}%` : crit != null ? `${(crit * 100).toFixed(0)}%` : '—')} · {n?.sector ?? '—'}</span>
                       </div>
                     )
                   })}
                   {(!simulateMutation.data.critical_nodes?.length && !vulnerabilityMutation.data?.most_critical_nodes?.length) && (
-                    <div className="px-3 py-2 text-white/40 text-xs">None identified</div>
+                    <div className="px-3 py-2 text-zinc-500 text-xs">None identified</div>
                   )}
                 </div>
               </div>
-              <div className="bg-white/5 rounded-lg border border-white/10 overflow-hidden">
-                <div className="text-white/70 text-xs uppercase tracking-wider px-3 py-2 border-b border-white/10">Containment points</div>
+              <div className="bg-zinc-900/50 rounded-md border border-zinc-800/60 overflow-hidden">
+                <div className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 px-3 py-2 border-b border-zinc-800/60">Containment points</div>
                 <div className="max-h-32 overflow-y-auto">
                   {(simulateMutation.data.containment_points ?? []).map((id) => {
                     const n = graphData.nodes.find(nn => nn.id === id)
                     return (
-                      <div key={id} className="px-3 py-1.5 flex justify-between text-xs border-b border-white/5">
-                        <span className="text-white/80">{n?.name ?? id}</span>
-                        <span className="text-white/50">{n?.sector ?? '—'}</span>
+                      <div key={id} className="px-3 py-1.5 flex justify-between text-xs border-b border-zinc-800/60">
+                        <span className="text-zinc-300">{n?.name ?? id}</span>
+                        <span className="text-zinc-400">{n?.sector ?? '—'}</span>
                       </div>
                     )
                   })}
                   {(simulateMutation.data.containment_points?.length ?? 0) === 0 && (
-                    <div className="px-3 py-2 text-white/40 text-xs">None identified</div>
+                    <div className="px-3 py-2 text-zinc-500 text-xs">None identified</div>
                   )}
                 </div>
               </div>
@@ -759,7 +786,7 @@ export default function CascadeVisualizer({ cityId, scenarioId, embed = false, h
               <button
                 type="button"
                 onClick={() => onAddToReport(simulateMutation.data!)}
-                className="mt-4 w-full py-2.5 bg-primary-500/20 hover:bg-primary-500/30 border border-primary-500/40 text-primary-300 rounded-lg text-sm font-medium flex items-center justify-center gap-2"
+                className="mt-4 w-full py-2.5 bg-zinc-800 border border-zinc-800/60 hover:bg-zinc-700 text-zinc-300 rounded-md text-sm font-medium flex items-center justify-center gap-2"
               >
                 <DocumentPlusIcon className="w-4 h-4" />
                 Add to Report
@@ -773,18 +800,18 @@ export default function CascadeVisualizer({ cityId, scenarioId, embed = false, h
       {!embed && (
       <div className="grid grid-cols-4 gap-4">
         {/* Simulation Controls */}
-        <div className="glass rounded-xl p-4 space-y-4">
-          <h3 className="text-sm font-medium text-white/80 flex items-center gap-2">
-            <BoltIcon className="w-4 h-4 text-red-400" />
+        <div className="glass rounded-md p-4 space-y-4">
+          <h3 className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+            <BoltIcon className="w-4 h-4 text-red-400/80" />
             Cascade Trigger
           </h3>
           
           <div>
-            <label className="text-xs text-white/40 mb-1 block">Trigger Node</label>
+            <label className="text-xs text-zinc-500 mb-1 block">Trigger Node</label>
             <select
               value={triggerNode}
               onChange={(e) => setTriggerNode(e.target.value)}
-              className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-sm text-white"
+              className="w-full px-3 py-2 bg-zinc-900/80 border border-zinc-800/60 rounded-md text-sm text-zinc-100 font-sans"
             >
               {graphData.nodes.map(n => (
                 <option key={n.id} value={n.id}>{n.name}</option>
@@ -793,7 +820,7 @@ export default function CascadeVisualizer({ cityId, scenarioId, embed = false, h
           </div>
           
           <div>
-            <label className="text-xs text-white/40 mb-1 block">
+            <label className="text-xs text-zinc-500 mb-1 block">
               Severity: {(triggerSeverity * 100).toFixed(0)}%
             </label>
             <input
@@ -808,9 +835,9 @@ export default function CascadeVisualizer({ cityId, scenarioId, embed = false, h
           </div>
           
           <button
-            onClick={() => simulateMutation.mutate()}
+            onClick={() => simulateMutation.mutate({})}
             disabled={simulateMutation.isPending}
-            className="w-full py-3 bg-primary-500/20 hover:bg-primary-500/30 border border-primary-500/30 text-primary-300 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all"
+            className="w-full py-3 bg-zinc-800 border border-zinc-800/60 hover:bg-zinc-700 text-zinc-300 rounded-md text-sm font-medium flex items-center justify-center gap-2 transition-all"
           >
             {simulateMutation.isPending ? (
               <ArrowPathIcon className="w-4 h-4 animate-spin" />
@@ -822,12 +849,12 @@ export default function CascadeVisualizer({ cityId, scenarioId, embed = false, h
         </div>
         
         {/* Selected Node Info */}
-        <div className="glass rounded-xl p-4">
-          <h3 className="text-sm font-medium text-white/80 mb-3">Selected Node</h3>
+        <div className="glass rounded-md p-4">
+          <h3 className="text-sm font-medium text-zinc-300 mb-3">Selected Node</h3>
           {selectedNode ? (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="font-medium text-white">{selectedNode.name}</span>
+                <span className="font-medium text-zinc-100">{selectedNode.name}</span>
                 <div 
                   className="w-4 h-4 rounded-full" 
                   style={{ backgroundColor: sectorConfig[selectedNode.sector]?.color || '#6b7280' }}
@@ -836,32 +863,32 @@ export default function CascadeVisualizer({ cityId, scenarioId, embed = false, h
               
               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div>
-                  <span className="text-white/40">Value</span>
-                  <div className="text-white font-medium">{formatCurrency(selectedNode.value)}</div>
+                  <span className="text-zinc-500">Value (exposure)</span>
+                  <div className="text-zinc-100 font-medium">{formatCurrency(selectedNode.value, reportCurrency)}</div>
                 </div>
                 <div>
-                  <span className="text-white/40">Risk Score</span>
-                  <div className="text-white font-medium">{selectedNode.risk_score.toFixed(0)}</div>
+                  <span className="text-zinc-500">Risk Score (0–100)</span>
+                  <div className="text-zinc-100 font-medium">{selectedNode.risk_score.toFixed(0)}</div>
                 </div>
                 <div>
-                  <span className="text-white/40">Sector</span>
-                  <div className="text-white">{selectedNode.sector}</div>
+                  <span className="text-zinc-500">Sector</span>
+                  <div className="text-zinc-100">{selectedNode.sector}</div>
                 </div>
                 <div>
-                  <span className="text-white/40">Region</span>
-                  <div className="text-white">{selectedNode.region}</div>
+                  <span className="text-zinc-500">Region</span>
+                  <div className="text-zinc-100">{selectedNode.region}</div>
                 </div>
               </div>
               
               {selectedNode.impact !== undefined && selectedNode.impact > 0 && (
-                <div className="pt-3 border-t border-white/10">
+                <div className="pt-3 border-t border-zinc-800/60">
                   <div className="flex items-center justify-between text-xs mb-1">
-                    <span className="text-white/40">Cascade Impact</span>
-                    <span className="text-white/70 font-medium">{(selectedNode.impact * 100).toFixed(0)}%</span>
+                    <span className="text-zinc-500">Cascade Impact (share of loss)</span>
+                    <span className="text-zinc-300 font-medium">{(selectedNode.impact * 100).toFixed(0)}%</span>
                   </div>
-                  <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                  <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
                     <motion.div 
-                      className="h-full bg-accent-500 rounded-full"
+                      className="h-full bg-zinc-500 rounded-full"
                       initial={{ width: 0 }}
                       animate={{ width: `${selectedNode.impact * 100}%` }}
                     />
@@ -870,53 +897,63 @@ export default function CascadeVisualizer({ cityId, scenarioId, embed = false, h
               )}
             </div>
           ) : (
-            <p className="text-sm text-white/40">Click a node to view details</p>
+            <div className="text-sm text-zinc-500 space-y-1">
+              <p>Click a node on the graph to see:</p>
+              <ul className="list-disc list-inside text-xs space-y-0.5 text-zinc-400">
+                <li>Exposure (value) and risk score</li>
+                <li>Sector and region</li>
+                <li>Cascade impact % after running a simulation</li>
+              </ul>
+            </div>
           )}
         </div>
         
         {/* Cascade Results */}
-        <div className="glass rounded-xl p-4">
-          <h3 className="text-sm font-medium text-white/80 mb-3 flex items-center gap-2">
-            <ExclamationTriangleIcon className="w-4 h-4 text-red-400" />
+        <div className="glass rounded-md p-4">
+          <h3 className="text-sm font-medium text-zinc-300 mb-3 flex items-center gap-2">
+            <ExclamationTriangleIcon className="w-4 h-4 text-red-400/80" />
             Cascade Impact
           </h3>
           
           {simulateMutation.data ? (
             <div className="space-y-3">
               {/* Summary: what happened and how to read the graph */}
-              <div className="p-3 bg-white/5 rounded-lg border border-white/10 text-xs text-white/70 space-y-1">
-                <div className="font-medium text-white/90">What happened</div>
+              <div className="p-3 bg-zinc-900/50 rounded-md border border-zinc-800/60 text-xs text-zinc-300 space-y-2">
+                <div className="font-medium text-zinc-200">What happened</div>
                 <p>
-                  The simulation started from node <span className="text-amber-400 font-medium">{simulateMutation.data.trigger_node}</span> at {(simulateMutation.data.trigger_severity * 100).toFixed(0)}% severity. Over {simulateMutation.data.simulation_steps} step(s), <span className="text-red-400 font-medium">{simulateMutation.data.affected_count}</span> node(s) were affected, with total loss of <span className="text-accent-400 font-medium">{formatCurrency(simulateMutation.data.total_loss)}</span>.
-                  {simulateMutation.data.containment_points.length > 0 && (
+                  The simulation started from node <span className="text-amber-400/80 font-medium">{simulateMutation.data.trigger_node}</span> at {(simulateMutation.data.trigger_severity * 100).toFixed(0)}% severity. Over {simulateMutation.data.simulation_steps} step(s), <span className="text-red-400/80 font-medium">{simulateMutation.data.affected_count}</span> node(s) were affected, with total loss of <span className="text-zinc-400 font-medium">{formatCurrency(simulateMutation.data.total_loss, reportCurrency)}</span>.
+                  {simulateMutation.data.affected_count === 0 && simulateMutation.data.total_loss > 0 && (
+                    <span className="text-zinc-500 text-[10px] block mt-1">Loss includes trigger node.</span>
+                  )}
+                  {simulateMutation.data.containment_points?.length > 0 && (
                     <> Containment points: {simulateMutation.data.containment_points.map(p => p.replace('asset_', 'A')).join(', ')}.</>
                   )}
                 </p>
-                <p className="text-white/50 pt-1">
-                  On the graph: <span className="text-[#8a4a4a]">red/brown</span> = trigger node, <span className="text-white/60">darkened</span> = affected, <span className="text-[#4a7a5a]">green</span> = containment.
+                <p className="text-zinc-400">
+                  On the graph: <span className="text-[#8a4a4a]">red/brown</span> = trigger node, <span className="text-zinc-400">darkened</span> = affected, <span className="text-[#4a7a5a]">green</span> = containment. Loss is in {reportCurrency}; metrics are from the cascade propagation model.
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div className="text-center p-3 bg-white/5 rounded-lg border border-white/10">
-                  <div className="text-2xl font-bold text-white/80">
+                <div className="text-center p-3 bg-zinc-900/50 rounded-md border border-zinc-800/60">
+                  <div className="text-2xl font-bold text-zinc-300">
                     {simulateMutation.data.affected_count}
                   </div>
-                  <div className="text-[10px] text-white/40">Nodes Affected</div>
+                  <div className="text-[10px] text-zinc-500">Nodes Affected</div>
                 </div>
-                <div className="text-center p-3 bg-white/5 rounded-lg border border-white/10">
-                  <div className="text-lg font-bold text-accent-400">
-                    {formatCurrency(simulateMutation.data.total_loss)}
+                <div className="text-center p-3 bg-zinc-900/50 rounded-md border border-zinc-800/60">
+                  <div className="text-lg font-bold text-zinc-400">
+                    {formatCurrency(simulateMutation.data.total_loss, reportCurrency)}
                   </div>
-                  <div className="text-[10px] text-white/40">Total Loss</div>
+                  <div className="text-[10px] text-zinc-500">Total Loss</div>
                 </div>
               </div>
               
-              {simulateMutation.data.containment_points.length > 0 && (
+              {(simulateMutation.data.containment_points?.length ?? 0) > 0 && (
                 <div>
-                  <span className="text-xs text-white/40">Containment Points</span>
+                  <span className="text-xs text-zinc-500">Containment Points</span>
                   <div className="flex flex-wrap gap-1 mt-1">
-                    {simulateMutation.data.containment_points.map(p => (
-                      <span key={p} className="text-xs px-2 py-0.5 bg-white/5 text-white/70 rounded border border-white/10">
+                    {(simulateMutation.data.containment_points ?? []).map(p => (
+                      <span key={p} className="text-xs px-2 py-0.5 bg-zinc-900/80 text-zinc-300 rounded border border-zinc-800/60">
                         {p.replace('asset_', 'A')}
                       </span>
                     ))}
@@ -927,7 +964,7 @@ export default function CascadeVisualizer({ cityId, scenarioId, embed = false, h
                 <button
                   type="button"
                   onClick={() => onAddToReport(simulateMutation.data!)}
-                  className="w-full mt-3 py-2.5 bg-primary-500/20 hover:bg-primary-500/30 border border-primary-500/40 text-primary-300 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors"
+                  className="w-full mt-3 py-2.5 bg-zinc-800 border border-zinc-800/60 hover:bg-zinc-700 text-zinc-300 rounded-md text-sm font-medium flex items-center justify-center gap-2 transition-colors"
                 >
                   <DocumentPlusIcon className="w-4 h-4" />
                   Add to Report
@@ -935,14 +972,22 @@ export default function CascadeVisualizer({ cityId, scenarioId, embed = false, h
               )}
             </div>
           ) : (
-            <p className="text-sm text-white/40">Run simulation to see results</p>
+            <div className="text-sm text-zinc-500 space-y-1">
+              <p>Run a simulation to see:</p>
+              <ul className="list-disc list-inside text-xs space-y-0.5 text-zinc-400">
+                <li>Number of affected nodes and total loss ({reportCurrency})</li>
+                <li>Containment points and critical path</li>
+                <li>Trigger node and severity used</li>
+              </ul>
+              <p className="text-[10px] text-zinc-600 mt-2">Select trigger node and severity above, then click &quot;Simulate Cascade&quot;.</p>
+            </div>
           )}
         </div>
         
         {/* Vulnerability Analysis */}
-        <div className="glass rounded-xl p-4">
-          <h3 className="text-sm font-medium text-white/80 mb-3 flex items-center gap-2">
-            <ShieldCheckIcon className="w-4 h-4 text-emerald-400" />
+        <div className="glass rounded-md p-4">
+          <h3 className="text-sm font-medium text-zinc-300 mb-3 flex items-center gap-2">
+            <ShieldCheckIcon className="w-4 h-4 text-emerald-400/80" />
             Network Resilience
           </h3>
           
@@ -950,17 +995,17 @@ export default function CascadeVisualizer({ cityId, scenarioId, embed = false, h
             <div className="space-y-3">
               <div>
                 <div className="flex items-center justify-between text-xs mb-1">
-                  <span className="text-white/40">Resilience Score</span>
+                  <span className="text-zinc-500">Resilience Score</span>
                   <span className="font-bold text-lg">
                     {vulnerabilityMutation.data.network_resilience_score.toFixed(0)}%
                   </span>
                 </div>
-                <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+                <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
                   <motion.div 
                     className={`h-full rounded-full ${
-                      vulnerabilityMutation.data.network_resilience_score >= 70 ? 'bg-primary-500' :
-                      vulnerabilityMutation.data.network_resilience_score >= 40 ? 'bg-accent-500' : 
-                      'bg-white/40'
+                      vulnerabilityMutation.data.network_resilience_score >= 70 ? 'bg-emerald-500/80' :
+                      vulnerabilityMutation.data.network_resilience_score >= 40 ? 'bg-amber-500/80' : 
+                      'bg-red-500/80'
                     }`}
                     initial={{ width: 0 }}
                     animate={{ width: `${vulnerabilityMutation.data.network_resilience_score}%` }}
@@ -969,21 +1014,38 @@ export default function CascadeVisualizer({ cityId, scenarioId, embed = false, h
                 </div>
               </div>
               
-              {vulnerabilityMutation.data.single_points_of_failure.length > 0 && (
+              {vulnerabilityMutation.data.single_points_of_failure?.length > 0 && (
                 <div>
-                  <span className="text-xs text-white/40">Single Points of Failure</span>
+                  <span className="text-xs text-zinc-500">Single Points of Failure (nodes whose failure disproportionately affects the network)</span>
                   <div className="flex flex-wrap gap-1 mt-1">
-                    {vulnerabilityMutation.data.single_points_of_failure.slice(0, 4).map(s => (
-                      <span key={s} className="text-xs px-2 py-0.5 bg-white/5 text-white/60 rounded border border-white/10">
+                    {vulnerabilityMutation.data.single_points_of_failure.slice(0, 6).map(s => (
+                      <span key={s} className="text-xs px-2 py-0.5 bg-zinc-900/80 text-zinc-400 rounded border border-zinc-800/60">
                         {s.replace('asset_', 'A')}
                       </span>
                     ))}
                   </div>
                 </div>
               )}
+              {vulnerabilityMutation.data.recommendations?.length > 0 && (
+                <div>
+                  <span className="text-xs text-zinc-500">Recommendations</span>
+                  <ul className="mt-1 text-xs text-zinc-400 list-disc list-inside space-y-0.5">
+                    {vulnerabilityMutation.data.recommendations.slice(0, 3).map((rec, i) => (
+                      <li key={i}>{rec}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           ) : (
-            <p className="text-sm text-white/40">Click Analyze to check vulnerability</p>
+            <div className="text-sm text-zinc-500 space-y-1">
+              <p>Click &quot;Analyze Vulnerability&quot; to see:</p>
+              <ul className="list-disc list-inside text-xs space-y-0.5 text-zinc-400">
+                <li>Network resilience score (0–100%)</li>
+                <li>Single points of failure</li>
+                <li>Recommendations to improve robustness</li>
+              </ul>
+            </div>
           )}
         </div>
       </div>

@@ -44,5 +44,5 @@ else
     echo "Или вручную:"
     echo "  cd $ROOT/apps/api"
     echo "  source .venv/bin/activate"
-    echo "  uvicorn src.main:app --reload --host 0.0.0.0 --port 9002"
+    echo "  uvicorn src.main:app --reload --host 0.0.0.0 --port 9002 --no-access-log"
 fi

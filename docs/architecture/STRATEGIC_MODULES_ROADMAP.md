@@ -114,6 +114,15 @@ Prove Product-Market Fit with commercial modules, establish revenue base.
 - ✅ All Phase 1 modules integrated
 - ✅ $15M+ ARR total
 
+### Phase 1 "Под Ключ" — Full Implementation Plan (24 months)
+
+Comprehensive implementation plan from architecture through production-ready system:
+
+- **[STRATEGIC_MODULES_PHASE1_FULL_IMPLEMENTATION.md](STRATEGIC_MODULES_PHASE1_FULL_IMPLEMENTATION.md)** — Scope (Base Framework, CIP, SCSS, SRO, Integration, Dashboard, API, Agents, Simulation, KG); project structure mapped to repo (`apps/api`, `apps/web`); tech stack; detailed 24-month timeline (Quarter 1–4, Year 2); base framework and CIP references; budget (~$2.85M); risks and success criteria.
+- **[STRATEGIC_MODULES_PHASE1_SPEC.md](STRATEGIC_MODULES_PHASE1_SPEC.md)** — Technical Specification (ТЗ): functional requirements (FR-CIP, FR-SCSS, FR-SRO, FR-CROSS); non-functional requirements (NFR); architecture; DB/KG schema summary; API and UI requirements; acceptance criteria.
+- **[SCSS_DETAILED_SPEC.md](SCSS_DETAILED_SPEC.md)** — Детальный разбор задач SCSS: карта цепочек, SPOF/концентрация, геополитические сценарии, early warning, ESG/sanctions, интеграция CIP/SRO, KPIs, примеры клиентов, data sources и ML.
+- **[SCSS_IMPLEMENTATION_PLAN.md](SCSS_IMPLEMENTATION_PLAN.md)** — 12-month accelerated SCSS delivery: phases (Foundation → Core Engine → Risk Intelligence → Visualization → Dashboard/GTM), FR-SCSS-001–008, integration (CIP/SRO/KG), KPIs, resources ($1.8M), GTM and pricing.
+
 ---
 
 ## Phase 2: National Security Integration (Years 4-8)

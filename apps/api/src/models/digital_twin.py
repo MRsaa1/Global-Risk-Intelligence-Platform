@@ -78,6 +78,9 @@ class DigitalTwin(Base):
     financial_metrics: Mapped[Optional[str]] = mapped_column(Text)  # JSON as text
     financial_updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     
+    # Regime Context (regime-aware Digital Twin parameters)
+    regime_context: Mapped[Optional[str]] = mapped_column(Text)  # JSON: regime, energy_cost_multiplier, pd_override, lgd_override, etc.
+    
     # Simulated Futures
     future_scenarios: Mapped[Optional[str]] = mapped_column(Text)  # JSON as text
     scenarios_updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime)

@@ -21,11 +21,20 @@ When use_data_federation_pipelines is True, /hotspots and /climate-risk
 delegate to DFM pipelines (geodata_risk, climate_stress).
 """
 import logging
-from fastapi import APIRouter, Query
 from typing import Optional
 
-from src.services.geo_data import geo_data_service
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.core.config import settings
+from src.core.database import get_db
+from src.services.geo_data import geo_data_service
+from src.services.global_risk_posture import (
+    get_latest_stress_loss,
+    get_real_aggregates,
+    get_risk_velocity_mom,
+    save_snapshot,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -36,7 +45,12 @@ FALLBACK_HOTSPOTS = {
     "features": [],
     "metadata": {"generated_at": "", "scenario": None, "total_exposure": 0, "hotspot_count": 0, "calculation_method": "fallback", "data_sources": []},
 }
-FALLBACK_SUMMARY = {"total_exposure": 0, "weighted_risk": 0, "total_expected_loss": 0, "at_risk_exposure": 0, "critical_exposure": 0, "hotspot_count": 0, "total_assets": 0}
+FALLBACK_SUMMARY = {
+    "total_exposure": 0, "weighted_risk": 0, "total_expected_loss": 0,
+    "at_risk_exposure": 0, "critical_exposure": 0, "hotspot_count": 0, "total_assets": 0,
+    "critical_count": 0, "high_count": 0, "medium_count": 0, "low_count": 0,
+    "risk_model_version": 2, "data_sources_freshness": "GDELT 15m, World Bank 24h, OFAC 24h",
+}
 
 from pydantic import BaseModel, Field
 
@@ -79,6 +93,7 @@ async def get_risk_hotspots(
     max_risk: float = Query(1.0, ge=0.0, le=1.0, description="Maximum risk filter"),
     scenario: Optional[str] = Query(None, description="Stress scenario to apply"),
     recalculate: bool = Query(False, description="Force recalculation of risk scores"),
+    risk_type: Optional[str] = Query(None, description="Filter by dominant risk type: geopolitical, climate, economic, seismic, other"),
 ):
     """
     Get risk hotspots as GeoJSON FeatureCollection.
@@ -103,6 +118,7 @@ async def get_risk_hotspots(
             min_risk=min_risk,
             max_risk=max_risk,
             scenario=scenario,
+            risk_type=risk_type,
         )
     except Exception as e:
         logger.warning("Geodata hotspots failed, returning fallback: %s", e)
@@ -138,15 +154,66 @@ async def get_heatmap(
 
 
 @router.get("/summary")
-async def get_portfolio_summary():
+async def get_portfolio_summary(
+    db: AsyncSession = Depends(get_db),
+    city_id: Optional[str] = Query(None, description="Scope metrics to this city (from CITIES_DATABASE)"),
+    country_code: Optional[str] = Query(None, description="Scope metrics to this country (ISO 3166-1 alpha-2, e.g. US, DE)"),
+):
     """
     Get aggregated portfolio metrics.
-    
-    Returns total exposure, risk, expected loss, etc.
+    Uses real Asset DB aggregates when available; otherwise city-based risk summary.
+    When city_id or country_code is provided, all metrics are scoped to that city/country
+    for consistency across modules (Dashboard, Command Center, stress tests).
     """
     try:
         await geo_data_service._ensure_risk_scores()
-        return geo_data_service.get_portfolio_summary()
+        summary = geo_data_service.get_portfolio_summary(country_code=country_code, city_id=city_id)
+        summary["risk_model_version"] = getattr(settings, "risk_model_version", 2)
+        summary["data_sources_freshness"] = (
+            "GDELT 15m, World Bank 24h, OFAC 24h" if getattr(settings, "risk_model_version", 2) == 2 else "USGS 6h, OpenWeather 3h"
+        )
+        # Override only financial/portfolio metrics from Asset DB when we have active assets (and no scope filter).
+        real = await get_real_aggregates(db, country_code=country_code, city_id=city_id)
+        if real:
+            summary["total_exposure"] = real["total_exposure"]
+            summary["at_risk_exposure"] = real["at_risk_exposure"]
+            summary["total_assets"] = real["total_assets"]
+            summary["weighted_risk"] = real["weighted_risk"]
+            stress_loss = await get_latest_stress_loss(db)
+            if stress_loss is not None:
+                summary["total_expected_loss"] = stress_loss
+            # Do NOT overwrite critical_count, high_count, medium_count, low_count —
+            # those stay from city risk (hotspots) so globe and counters stay in sync.
+
+        # Risk Velocity (MoM): from snapshot history or compare with previous snapshot
+        velocity = await get_risk_velocity_mom(db)
+        at_risk = summary.get("at_risk_exposure") or 0
+        if velocity:
+            if velocity.get("risk_velocity_mom_pct") is not None:
+                summary["risk_velocity_mom_pct"] = velocity["risk_velocity_mom_pct"]
+            elif at_risk is not None and velocity.get("risk_velocity_previous_at_risk"):
+                prev = float(velocity["risk_velocity_previous_at_risk"])
+                if prev > 0:
+                    summary["risk_velocity_mom_pct"] = round((at_risk - prev) / prev * 100, 1)
+            if velocity.get("risk_velocity_previous_at_risk") is not None:
+                summary["risk_velocity_previous_at_risk"] = velocity["risk_velocity_previous_at_risk"]
+                summary["risk_velocity_previous_date"] = velocity.get("risk_velocity_previous_date")
+
+        # Persist today's snapshot for future MoM (best-effort; table may not exist yet)
+        try:
+            await save_snapshot(
+                db,
+                at_risk_exposure=float(summary.get("at_risk_exposure") or 0),
+                weighted_risk=float(summary.get("weighted_risk") or 0),
+                total_expected_loss=summary.get("total_expected_loss"),
+                total_exposure=summary.get("total_exposure"),
+            )
+        except Exception:
+            pass
+
+        if city_id or country_code:
+            summary["scope"] = {"city_id": city_id, "country_code": country_code}
+        return summary
     except Exception as e:
         logger.warning("Geodata summary failed, returning fallback: %s", e)
         return FALLBACK_SUMMARY
@@ -223,33 +290,34 @@ def _risk_score_from_known_risks(known_risks: dict) -> float:
 async def get_all_cities():
     """
     Get list of all available cities with basic info, exposure, risk score, and camera position for 3D view.
+    Exposure (Asset Value) uses reference data from metro GDP / real estate when available.
     """
     from src.data.cities import get_all_cities as get_cities
+    from src.data.city_exposure_reference import get_exposure_b
 
     cities = get_cities()
-    return {
-        "cities": [
-            {
-                "id": c.id,
-                "name": c.name,
-                "country": c.country,
-                "coordinates": [c.lng, c.lat],
-                "exposure": c.exposure,
-                "risk_score": _risk_score_from_known_risks(c.known_risks),
-                "seismic_zone": c.seismic_zone.value,
-                "climate_zone": c.climate_zone.value,
-                "camera_position": {
-                    "lat": c.lat,
-                    "lng": c.lng,
-                    "height": _camera_height_for_city(c.exposure),
-                    "heading": 60,
-                    "pitch": -35,
-                },
-            }
-            for c in cities
-        ],
-        "total": len(cities),
-    }
+    out = []
+    for c in cities:
+        ref_exposure = get_exposure_b(c.id)
+        exposure = ref_exposure if ref_exposure is not None else c.exposure
+        out.append({
+            "id": c.id,
+            "name": c.name,
+            "country": c.country,
+            "coordinates": [c.lng, c.lat],
+            "exposure": exposure,
+            "risk_score": _risk_score_from_known_risks(c.known_risks),
+            "seismic_zone": c.seismic_zone.value,
+            "climate_zone": c.climate_zone.value,
+            "camera_position": {
+                "lat": c.lat,
+                "lng": c.lng,
+                "height": _camera_height_for_city(exposure),
+                "heading": 60,
+                "pitch": -35,
+            },
+        })
+    return {"cities": out, "total": len(out)}
 
 
 class CityParametersUpdate(BaseModel):

@@ -16,7 +16,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { CubeTransparentIcon, ChartBarIcon, Cog6ToothIcon, HomeIcon, Square3Stack3DIcon, BuildingOffice2Icon, CpuChipIcon, InformationCircleIcon, BriefcaseIcon, BanknotesIcon, ShieldExclamationIcon, SparklesIcon, LinkIcon, ServerStackIcon, DocumentTextIcon, BeakerIcon, ClipboardDocumentListIcon } from '@heroicons/react/24/outline'
+import { CubeTransparentIcon, CpuChipIcon, DocumentTextIcon, InformationCircleIcon, LinkIcon } from '@heroicons/react/24/outline'
+import AIAssistant, { type AIAssistantHandle } from '../components/AIAssistant'
 import CesiumGlobe, { RiskZone, ZoneAsset } from '../components/CesiumGlobe'
 import DigitalTwinPanel from '../components/DigitalTwinPanel'
 import { useWebSocket, RiskUpdate } from '../lib/useWebSocket'
@@ -26,28 +27,43 @@ import UnifiedStressTestSelector from '../components/stress/UnifiedStressTestSel
 import HistoricalEventPanel from '../components/HistoricalEventPanel'
 import SystemOverseerWidget from '../components/dashboard/SystemOverseerWidget'
 import AgentMonitoringWidget from '../components/dashboard/AgentMonitoringWidget'
+import ActiveIncidentsPanel from '../components/dashboard/ActiveIncidentsPanel'
+import AlertFeedPanel from '../components/AlertFeedPanel'
+// ThreatIntelFeed available but not used in current layout
+import SendToARINButton from '../components/SendToARINButton'
+import ARINVerdictBadge from '../components/ARINVerdictBadge'
 import { exportStressTestPdf } from '../lib/exportService'
 import { mapEventIdToCascadeScenarioId } from '../lib/stressTestToCascade'
 import { CURRENT_EVENTS as currentEvents, FORECAST_SCENARIOS as forecastScenarios } from '../lib/riskEventCatalog'
-import { STRESS_TYPES_WITH_ZONE_ENTITIES } from '../lib/stressTestConstants'
+// STRESS_TYPES_WITH_ZONE_ENTITIES available for zone-entity stress tests
 // Platform state management
-import { usePlatformStore, usePortfolio, useSelectedZone, useShowDigitalTwinPanel, useActiveScenario, useSelectedStressTestId, useCommandMode, useToggleCommandMode, useRecentEvents, PortfolioState as StorePortfolioState, ActiveScenarioState } from '../store/platformStore'
+import { usePlatformStore, usePortfolio, useSelectedZone, useShowDigitalTwinPanel, useActiveScenario, useSelectedStressTestId, useCommandMode, useToggleCommandMode, useRecentEvents } from '../store/platformStore'
 import { EventTypes } from '../types/events'
 import type { PlatformEvent } from '../types/events'
 import { CommandModePanel } from '../components/command'
-import AIAssistant from '../components/AIAssistant'
-import { usePlatformWebSocket } from '../hooks/usePlatformWebSocket'
-import { assetsApi } from '../lib/api'
+import CommandCenterTopBar from '../components/command/CommandCenterTopBar'
+import { assetsApi, replayApi } from '../lib/api'
+import { quickActionsCommandCenter, quickActionIconColors } from '../config/quickActions'
+import { formatEur } from '../lib/formatCurrency'
+import { getApiBase, getApiV1Base } from '../config/env'
 
-const API_BASE = '/api/v1'
+// Runtime ?api= or VITE_API_URL — same as Dashboard so data matches
+const getCommandApi = (): string => getApiV1Base()
 
 // ============================================
-// UI ATOMS
+// UI ATOMS — Corporate style (zinc, no glass)
 // ============================================
+const CC_LABEL = 'font-mono text-[10px] uppercase tracking-widest text-zinc-500'
+const CC_CARD = 'rounded-md bg-zinc-900 border border-zinc-800'
+const CC_MUTED = 'text-zinc-500'
+const CC_MUTED_LIGHT = 'text-zinc-400'
+const CC_TEXT = 'text-zinc-100'
+const CC_BORDER = 'border-zinc-700'
+const CC_BG_HOVER = 'hover:bg-zinc-800'
 
 function Keycap({ children }: { children: React.ReactNode }) {
   return (
-    <kbd className="px-2 py-1 rounded-md bg-white/5 border border-white/10 text-[10px] font-mono text-white/70">
+    <kbd className="px-2 py-1 rounded-md bg-zinc-800 border border-zinc-700 text-[10px] font-mono text-zinc-300">
       {children}
     </kbd>
   )
@@ -57,12 +73,8 @@ function Keycap({ children }: { children: React.ReactNode }) {
 // TYPES
 // ============================================
 
-interface PortfolioState {
-  totalExposure: number      // in billions
-  atRisk: number             // in billions
-  criticalCount: number      // number of critical hotspots
-  weightedRisk: number       // 0-1
-}
+// PortfolioState shape is managed by platformStore; kept as doc reference
+// totalExposure (B), atRisk (B), criticalCount, weightedRisk (0-1)
 
 interface FocusedHotspot {
   id: string
@@ -118,10 +130,10 @@ function formatBillions(value: number): string {
 
 // Determine risk posture level for institutional display
 function getRiskPosture(weightedRisk: number): { level: string; color: string; arrow: string } {
-  if (weightedRisk > 0.75) return { level: 'CRITICAL', color: 'text-red-400', arrow: '↑↑' }
-  if (weightedRisk > 0.6) return { level: 'ELEVATED', color: 'text-orange-400', arrow: '↑' }
-  if (weightedRisk > 0.4) return { level: 'MODERATE', color: 'text-amber-400', arrow: '→' }
-  return { level: 'STABLE', color: 'text-emerald-400', arrow: '↓' }
+  if (weightedRisk > 0.75) return { level: 'CRITICAL', color: 'text-red-400/80', arrow: '↑↑' }
+  if (weightedRisk > 0.6) return { level: 'ELEVATED', color: 'text-orange-400/80', arrow: '↑' }
+  if (weightedRisk > 0.4) return { level: 'MODERATE', color: 'text-amber-400/80', arrow: '→' }
+  return { level: 'STABLE', color: 'text-emerald-400/80', arrow: '↓' }
 }
 
 function formatRecentTime(timestamp: string): string {
@@ -179,6 +191,7 @@ interface RiskLevelRowProps {
   label: string
   color: 'red' | 'orange' | 'yellow' | 'green'
   zones: { id: string; name: string; risk: number }[]
+  countOverride?: number  // From API (geodata/summary), refreshed every 5 min
   isExpanded: boolean
   onToggle: () => void
   onZoneClick: (id: string) => void
@@ -189,7 +202,7 @@ interface RiskLevelRowProps {
   onOpenDigitalTwin?: (cityId: string, cityName: string, eventId?: string, eventName?: string, eventCategory?: string, timeHorizon?: string) => void
 }
 
-function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZoneClick: _onZoneClick, onZoneLinksClick, onHistoricalSelect, onCurrentSelect: _onCurrentSelect, onForecastSelect: _onForecastSelect, onOpenDigitalTwin }: RiskLevelRowProps) {
+function RiskLevelRow({ level: _level, label, color, zones, countOverride, isExpanded, onToggle, onZoneClick: _onZoneClick, onZoneLinksClick, onHistoricalSelect, onCurrentSelect: _onCurrentSelect, onForecastSelect: _onForecastSelect, onOpenDigitalTwin }: RiskLevelRowProps) {
   // Note: _onZoneClick, _onCurrentSelect, _onForecastSelect are available but not directly used in this component
   const [viewMode, setViewMode] = useState<RiskViewMode>('menu')
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
@@ -203,7 +216,7 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
   const colorClasses = {
     red: { text: 'text-red-300', bg: 'bg-red-500/20', border: 'border-red-500/20', hover: 'hover:bg-red-500/10' },
     orange: { text: 'text-orange-300', bg: 'bg-orange-500/20', border: 'border-orange-500/20', hover: 'hover:bg-orange-500/10' },
-    yellow: { text: 'text-amber-300', bg: 'bg-amber-500/20', border: 'border-amber-500/20', hover: 'hover:bg-amber-500/10' },
+    yellow: { text: 'text-amber-300', bg: 'bg-amber-500/20', border: 'border-amber-500/20', hover: 'hover:bg-zinc-800' },
     green: { text: 'text-emerald-300', bg: 'bg-emerald-500/20', border: 'border-emerald-500/20', hover: 'hover:bg-emerald-500/10' },
   }
   
@@ -1872,7 +1885,7 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
   
   // Category icon component
   const CategoryIcon = ({ id }: { id: string }) => {
-    const iconClass = "w-3.5 h-3.5 text-white/50"
+    const iconClass = "w-3.5 h-3.5 text-zinc-500"
     switch (id) {
       case 'climate':
         return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" /></svg>
@@ -1893,7 +1906,7 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
       case 'energy':
         return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
       default:
-        return <div className="w-3.5 h-3.5 rounded-full bg-amber-400/70" />
+        return <div className="w-3.5 h-3.5 rounded-full bg-zinc-500" />
     }
   }
   
@@ -1909,28 +1922,29 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
     }
   }, [isExpanded])
   
-  if (zones.length === 0) return null
-  
+  const displayCount = countOverride ?? zones.length
+  if (zones.length === 0 && !(countOverride && countOverride > 0)) return null
+
   return (
     <div className="relative">
       {/* Main row - clickable */}
       <button
         onClick={onToggle}
-        className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-all ${colors.hover} ${isExpanded ? 'bg-amber-500/5' : ''}`}
+        className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md transition-all min-w-0 ${colors.hover} ${isExpanded ? 'bg-zinc-800' : ''}`}
       >
-        {/* Count */}
-        <span className={`${colors.text} text-lg font-light min-w-[20px]`}>
-          {zones.length}
+        {/* Count - use API when available (refreshed every 5 min) */}
+        <span className={`${colors.text} text-lg font-light min-w-[20px] shrink-0`}>
+          {displayCount}
         </span>
         
         {/* Label */}
-        <span className="text-white/50 text-xs flex-1 text-left">
+        <span className="text-zinc-500 text-xs flex-1 text-left min-w-0 truncate">
           {label}
         </span>
         
         {/* Expand icon */}
         <svg 
-          className={`w-3 h-3 text-white/30 transition-transform ${isExpanded ? 'rotate-180' : ''}`} 
+          className={`w-3 h-3 text-zinc-600 shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} 
           fill="none" 
           stroke="currentColor" 
           viewBox="0 0 24 24"
@@ -1957,47 +1971,47 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                   {/* Option 0: Zones */}
                   <button
                     onClick={() => setViewMode('zones')}
-                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-amber-500/10 transition-all text-left group"
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-zinc-800 transition-all text-left group"
                   >
-                    <LinkIcon className="w-3.5 h-3.5 text-white/50 group-hover:text-white/70" />
-                    <span className="text-white/70 text-xs group-hover:text-white flex-1">Zones</span>
-                    <span className="text-white/30 text-[10px]">{zones.length}</span>
+                    <LinkIcon className="w-3.5 h-3.5 text-zinc-500 group-hover:text-zinc-300" />
+                    <span className="text-zinc-300 text-xs group-hover:text-zinc-100 flex-1">Zones</span>
+                    <span className="text-zinc-600 text-[10px]">{displayCount}</span>
                   </button>
 
                   {/* Option 1: Historical */}
                   <button
                     onClick={() => setViewMode('historical')}
-                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-amber-500/10 transition-all text-left group"
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-zinc-800 transition-all text-left group"
                   >
-                    <svg className="w-3.5 h-3.5 text-white/50 group-hover:text-white/70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-3.5 h-3.5 text-zinc-500 group-hover:text-zinc-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    <span className="text-white/70 text-xs group-hover:text-white flex-1">Historical Events</span>
-                    <span className="text-white/30 text-[10px]">1970+</span>
+                    <span className="text-zinc-300 text-xs group-hover:text-zinc-100 flex-1">Historical Events</span>
+                    <span className="text-zinc-600 text-[10px]">1970+</span>
                   </button>
                   
                   {/* Option 2: Current */}
                   <button
                     onClick={() => setViewMode('current')}
-                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-amber-500/10 transition-all text-left group"
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-zinc-800 transition-all text-left group"
                   >
-                    <svg className="w-3.5 h-3.5 text-white/50 group-hover:text-white/70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-3.5 h-3.5 text-zinc-500 group-hover:text-zinc-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                     </svg>
-                    <span className="text-white/70 text-xs group-hover:text-white flex-1">Current Events</span>
-                    <span className="text-white/30 text-[10px]">0-1yr</span>
+                    <span className="text-zinc-300 text-xs group-hover:text-zinc-100 flex-1">Current Events</span>
+                    <span className="text-zinc-600 text-[10px]">0-1yr</span>
                   </button>
                   
                   {/* Option 3: Forecast */}
                   <button
                     onClick={() => setViewMode('forecast')}
-                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-amber-500/10 transition-all text-left group"
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-zinc-800 transition-all text-left group"
                   >
-                    <svg className="w-3.5 h-3.5 text-white/50 group-hover:text-white/70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-3.5 h-3.5 text-zinc-500 group-hover:text-zinc-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                     </svg>
-                    <span className="text-white/70 text-xs group-hover:text-white flex-1">Forecast</span>
-                    <span className="text-white/30 text-[10px]">5-30yr</span>
+                    <span className="text-zinc-300 text-xs group-hover:text-zinc-100 flex-1">Forecast</span>
+                    <span className="text-zinc-600 text-[10px]">5-30yr</span>
                   </button>
                 </div>
               )}
@@ -2007,11 +2021,11 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                 <div className="space-y-1 py-1">
                   <button
                     onClick={() => setViewMode('menu')}
-                    className="w-full flex items-center gap-1 px-2 py-1 text-white/40 text-[10px] hover:text-white/60"
+                    className="w-full flex items-center gap-1 px-2 py-1 text-zinc-500 text-[10px] hover:text-zinc-400"
                   >
                     ← Back
                   </button>
-                  <div className="text-white/30 text-[10px] px-2 py-1 uppercase tracking-wider">
+                  <div className="font-mono text-[10px] px-2 py-1 uppercase tracking-widest text-zinc-500">
                     Zones ({label})
                   </div>
                   <div className="max-h-[300px] overflow-y-auto custom-scrollbar pr-1 space-y-1">
@@ -2021,7 +2035,7 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                       .map((z) => (
                         <div
                           key={z.id}
-                          className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-amber-500/10 transition-all group"
+                          className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-zinc-800 transition-all group"
                         >
                           <button
                             onClick={() => _onZoneClick(z.id)}
@@ -2029,17 +2043,17 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                             title="Focus zone"
                           >
                             <div className="flex items-center justify-between gap-2">
-                              <span className="text-white/70 text-xs group-hover:text-white truncate">
+                              <span className="text-zinc-300 text-xs group-hover:text-zinc-100 truncate">
                                 {z.name}
                               </span>
-                              <span className="text-white/30 text-[10px] flex-shrink-0">
+                              <span className="text-zinc-600 text-[10px] flex-shrink-0">
                                 {(z.risk * 100).toFixed(0)}%
                               </span>
                             </div>
                           </button>
                           <button
                             onClick={() => (onZoneLinksClick ? onZoneLinksClick(z.id) : _onZoneClick(z.id))}
-                            className="p-1.5 rounded border border-white/10 bg-black/20 text-white/55 hover:text-white hover:bg-white/10 transition-colors flex-shrink-0"
+                            className="p-1.5 rounded border border-zinc-700 bg-zinc-800 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700 transition-colors flex-shrink-0"
                             title="Show dependency links for this zone"
                           >
                             <LinkIcon className="w-3.5 h-3.5" />
@@ -2055,11 +2069,11 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                 <div className="space-y-1 py-1">
                   <button
                     onClick={() => setViewMode('menu')}
-                    className="w-full flex items-center gap-1 px-2 py-1 text-white/40 text-[10px] hover:text-white/60"
+                    className="w-full flex items-center gap-1 px-2 py-1 text-zinc-500 text-[10px] hover:text-zinc-400"
                   >
                     ← Back
                   </button>
-                  <div className="text-white/30 text-[10px] px-2 py-1 uppercase tracking-wider">
+                  <div className="font-mono text-[10px] px-2 py-1 uppercase tracking-widest text-zinc-500">
                     Historical Events (1970-Present)
                   </div>
                   <div className="max-h-[300px] overflow-y-auto custom-scrollbar pr-1">
@@ -2070,12 +2084,12 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                           onHistoricalSelect?.(event.id)
                           // Historical events open report, not 3D view
                         }}
-                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-amber-500/10 transition-all text-left group"
+                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-zinc-800 transition-all text-left group"
                       >
-                        <span className="text-white/70 text-xs group-hover:text-white flex-1">
+                        <span className="text-zinc-300 text-xs group-hover:text-zinc-100 flex-1">
                           {event.name}
                         </span>
-                        <span className="text-white/30 text-[10px]">{event.type}</span>
+                        <span className="text-zinc-600 text-[10px]">{event.type}</span>
                       </button>
                     ))}
                   </div>
@@ -2087,11 +2101,11 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                 <div className="space-y-1 py-1">
                   <button
                     onClick={() => setViewMode('menu')}
-                    className="w-full flex items-center gap-1 px-2 py-1 text-white/40 text-[10px] hover:text-white/60"
+                    className="w-full flex items-center gap-1 px-2 py-1 text-zinc-500 text-[10px] hover:text-zinc-400"
                   >
                     ← Back
                   </button>
-                  <div className="text-white/30 text-[10px] px-2 py-1 uppercase tracking-wider">
+                  <div className="font-mono text-[10px] px-2 py-1 uppercase tracking-widest text-zinc-500">
                     Current Event Categories
                   </div>
                   <div className="max-h-[300px] overflow-y-auto custom-scrollbar pr-1">
@@ -2099,13 +2113,13 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                       <button
                         key={cat.id}
                         onClick={() => setSelectedCategory(cat.id)}
-                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-amber-500/10 transition-all text-left group"
+                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-zinc-800 transition-all text-left group"
                       >
                         <CategoryIcon id={cat.id} />
-                        <span className="text-white/70 text-xs group-hover:text-white flex-1">
+                        <span className="text-zinc-300 text-xs group-hover:text-zinc-100 flex-1">
                           {cat.name}
                         </span>
-                        <span className="text-white/30 text-[10px]">{cat.events.length}</span>
+                        <span className="text-zinc-600 text-[10px]">{cat.events.length}</span>
                       </button>
                     ))}
                   </div>
@@ -2117,21 +2131,21 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                 <div className="space-y-1 py-1">
                   <button
                     onClick={() => setSelectedCategory(null)}
-                    className="w-full flex items-center gap-1 px-2 py-1 text-white/40 text-[10px] hover:text-white/60"
+                    className="w-full flex items-center gap-1 px-2 py-1 text-zinc-500 text-[10px] hover:text-zinc-400"
                   >
                     ← Back to categories
                   </button>
-                  <div className="text-white/30 text-[10px] px-2 py-1 uppercase tracking-wider">
+                  <div className="font-mono text-[10px] px-2 py-1 uppercase tracking-widest text-zinc-500">
                     {currentEvents.find(c => c.id === selectedCategory)?.name || 'Events'}
                   </div>
                   <div className="max-h-[300px] overflow-y-auto custom-scrollbar pr-1">
-                    {currentEvents.find(c => c.id === selectedCategory)?.events.map((event) => (
+                    {(currentEvents.find(c => c.id === selectedCategory)?.events ?? []).map((event) => (
                       <button
                         key={event.id}
                         onClick={() => setSelectedEventId(event.id)}
-                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-amber-500/10 transition-all text-left group"
+                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-zinc-800 transition-all text-left group"
                       >
-                        <span className="text-white/70 text-xs group-hover:text-white flex-1">
+                        <span className="text-zinc-300 text-xs group-hover:text-zinc-100 flex-1">
                           {event.name}
                         </span>
                         <span className={`text-[10px] font-mono ${event.risk > 0.7 ? 'text-red-300' : event.risk > 0.5 ? 'text-orange-300' : 'text-amber-300'}`}>
@@ -2148,28 +2162,28 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                 <div className="space-y-1 py-1">
                   <button
                     onClick={() => setSelectedEventId(null)}
-                    className="w-full flex items-center gap-1 px-2 py-1 text-white/40 text-[10px] hover:text-white/60"
+                    className="w-full flex items-center gap-1 px-2 py-1 text-zinc-500 text-[10px] hover:text-zinc-400"
                   >
                     ← Back to events
                   </button>
-                  <div className="text-white/30 text-[10px] px-2 py-1 uppercase tracking-wider">
+                  <div className="font-mono text-[10px] px-2 py-1 uppercase tracking-widest text-zinc-500">
                     Affected Countries
                   </div>
                   {(affectedRegions[selectedEventId]?.countries || []).map((country) => (
                     <button
                       key={country.id}
                       onClick={() => setSelectedCountry(country.id)}
-                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-amber-500/10 transition-all text-left group"
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-zinc-800 transition-all text-left group"
                     >
                       <span className="text-sm">{country.flag}</span>
-                      <span className="text-white/70 text-xs group-hover:text-white flex-1">
+                      <span className="text-zinc-300 text-xs group-hover:text-zinc-100 flex-1">
                         {country.name}
                       </span>
-                      <span className="text-white/30 text-[10px]">{country.cities.length} cities</span>
+                      <span className="text-zinc-600 text-[10px]">{country.cities.length} cities</span>
                     </button>
                   ))}
                   {!affectedRegions[selectedEventId] && (
-                    <div className="text-white/30 text-xs px-2 py-2">
+                    <div className="text-zinc-600 text-xs px-2 py-2">
                       Region data loading...
                     </div>
                   )}
@@ -2181,16 +2195,15 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                 <div className="space-y-1 py-1">
                   <button
                     onClick={() => setSelectedCountry(null)}
-                    className="w-full flex items-center gap-1 px-2 py-1 text-white/40 text-[10px] hover:text-white/60"
+                    className="w-full flex items-center gap-1 px-2 py-1 text-zinc-500 text-[10px] hover:text-zinc-400"
                   >
                     ← Back to countries
                   </button>
-                  <div className="text-white/30 text-[10px] px-2 py-1 uppercase tracking-wider">
+                  <div className="font-mono text-[10px] px-2 py-1 uppercase tracking-widest text-zinc-500">
                     {affectedRegions[selectedEventId]?.countries.find(c => c.id === selectedCountry)?.name || 'Cities'}
                   </div>
                   <div className="max-h-[300px] overflow-y-auto custom-scrollbar pr-1">
-                    {affectedRegions[selectedEventId]?.countries.find(c => c.id === selectedCountry)?.cities.map((city) => {
-                      // Find event name from currentEvents
+                    {(affectedRegions[selectedEventId]?.countries.find(c => c.id === selectedCountry)?.cities ?? []).map((city) => {
                       const eventInfo = currentEvents.flatMap(c => c.events).find(e => e.id === selectedEventId)
                       const categoryInfo = currentEvents.find(c => c.events.some(e => e.id === selectedEventId))
                       return (
@@ -2209,9 +2222,9 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                           )
                           console.log('City clicked:', city.name, '- Opening Digital Twin for event:', eventInfo?.name)
                         }}
-                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-amber-500/10 transition-all text-left group"
+                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-zinc-800 transition-all text-left group"
                       >
-                        <span className="text-white/70 text-xs group-hover:text-white flex-1">
+                        <span className="text-zinc-300 text-xs group-hover:text-zinc-100 flex-1">
                           {city.name}
                         </span>
                         <span className={`text-[10px] font-mono ${city.risk > 0.7 ? 'text-red-300' : city.risk > 0.5 ? 'text-orange-300' : 'text-amber-300'}`}>
@@ -2228,21 +2241,21 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                 <div className="space-y-2 py-1">
                   <button
                     onClick={() => setSelectedCity(null)}
-                    className="w-full flex items-center gap-1 px-2 py-1 text-white/40 text-[10px] hover:text-white/60"
+                    className="w-full flex items-center gap-1 px-2 py-1 text-zinc-500 text-[10px] hover:text-zinc-400"
                   >
                     ← Back to cities
                   </button>
                   
                   {/* Selected city info - Digital Twin is open */}
-                  <div className="px-2 py-2 bg-amber-500/5 rounded-lg border border-amber-500/10">
+                  <div className="px-2 py-2 bg-zinc-800 rounded-md border border-zinc-700">
                     <div className="flex items-center gap-2 mb-2">
-                      <div className="w-2 h-2 rounded-full bg-amber-400/60 animate-pulse" />
-                      <span className="text-amber-300 text-sm font-medium">{selectedCity.name}</span>
+                      <div className="w-2 h-2 rounded-full bg-zinc-500 animate-pulse" />
+                      <span className="text-zinc-200 text-sm font-medium">{selectedCity.name}</span>
                     </div>
-                    <div className="text-white/50 text-[10px] mb-1">
+                    <div className="text-zinc-500 text-[10px] mb-1">
                       Event: {currentEvents.flatMap(c => c.events).find(e => e.id === selectedEventId)?.name || selectedEventId}
                     </div>
-                    <div className="text-amber-300/50 text-[10px]">
+                    <div className="text-zinc-500 text-[10px]">
                       Digital Twin is open. Click "Run Stress Test" button on the 3D view to analyze risk zones.
                     </div>
                   </div>
@@ -2254,11 +2267,11 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                 <div className="space-y-1 py-1">
                   <button
                     onClick={() => setViewMode('menu')}
-                    className="w-full flex items-center gap-1 px-2 py-1 text-white/40 text-[10px] hover:text-white/60"
+                    className="w-full flex items-center gap-1 px-2 py-1 text-zinc-500 text-[10px] hover:text-zinc-400"
                   >
                     ← Back
                   </button>
-                  <div className="text-white/30 text-[10px] px-2 py-1 uppercase tracking-wider">
+                  <div className="font-mono text-[10px] px-2 py-1 uppercase tracking-widest text-zinc-500">
                     Forecast Horizon
                   </div>
                   <div className="max-h-[300px] overflow-y-auto custom-scrollbar pr-1">
@@ -2266,15 +2279,15 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                       <button
                         key={period.horizon}
                         onClick={() => setSelectedHorizon(period.horizon)}
-                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-amber-500/10 transition-all text-left group"
+                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-zinc-800 transition-all text-left group"
                       >
-                        <svg className="w-3.5 h-3.5 text-white/50 group-hover:text-white/70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-3.5 h-3.5 text-zinc-500 group-hover:text-zinc-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
                         </svg>
-                        <span className="text-white/70 text-xs group-hover:text-white flex-1">
+                        <span className="text-zinc-300 text-xs group-hover:text-zinc-100 flex-1">
                           {period.name}
                         </span>
-                        <span className="text-white/30 text-[10px]">{period.scenarios.length} scenarios</span>
+                        <span className="text-zinc-600 text-[10px]">{period.scenarios.length} scenarios</span>
                       </button>
                     ))}
                   </div>
@@ -2286,27 +2299,27 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                 <div className="space-y-1 py-1">
                   <button
                     onClick={() => setSelectedHorizon(null)}
-                    className="w-full flex items-center gap-1 px-2 py-1 text-white/40 text-[10px] hover:text-white/60"
+                    className="w-full flex items-center gap-1 px-2 py-1 text-zinc-500 text-[10px] hover:text-zinc-400"
                   >
                     ← Back to horizons
                   </button>
-                  <div className="text-white/30 text-[10px] px-2 py-1 uppercase tracking-wider">
+                  <div className="font-mono text-[10px] px-2 py-1 uppercase tracking-widest text-zinc-500">
                     {forecastScenarios.find(f => f.horizon === selectedHorizon)?.name || `${selectedHorizon}yr Scenarios`}
                   </div>
                   <div className="max-h-[300px] overflow-y-auto custom-scrollbar pr-1">
-                    {forecastScenarios.find(f => f.horizon === selectedHorizon)?.scenarios.map((scenario) => (
+                    {(forecastScenarios.find(f => f.horizon === selectedHorizon)?.scenarios ?? []).map((scenario) => (
                       <button
                         key={scenario.id}
                         onClick={() => setSelectedEventId(scenario.id)}
-                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-amber-500/10 transition-all text-left group"
+                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-zinc-800 transition-all text-left group"
                       >
-                        <span className="text-white/70 text-xs group-hover:text-white flex-1">
+                        <span className="text-zinc-300 text-xs group-hover:text-zinc-100 flex-1">
                           {scenario.name}
                         </span>
                         <span className={`text-[10px] font-mono ${scenario.risk > 0.7 ? 'text-red-300' : scenario.risk > 0.5 ? 'text-orange-300' : 'text-amber-300'}`}>
                           {(scenario.risk * 100).toFixed(0)}%
                         </span>
-                        <span className="text-white/20 text-[9px] ml-1">{scenario.type}</span>
+                        <span className="text-zinc-600 text-[9px] ml-1">{scenario.type}</span>
                       </button>
                     ))}
                   </div>
@@ -2318,11 +2331,11 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                 <div className="space-y-1 py-1">
                   <button
                     onClick={() => setSelectedEventId(null)}
-                    className="w-full flex items-center gap-1 px-2 py-1 text-white/40 text-[10px] hover:text-white/60"
+                    className="w-full flex items-center gap-1 px-2 py-1 text-zinc-500 text-[10px] hover:text-zinc-400"
                   >
                     ← Back to scenarios
                   </button>
-                  <div className="text-white/30 text-[10px] px-2 py-1 uppercase tracking-wider">
+                  <div className="font-mono text-[10px] px-2 py-1 uppercase tracking-widest text-zinc-500">
                     Affected Countries
                   </div>
                   <div className="max-h-[300px] overflow-y-auto custom-scrollbar pr-1">
@@ -2330,17 +2343,17 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                       <button
                         key={country.id}
                         onClick={() => setSelectedCountry(country.id)}
-                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-amber-500/10 transition-all text-left group"
+                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-zinc-800 transition-all text-left group"
                       >
                         <span className="text-sm">{country.flag}</span>
-                        <span className="text-white/70 text-xs group-hover:text-white flex-1">
+                        <span className="text-zinc-300 text-xs group-hover:text-zinc-100 flex-1">
                           {country.name}
                         </span>
-                        <span className="text-white/30 text-[10px]">{country.cities.length} cities</span>
+                        <span className="text-zinc-600 text-[10px]">{country.cities.length} cities</span>
                       </button>
                     ))}
                     {!affectedRegions[selectedEventId] && (
-                      <div className="text-white/30 text-xs px-2 py-2">
+                      <div className="text-zinc-600 text-xs px-2 py-2">
                         Region data for forecast...
                       </div>
                     )}
@@ -2353,15 +2366,15 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                 <div className="space-y-1 py-1">
                   <button
                     onClick={() => setSelectedCountry(null)}
-                    className="w-full flex items-center gap-1 px-2 py-1 text-white/40 text-[10px] hover:text-white/60"
+                    className="w-full flex items-center gap-1 px-2 py-1 text-zinc-500 text-[10px] hover:text-zinc-400"
                   >
                     ← Back to countries
                   </button>
-                  <div className="text-white/30 text-[10px] px-2 py-1 uppercase tracking-wider">
+                  <div className="font-mono text-[10px] px-2 py-1 uppercase tracking-widest text-zinc-500">
                     {affectedRegions[selectedEventId]?.countries.find(c => c.id === selectedCountry)?.name || 'Cities'} - {selectedHorizon}yr
                   </div>
                   <div className="max-h-[300px] overflow-y-auto custom-scrollbar pr-1">
-                    {affectedRegions[selectedEventId]?.countries.find(c => c.id === selectedCountry)?.cities.map((city) => {
+                    {(affectedRegions[selectedEventId]?.countries.find(c => c.id === selectedCountry)?.cities ?? []).map((city) => {
                       // Find scenario name from forecastScenarios
                       const scenarioInfo = forecastScenarios.flatMap(h => h.scenarios).find(s => s.id === selectedEventId)
                       return (
@@ -2380,9 +2393,9 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                           )
                           console.log('City clicked:', city.name, '- Opening Digital Twin for forecast:', scenarioInfo?.name, selectedHorizon + 'yr')
                         }}
-                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-amber-500/10 transition-all text-left group"
+                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-zinc-800 transition-all text-left group"
                       >
-                        <span className="text-white/70 text-xs group-hover:text-white flex-1">
+                        <span className="text-zinc-300 text-xs group-hover:text-zinc-100 flex-1">
                           {city.name}
                         </span>
                         <span className={`text-[10px] font-mono ${city.risk > 0.7 ? 'text-red-300' : city.risk > 0.5 ? 'text-orange-300' : 'text-amber-300'}`}>
@@ -2399,24 +2412,24 @@ function RiskLevelRow({ level, label, color, zones, isExpanded, onToggle, onZone
                 <div className="space-y-2 py-1">
                   <button
                     onClick={() => setSelectedCity(null)}
-                    className="w-full flex items-center gap-1 px-2 py-1 text-white/40 text-[10px] hover:text-white/60"
+                    className="w-full flex items-center gap-1 px-2 py-1 text-zinc-500 text-[10px] hover:text-zinc-400"
                   >
                     ← Back to cities
                   </button>
                   
                   {/* Selected city info - Digital Twin is open */}
-                  <div className="px-2 py-2 bg-amber-500/5 rounded-lg border border-amber-500/10">
+                  <div className="px-2 py-2 bg-zinc-800 rounded-md border border-zinc-700">
                     <div className="flex items-center gap-2 mb-2">
-                      <div className="w-2 h-2 rounded-full bg-amber-400/60 animate-pulse" />
-                      <span className="text-amber-300 text-sm font-medium">{selectedCity.name}</span>
+                      <div className="w-2 h-2 rounded-full bg-zinc-500 animate-pulse" />
+                      <span className="text-zinc-200 text-sm font-medium">{selectedCity.name}</span>
                     </div>
-                    <div className="text-white/50 text-[10px] mb-1">
+                    <div className="text-zinc-500 text-[10px] mb-1">
                       Scenario: {forecastScenarios.flatMap(h => h.scenarios).find(s => s.id === selectedEventId)?.name || selectedEventId}
                     </div>
-                    <div className="text-white/40 text-[10px] mb-1">
+                    <div className="text-zinc-500 text-[10px] mb-1">
                       Horizon: {selectedHorizon} years
                     </div>
-                    <div className="text-amber-300/50 text-[10px]">
+                    <div className="text-zinc-500 text-[10px]">
                       Digital Twin is open. Click "Run Stress Test" button on the 3D view to analyze risk zones.
                     </div>
                   </div>
@@ -2465,7 +2478,7 @@ function EntryAnimation({ onComplete }: { onComplete: () => void }) {
   return (
     <motion.div
       className="fixed inset-0 z-[100] flex items-center justify-center"
-      style={{ background: '#030810' }}
+      style={{ background: '#09090b' }}
       initial={{ opacity: 1 }}
       animate={{ opacity: phase === 'entering' ? 0 : 1 }}
       transition={{ duration: 1.5 }}
@@ -2473,7 +2486,7 @@ function EntryAnimation({ onComplete }: { onComplete: () => void }) {
       <div className="text-center">
         {/* Logo */}
         <motion.div
-          className="w-24 h-24 mx-auto mb-8 rounded-2xl bg-gradient-to-br from-amber-500/10 to-amber-700/10 border border-amber-500/10 flex items-center justify-center"
+          className="w-24 h-24 mx-auto mb-8 rounded-md bg-zinc-800 border border-zinc-700 flex items-center justify-center"
           initial={{ scale: 0.5, opacity: 0 }}
           animate={{ 
             scale: phase === 'loading' ? [1, 1.1, 1] : 1,
@@ -2484,12 +2497,12 @@ function EntryAnimation({ onComplete }: { onComplete: () => void }) {
             opacity: { duration: 0.5 }
           }}
         >
-          <CubeTransparentIcon className="w-12 h-12 text-amber-300/60" />
+          <CubeTransparentIcon className="w-12 h-12 text-zinc-500" />
         </motion.div>
         
         {/* Title */}
         <motion.h1
-          className="text-white text-2xl font-light mb-2 tracking-wide"
+          className="text-zinc-100 text-2xl font-light mb-2 tracking-wide"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3, duration: 0.6 }}
@@ -2498,7 +2511,7 @@ function EntryAnimation({ onComplete }: { onComplete: () => void }) {
         </motion.h1>
         
         <motion.p
-          className="text-white/40 text-sm mb-8"
+          className="text-zinc-500 text-sm mb-8"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.5 }}
@@ -2516,7 +2529,7 @@ function EntryAnimation({ onComplete }: { onComplete: () => void }) {
           {phase === 'loading' && (
             <>
               <motion.div
-                className="text-amber-300/40 text-xs uppercase tracking-[0.2em]"
+                className="font-mono text-[10px] uppercase tracking-widest text-zinc-500"
                 animate={{ opacity: [0.5, 1, 0.5] }}
                 transition={{ duration: 1.5, repeat: Infinity }}
               >
@@ -2526,7 +2539,7 @@ function EntryAnimation({ onComplete }: { onComplete: () => void }) {
           )}
           {phase === 'entering' && (
             <motion.div
-              className="text-amber-300/60 text-xs uppercase tracking-[0.2em]"
+              className="font-mono text-[10px] uppercase tracking-widest text-zinc-500"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
             >
@@ -2545,7 +2558,7 @@ function EntryAnimation({ onComplete }: { onComplete: () => void }) {
           {[0, 1, 2].map((i) => (
             <motion.div
               key={i}
-              className="w-1.5 h-1.5 rounded-full bg-amber-300/60"
+              className="w-1.5 h-1.5 rounded-full bg-zinc-500"
               animate={{ opacity: [0.2, 1, 0.2] }}
               transition={{ duration: 1, repeat: Infinity, delay: i * 0.2 }}
             />
@@ -2555,11 +2568,11 @@ function EntryAnimation({ onComplete }: { onComplete: () => void }) {
       
       {/* Radial gradient overlay */}
       <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute inset-0 bg-gradient-to-t from-[#030810] via-transparent to-[#030810]/50" />
+        <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-transparent to-zinc-950/50" />
         <motion.div
           className="absolute inset-0"
           style={{
-            background: 'radial-gradient(circle at center, transparent 0%, #030810 70%)',
+            background: 'radial-gradient(circle at center, transparent 0%, #09090b 70%)',
           }}
           initial={{ opacity: 0 }}
           animate={{ opacity: phase === 'entering' ? 0 : 0.5 }}
@@ -2645,6 +2658,7 @@ const CLIMATE_CITY_DISPLAY_TO_ID: Record<string, string> = {
   'Nairobi': 'nairobi',
   'Khartoum': 'khartoum',
   'Lusaka': 'lusaka',
+  'Tripoli': 'tripoli',
   // Oceania
   'Sydney': 'sydney',
   'Melbourne': 'melbourne',
@@ -2658,29 +2672,29 @@ const CLIMATE_CITY_DISPLAY_TO_ID: Record<string, string> = {
 // ============================================
 const CITY_COORDINATES: Record<string, { lat: number; lng: number; exposure?: number; risk?: number }> = {
   // Major cities with coordinates for Digital Twin
-  newyork: { lat: 40.7128, lng: -74.0060, exposure: 52.3, risk: 0.75 },
-  tokyo: { lat: 35.6762, lng: 139.6503, exposure: 45.2, risk: 0.92 },
-  london: { lat: 51.5074, lng: -0.1278, exposure: 38.5, risk: 0.68 },
-  paris: { lat: 48.8566, lng: 2.3522, exposure: 28.4, risk: 0.62 },
-  frankfurt: { lat: 50.1109, lng: 8.6821, exposure: 35.2, risk: 0.58 },
-  berlin: { lat: 52.5200, lng: 13.4050, exposure: 22.8, risk: 0.55 },
-  munich: { lat: 48.1351, lng: 11.5820, exposure: 18.5, risk: 0.52 },
-  sydney: { lat: -33.8688, lng: 151.2093, exposure: 38.7, risk: 0.52 },
-  melbourne: { lat: -37.8136, lng: 144.9631, exposure: 28.5, risk: 0.58 },
-  boston: { lat: 42.3601, lng: -71.0589, exposure: 31.2, risk: 0.62 },
-  chicago: { lat: 41.8781, lng: -87.6298, exposure: 25.4, risk: 0.65 },
-  losangeles: { lat: 34.0522, lng: -118.2437, exposure: 42.1, risk: 0.72 },
-  sanfrancisco: { lat: 37.7749, lng: -122.4194, exposure: 48.5, risk: 0.78 },
-  shanghai: { lat: 31.2304, lng: 121.4737, exposure: 55.8, risk: 0.82 },
-  beijing: { lat: 39.9042, lng: 116.4074, exposure: 48.2, risk: 0.78 },
-  hongkong: { lat: 22.3193, lng: 114.1694, exposure: 42.5, risk: 0.75 },
-  singapore: { lat: 1.3521, lng: 103.8198, exposure: 38.9, risk: 0.62 },
-  dubai: { lat: 25.2048, lng: 55.2708, exposure: 32.5, risk: 0.68 },
-  mumbai: { lat: 19.0760, lng: 72.8777, exposure: 28.4, risk: 0.82 },
-  delhi: { lat: 28.6139, lng: 77.2090, exposure: 22.8, risk: 0.78 },
-  seoul: { lat: 37.5665, lng: 126.9780, exposure: 38.5, risk: 0.72 },
-  taipei: { lat: 25.0330, lng: 121.5654, exposure: 28.9, risk: 0.78 },
-  moscow: { lat: 55.7558, lng: 37.6173, exposure: 35.2, risk: 0.72 },
+  newyork: { lat: 40.7128, lng: -74.0060, exposure: 82, risk: 0.75 },
+  tokyo: { lat: 35.6762, lng: 139.6503, exposure: 94, risk: 0.92 },
+  london: { lat: 51.5074, lng: -0.1278, exposure: 58, risk: 0.68 },
+  paris: { lat: 48.8566, lng: 2.3522, exposure: 52, risk: 0.62 },
+  frankfurt: { lat: 50.1109, lng: 8.6821, exposure: 28, risk: 0.58 },
+  berlin: { lat: 52.5200, lng: 13.4050, exposure: 38, risk: 0.55 },
+  munich: { lat: 48.1351, lng: 11.5820, exposure: 26, risk: 0.52 },
+  sydney: { lat: -33.8688, lng: 151.2093, exposure: 38, risk: 0.52 },
+  melbourne: { lat: -37.8136, lng: 144.9631, exposure: 36, risk: 0.58 },
+  boston: { lat: 42.3601, lng: -71.0589, exposure: 34, risk: 0.62 },
+  chicago: { lat: 41.8781, lng: -87.6298, exposure: 42, risk: 0.65 },
+  losangeles: { lat: 34.0522, lng: -118.2437, exposure: 68, risk: 0.72 },
+  sanfrancisco: { lat: 37.7749, lng: -122.4194, exposure: 52, risk: 0.78 },
+  shanghai: { lat: 31.2304, lng: 121.4737, exposure: 68, risk: 0.82 },
+  beijing: { lat: 39.9042, lng: 116.4074, exposure: 58, risk: 0.78 },
+  hongkong: { lat: 22.3193, lng: 114.1694, exposure: 48, risk: 0.75 },
+  singapore: { lat: 1.3521, lng: 103.8198, exposure: 42, risk: 0.62 },
+  dubai: { lat: 25.2048, lng: 55.2708, exposure: 38, risk: 0.68 },
+  mumbai: { lat: 19.0760, lng: 72.8777, exposure: 48, risk: 0.82 },
+  delhi: { lat: 28.6139, lng: 77.2090, exposure: 42, risk: 0.78 },
+  seoul: { lat: 37.5665, lng: 126.9780, exposure: 52, risk: 0.72 },
+  taipei: { lat: 25.0330, lng: 121.5654, exposure: 28, risk: 0.78 },
+  moscow: { lat: 55.7558, lng: 37.6173, exposure: 52, risk: 0.72 },
   kyiv: { lat: 50.4501, lng: 30.5234, exposure: 12.5, risk: 0.95 },
   warsaw: { lat: 52.2297, lng: 21.0122, exposure: 18.5, risk: 0.55 },
   amsterdam: { lat: 52.3676, lng: 4.9041, exposure: 28.5, risk: 0.62 },
@@ -3017,9 +3031,6 @@ export default function CommandCenter() {
   const store = usePlatformStore()
   const portfolio = usePortfolio()
   
-  // Platform WebSocket - syncs events to Dashboard
-  usePlatformWebSocket(['command_center', 'dashboard', 'stress_tests'])
-  
   const [focusedHotspot, setFocusedHotspot] = useState<FocusedHotspot | null>(null)
   const [flyToHotspotId, setFlyToHotspotId] = useState<string | null>(null)
   const [dependencyZoneId, setDependencyZoneId] = useState<string | null>(null)
@@ -3070,16 +3081,146 @@ export default function CommandCenter() {
   const [showHeavyRainLayer, setShowHeavyRainLayer] = useState(false)
   const [showDroughtLayer, setShowDroughtLayer] = useState(false)
   const [showUvLayer, setShowUvLayer] = useState(false)
+  const [showEarthquakeLayer, setShowEarthquakeLayer] = useState(false)
+  const [earthquakeMinMagnitude, setEarthquakeMinMagnitude] = useState(5)
+  const [showActiveIncidentsLayer, setShowActiveIncidentsLayer] = useState(false)
+  /** When opening Digital Twin from climate zone double-click: which risk type + city for filtering stress tests */
+  const [climateTriggerRiskType, setClimateTriggerRiskType] = useState<string | null>(null)
+  const [climateTriggerCityId, setClimateTriggerCityId] = useState<string | null>(null)
   const [showGoogle3dLayer, setShowGoogle3dLayer] = useState(false)
+  const [showH3Layer, setShowH3Layer] = useState(false)
+  const [h3Resolution, setH3Resolution] = useState(5)
+  /** Zone Risk Vector: show hexagons colored by a single risk dimension (p_agi, p_bio, etc.). Set only after user selects risk + zone. */
+  const [showZoneRiskVectorPanel, setShowZoneRiskVectorPanel] = useState(false)
+  const [zoneRiskVectorDimension, setZoneRiskVectorDimension] = useState<string>('p_climate')
+  const [zoneRiskVectorResolution, setZoneRiskVectorResolution] = useState(5)
+  const [showZoneRiskVector, setShowZoneRiskVector] = useState(false)
+  // Time slider for temporal replay (risk-at-time API)
+  const [timeSliderValue, setTimeSliderValue] = useState<string | null>(null)
   const [floodDepthOverride, setFloodDepthOverride] = useState<number>(1)
   const FLOOD_LEVELS_M = [0.5, 1, 2, 3, 6, 9] as const
   const [expandedRiskLevel, setExpandedRiskLevel] = useState<'critical' | 'high' | 'medium' | 'low' | null>('critical')
   const [highFidelityScenarioId, setHighFidelityScenarioId] = useState<string | null>(null)
   const [highFidelityScenarioIds, setHighFidelityScenarioIds] = useState<string[]>([])
+  /** Top-right icon bar: collapsed = only Dashboard (home) visible; expanded = full layers + quick actions */
+  const [topBarExpanded, setTopBarExpanded] = useState(false)
+
+  // ============================================
+  // VIEW MODE: Global → Country → City navigation
+  // ============================================
+  type ViewMode = 'global' | 'country' | 'city'
+  const [viewMode, setViewMode] = useState<ViewMode>('global')
+  const [selectedCountryCode, setSelectedCountryCode] = useState<string | null>(null)
+  const [selectedCountryName, setSelectedCountryName] = useState<string | null>(null)
+  const [selectedCountryCity, setSelectedCountryCity] = useState<{ id: string; name: string; lat: number; lng: number } | null>(null)
+  const [countrySearchQuery, setCountrySearchQuery] = useState('')
+  const [countrySearchOpen, setCountrySearchOpen] = useState(false)
+  const [countryRiskData, setCountryRiskData] = useState<{
+    composite_risk: number
+    risk_level: string
+    hazards: Record<string, number>
+    top_cities: { id: string; name: string; lat: number; lng: number; risk_score: number; exposure_b: number }[]
+    total_exposure_b: number
+    cities_count: number
+  } | null>(null)
+  const [countriesList, setCountriesList] = useState<{ code: string; name: string; lat: number; lng: number; bbox: number[]; population: number; region: string }[]>([])
+  const [countryCitiesFromData, setCountryCitiesFromData] = useState<{ id: string; name: string; lat: number; lng: number }[]>([])
+  const countrySearchInputRef = useRef<HTMLInputElement>(null)
+  const aiAssistantRef = useRef<AIAssistantHandle>(null)
+
+  // Load countries list on mount
+  useEffect(() => {
+    fetch('/data/countries.json')
+      .then(res => res.json())
+      .then(data => setCountriesList(data))
+      .catch(() => {})
+  }, [])
+
+  // Fetch country risk data when country is selected
+  useEffect(() => {
+    if (!selectedCountryCode) {
+      setCountryRiskData(null)
+      return
+    }
+    fetch(`${getCommandApi()}/country-risk/${selectedCountryCode}`)
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data) setCountryRiskData(data)
+      })
+      .catch(() => {})
+  }, [selectedCountryCode])
+
+  // Fetch cities-by-country (top 20 by population) for panel fallback and globe markers
+  useEffect(() => {
+    if (!selectedCountryCode) {
+      setCountryCitiesFromData([])
+      return
+    }
+    fetch('/data/cities-by-country.json')
+      .then(res => res.ok ? res.json() : null)
+      .then((data: Record<string, Array<{ id: string; name: string; lat: number; lng: number }>>) => {
+        const cities = data?.[selectedCountryCode]
+        setCountryCitiesFromData(Array.isArray(cities) ? cities : [])
+      })
+      .catch(() => setCountryCitiesFromData([]))
+  }, [selectedCountryCode])
+
+  // Navigate to country
+  const navigateToCountry = useCallback((code: string, name: string) => {
+    setSelectedCountryCode(code)
+    setSelectedCountryName(name)
+    setViewMode('country')
+    setCountrySearchOpen(false)
+    setCountrySearchQuery('')
+    setSelectedCountryCity(null)
+    rotationEnabledRef.current = false
+    store.addEvent(createPlatformEvent(EventTypes.ZONE_SELECTED, 'country', code, { name }))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Navigate to city within country
+  const navigateToCity = useCallback((city: { id: string; name: string; lat: number; lng: number }) => {
+    setSelectedCountryCity(city)
+    setViewMode('city')
+    // Focus globe on city coordinates
+    setFocusCoordinatesForGlobe({ lat: city.lat, lng: city.lng })
+    // Open Digital Twin with city data for ClimateShield Local
+    setSelectedZoneAsset({
+      id: city.id,
+      name: city.name,
+      type: 'city',
+      latitude: city.lat,
+      longitude: city.lng,
+      exposure: 10,
+      impactSeverity: 0.5,
+    })
+    setShowDigitalTwin(true)
+    store.addEvent(createPlatformEvent(EventTypes.ZONE_SELECTED, 'city', city.id, { name: city.name }))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Navigate back to global
+  const navigateToGlobal = useCallback(() => {
+    setViewMode('global')
+    setSelectedCountryCode(null)
+    setSelectedCountryName(null)
+    setSelectedCountryCity(null)
+    setCountryRiskData(null)
+    setCountryCitiesFromData([])
+  }, [])
+
+  // Navigate back to country from city
+  const navigateBackToCountry = useCallback(() => {
+    setViewMode('country')
+    setSelectedCountryCity(null)
+  }, [])
+
+  // Ref for rotation control (shared with globe)
+  const rotationEnabledRef = useRef(true)
   
   // Stress Test State (integrated into Risk Zones)
   // Store the full test data locally, but sync ID to store for Dashboard access
-  const selectedStressTestId = useSelectedStressTestId()
+  useSelectedStressTestId() // keep hook subscription active — synced to store for Dashboard
   const setSelectedStressTestId = store.setSelectedStressTestId
   const [selectedStressTestData, setSelectedStressTestData] = useState<{
     id: string
@@ -3098,6 +3239,11 @@ export default function CommandCenter() {
       store.addEvent(createPlatformEvent(EventTypes.STRESS_TEST_STARTED, 'stress_test', test.id, { name: test.name }))
     }
   }
+
+  // When stress test panel opens (S key + event select), clear 4D timeline so bottom bar is hidden
+  useEffect(() => {
+    if (selectedStressTest) setStressTestCzmlUrl(null)
+  }, [selectedStressTest])
   
   const [showActionPlans, setShowActionPlans] = useState(false)
   const [showStressTestSelector, setShowStressTestSelector] = useState(false)
@@ -3143,20 +3289,63 @@ export default function CommandCenter() {
   const [focusAssetFromUrl, setFocusAssetFromUrl] = useState<{
     id: string
     name: string
+    type: string
     latitude: number
     longitude: number
     exposure: number
     impactSeverity: number
   } | null>(null)
-  const [focusCoordinatesForGlobe, setFocusCoordinatesForGlobe] = useState<{ lat: number; lng: number } | null>(null)
+  const [focusCoordinatesForGlobe, setFocusCoordinatesForGlobe] = useState<{ lat: number; lng: number; height?: number } | null>(null)
+
+  const czmlDecisionId = searchParams.get('czmlDecisionId')
+  const apiBaseForCzml = getApiBase().replace(/\/+$/, '')
+  const czmlUrl = czmlDecisionId
+    ? (apiBaseForCzml + replayApi.getCascadeCzmlUrl(czmlDecisionId, 30, 10))
+    : null
+
+  const [stressTestCzmlUrl, setStressTestCzmlUrl] = useState<string | null>(null)
+
+  // When opening with czmlDecisionId (e.g. View on Globe with "demo"), fly globe to cascade center and zoom in so animation is visible
+  useEffect(() => {
+    if (searchParams.get('czmlDecisionId') && !searchParams.get('assetId')) {
+      setFocusCoordinatesForGlobe({ lat: 40.7128, lng: -74.006, height: 2500 })
+    }
+  }, [searchParams])
 
   useEffect(() => {
     const assetId = searchParams.get('assetId')
     const openTwin = searchParams.get('openTwin')
+    const cityId = searchParams.get('cityId')
+    const cityName = searchParams.get('cityName')
+
+    if (cityId && openTwin === '1') {
+      const coords = findCityCoordinates(cityId)
+      const fallback = coords ?? (CITY_COORDINATES[cityId.toLowerCase().replace(/[^a-z]/g, '')] ?? null)
+      if (fallback) {
+        setSelectedZoneAsset({
+          id: cityId,
+          name: cityName || cityId,
+          type: 'city',
+          latitude: fallback.lat,
+          longitude: fallback.lng,
+          exposure: fallback.exposure ?? 10,
+          impactSeverity: fallback.risk ?? 0.5,
+        })
+        setFocusCoordinatesForGlobe({ lat: fallback.lat, lng: fallback.lng })
+        const riskCategory = (fallback.risk ?? 0.5) > 0.8 ? 'conflict' : (fallback.risk ?? 0.5) > 0.6 ? 'climate' : 'financial'
+        setSelectedDigitalTwinEvent('stress_test_scenario')
+        setSelectedDigitalTwinEventName(cityName ? `Stress Test: ${cityName}` : `Stress Test: ${cityId}`)
+        setSelectedDigitalTwinEventCategory(riskCategory)
+        setSelectedDigitalTwinTimeHorizon('current')
+        setShowDigitalTwin(true)
+      }
+      return
+    }
+
     if (!assetId) {
       setFocusAssetIdFromUrl(null)
       setFocusAssetFromUrl(null)
-      setFocusCoordinatesForGlobe(null)
+      if (!searchParams.get('czmlDecisionId')) setFocusCoordinatesForGlobe(null)
       return
     }
     setFocusAssetIdFromUrl(assetId)
@@ -3167,6 +3356,7 @@ export default function CommandCenter() {
       setFocusAssetFromUrl({
         id: asset.id,
         name: asset.name ?? 'Asset',
+        type: asset.asset_type ?? 'infrastructure',
         latitude: asset.latitude ?? 0,
         longitude: asset.longitude ?? 0,
         exposure: asset.current_valuation ?? 0,
@@ -3275,6 +3465,12 @@ export default function CommandCenter() {
   const [omniverseStatus, setOmniverseStatus] = useState<{ e2cc_configured?: boolean; e2cc_base_url?: string; e2cc_use_port_forward?: boolean } | null>(null)
   const [weatherTestResult, setWeatherTestResult] = useState<string | null>(null)
   const [weatherTestLoading, setWeatherTestLoading] = useState(false)
+  const [weatherForecastData, setWeatherForecastData] = useState<{
+    forecasts: Array<{ forecast_time: string; lead_hours: number; temperature_k: number; wind_u_ms: number; wind_v_ms: number; precipitation_mm: number }>
+    latitude: number
+    longitude: number
+    model: string
+  } | null>(null)
   
   // Generate zone assets: use ENTERPRISE_ADDRESSES (HQ/legal addresses) when zone has cityId, else fallback
   const generateZoneAssets = useCallback((zone: Omit<RiskZone, 'assets'> & { cityId?: string }, count: number): ZoneAsset[] => {
@@ -3338,7 +3534,9 @@ export default function CommandCenter() {
     if (['climate', 'financial', 'geopolitical', 'pandemic', 'political', 'regulatory', 'civil_unrest', 'fire'].includes(t)) return t
     if (t === 'military') return 'geopolitical'
     if (t === 'protest') return 'civil_unrest'
-    if (t.includes('flood') || t.includes('ngfs') || t.includes('ssp') || t.includes('sea_level') || t.includes('heat')) return 'climate'
+    if (t.includes('flood') || t.includes('ngfs') || t.includes('ssp') || t.includes('sea_level') || t.includes('heat') ||
+        t.includes('drought') || t.includes('wind') || t.includes('hurricane') || t.includes('typhoon') || t.includes('cyclone') ||
+        t.includes('uv') || t.includes('heavy_rain') || t.includes('meteo')) return 'climate'
     if (t.includes('fire') || t.includes('wildfire')) return 'fire'
     if (t.includes('bank') || t.includes('basel') || t.includes('credit') || t.includes('liquidity')) return 'financial'
     if (t.includes('pandemic') || t.includes('health')) return 'pandemic'
@@ -3471,6 +3669,16 @@ export default function CommandCenter() {
         { id: 'zone-6', name: 'Perth Bushfire Zone', zone_level: 'high', ...cc('perth'), radius_km: 50, risk_score: 0.52, affected_assets_count: 8, total_exposure: 25.8, cityId: 'perth' },
         { id: 'zone-7', name: 'Cape Town Mountain Fire', zone_level: 'medium', ...cc('capetown'), radius_km: 45, risk_score: 0.58, affected_assets_count: 7, total_exposure: 18.5, cityId: 'capetown' },
       ],
+      // Polar Vortex — US/Canada subset (arctic_vortex scenario)
+      arctic_vortex: [
+        { id: 'zone-1', name: 'Chicago Metro (Polar)', zone_level: 'critical', ...cc('chicago'), radius_km: 70, risk_score: 0.78, affected_assets_count: 14, total_exposure: 42.0, cityId: 'chicago' },
+        { id: 'zone-2', name: 'Minneapolis–St Paul', zone_level: 'critical', ...cc('minneapolis'), radius_km: 55, risk_score: 0.78, affected_assets_count: 10, total_exposure: 22.5, cityId: 'minneapolis' },
+        { id: 'zone-3', name: 'Detroit Metro', zone_level: 'high', ...cc('detroit'), radius_km: 60, risk_score: 0.72, affected_assets_count: 12, total_exposure: 28.5, cityId: 'detroit' },
+        { id: 'zone-4', name: 'Toronto GTA', zone_level: 'high', ...cc('toronto'), radius_km: 65, risk_score: 0.72, affected_assets_count: 12, total_exposure: 32.5, cityId: 'toronto' },
+        { id: 'zone-5', name: 'Montreal Region', zone_level: 'high', ...cc('montreal'), radius_km: 50, risk_score: 0.72, affected_assets_count: 10, total_exposure: 22.4, cityId: 'montreal' },
+        { id: 'zone-6', name: 'New York Metro (Polar)', zone_level: 'high', ...cc('newyork'), radius_km: 70, risk_score: 0.75, affected_assets_count: 16, total_exposure: 52.3, cityId: 'newyork' },
+        { id: 'zone-7', name: 'Boston Metro', zone_level: 'medium', ...cc('boston'), radius_km: 50, risk_score: 0.68, affected_assets_count: 10, total_exposure: 34.0, cityId: 'boston' },
+      ],
     }
     const baseZones = typeZonesBase[typeKey] ?? []
     return baseZones.map(zone => {
@@ -3564,28 +3772,58 @@ export default function CommandCenter() {
     if (!showDigitalTwin) prevTwinOpenRef.current = false
   }, [showDigitalTwin, focusedHotspot?.name, focusedHotspot?.id, selectedZoneAsset?.name, selectedZoneAsset?.id, store])
 
-  // Load initial data
-  useEffect(() => {
-    async function loadData() {
-      try {
-        const res = await fetch(`${API_BASE}/geodata/summary`)
-        if (res.ok) {
-          const data = await res.json()
-          // Update store - synced to Dashboard
-          store.setPortfolioConfirmed({
-            totalExposure: data.total_exposure || 247.3,
-            atRisk: data.at_risk_exposure || 52.1,
-            criticalCount: data.critical_count || 4,
-            weightedRisk: data.weighted_risk || 0.68,
-          })
+  // Load portfolio summary (initial + periodic refresh every 5 min).
+  // Use getState() inside callback to avoid dependency on store — prevents re-running effect on every store update (no request storm / ERR_INSUFFICIENT_RESOURCES).
+  // Fetch risk-velocity only when summary did not return MoM to avoid flicker and extra request.
+  const fetchPortfolioSummary = useCallback(async (noCache = false) => {
+    try {
+      const url = noCache ? `${getCommandApi()}/geodata/summary?t=${Date.now()}` : `${getCommandApi()}/geodata/summary`
+      const res = await fetch(url, noCache ? { cache: 'no-store' } : undefined)
+      if (res.ok) {
+        const data = await res.json()
+        const momFromSummary = data.risk_velocity_mom_pct != null ? data.risk_velocity_mom_pct : null
+        usePlatformStore.getState().setPortfolioConfirmed({
+          totalExposure: data.total_exposure ?? 0,
+          atRisk: data.at_risk_exposure ?? 0,
+          totalExpectedLoss: data.total_expected_loss,
+          criticalCount: data.critical_count ?? 0,
+          highCount: data.high_count ?? 0,
+          mediumCount: data.medium_count ?? 0,
+          lowCount: data.low_count ?? 0,
+          weightedRisk: data.weighted_risk ?? 0,
+          riskVelocityMomPct: momFromSummary,
+          riskModelVersion: data.risk_model_version,
+          dataSourcesFreshness: data.data_sources_freshness,
+        })
+        // Only fetch risk-velocity when summary did not return MoM (avoids flicker + reduces requests)
+        if (momFromSummary == null) {
+          const velRes = await fetch(`${getCommandApi()}/risk-engine/risk-velocity`)
+          if (velRes.ok) {
+            const velData = await velRes.json()
+            const momPct = velData?.risk_velocity?.mom_pct
+            if (typeof momPct === 'number') {
+              usePlatformStore.getState().updatePortfolio({ riskVelocityMomPct: momPct })
+            }
+          }
         }
-      } catch (e) {
-        // Use defaults
       }
-      setIsSceneReady(true)
+    } catch {
+      // Use store defaults
     }
-    loadData()
   }, [])
+
+  useEffect(() => {
+    fetchPortfolioSummary().finally(() => setIsSceneReady(true))
+    const interval = setInterval(fetchPortfolioSummary, 5 * 60 * 1000) // every 5 min
+    return () => clearInterval(interval)
+  }, [fetchPortfolioSummary])
+
+  // Refetch portfolio when tab/window gains focus so server shows fresh data (not stale cache)
+  useEffect(() => {
+    const onFocus = () => { fetchPortfolioSummary(true) }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [fetchPortfolioSummary])
 
   // Hotspot data for cities - auto-generated from CITY_COORDINATES
   const HOTSPOT_DATA: Record<string, FocusedHotspot> = useMemo(() => {
@@ -3733,9 +3971,9 @@ export default function CommandCenter() {
   // Omniverse / E2CC: open launch URL; if localhost, user needs port-forward 8010 on their machine
   const handleOmniverseOpen = useCallback(async (launchParams?: URLSearchParams) => {
     try {
-      const statusRes = await fetch('/api/v1/omniverse/status')
+      const statusRes = await fetch(`${getCommandApi()}/omniverse/status`)
       const status = await statusRes.json()
-      const url = launchParams ? `/api/v1/omniverse/launch?${launchParams}` : '/api/v1/omniverse/launch'
+      const url = launchParams ? `${getCommandApi()}/omniverse/launch?${launchParams}` : `${getCommandApi()}/omniverse/launch`
       const res = await fetch(url)
       const data = await res.json()
       if (data?.launch_url) {
@@ -3781,8 +4019,8 @@ export default function CommandCenter() {
   // Fetch registry scenarios (library + extended) for Focused Zone panel
   useEffect(() => {
     Promise.all([
-      fetch('/api/v1/stress-tests/scenarios/library').then((r) => (r.ok ? r.json() : [])),
-      fetch('/api/v1/stress-tests/scenarios/extended').then((r) => (r.ok ? r.json() : { categories: [] })),
+      fetch(`${getCommandApi()}/stress-tests/scenarios/library`).then((r) => (r.ok ? r.json() : [])),
+      fetch(`${getCommandApi()}/stress-tests/scenarios/extended`).then((r) => (r.ok ? r.json() : { categories: [] })),
     ])
       .then(([lib, ext]) => {
         const flat = Array.isArray(lib) ? lib : []
@@ -3795,7 +4033,7 @@ export default function CommandCenter() {
 
   // Fetch high-fidelity scenario IDs (WRF/ADCIRC) for disaster layer source option
   useEffect(() => {
-    fetch(`${API_BASE}/climate/high-fidelity/scenarios`)
+    fetch(`${getCommandApi()}/climate/high-fidelity/scenarios`)
       .then((r) => (r.ok ? r.json() : { scenario_ids: [] }))
       .then((data: { scenario_ids?: string[] }) => {
         const ids = data?.scenario_ids ?? []
@@ -3809,9 +4047,9 @@ export default function CommandCenter() {
   // Fetch GPU / NIM / Omniverse / DFM status for bottom bar
   useEffect(() => {
     Promise.all([
-      fetch(`${API_BASE}/nvidia/nim/health`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-      fetch(`${API_BASE}/data-federation/status`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-      fetch(`${API_BASE}/omniverse/status`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch(`${getCommandApi()}/nvidia/nim/health`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch(`${getCommandApi()}/data-federation/status`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch(`${getCommandApi()}/omniverse/status`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
     ]).then(([nim, dfm, omni]) => {
       setNimHealth(nim)
       setDfmStatus(dfm)
@@ -3823,8 +4061,9 @@ export default function CommandCenter() {
   const handleTestWeatherNim = useCallback(async () => {
     setWeatherTestLoading(true)
     setWeatherTestResult(null)
+    setWeatherForecastData(null)
     try {
-      const res = await fetch(`${API_BASE}/data-federation/pipelines/weather_forecast/run`, {
+      const res = await fetch(`${getCommandApi()}/data-federation/pipelines/weather_forecast/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -3838,7 +4077,17 @@ export default function CommandCenter() {
         setWeatherTestResult(`Error: ${data?.detail || res.status}`)
         return
       }
-      const steps = data?.artifacts?.forecast?.forecasts?.length ?? data?.meta?.steps ?? 0
+      const forecast = data?.artifacts?.forecast
+      const list = forecast?.forecasts
+      if (Array.isArray(list) && list.length > 0) {
+        setWeatherForecastData({
+          forecasts: list,
+          latitude: forecast.latitude ?? 25.76,
+          longitude: forecast.longitude ?? -80.19,
+          model: forecast.model ?? 'fourcastnet-nim',
+        })
+      }
+      const steps = list?.length ?? data?.meta?.steps ?? 0
       setWeatherTestResult(steps ? `${steps} steps from FourCastNet NIM ✓` : 'No forecast data')
       setTimeout(() => setWeatherTestResult(null), 6000)
     } catch (e) {
@@ -3852,9 +4101,10 @@ export default function CommandCenter() {
   return (
     <div 
       ref={containerRef}
-      className="fixed inset-0 bg-[#030810] overflow-hidden"
+      className="fixed inset-0 overflow-hidden font-sans scene-bg-quantum"
+      style={{ fontFamily: "'JetBrains Mono', monospace" }}
       tabIndex={0}
-      onKeyDown={(e) => {
+      onKeyDown={() => {
         // This is a fallback - main handler is in KeyboardHandler component
         // But we ensure the container can receive focus
       }}
@@ -3876,7 +4126,7 @@ export default function CommandCenter() {
       <motion.div 
         className={`absolute top-0 left-0 transition-opacity duration-300 ${
           showDigitalTwin ? 'opacity-0 pointer-events-none' : 'opacity-100'
-        } ${commandMode ? 'overflow-hidden rounded-2xl border border-white/10 shadow-2xl bg-black/30' : ''}`}
+        } ${commandMode ? 'overflow-hidden rounded-md border border-zinc-700 shadow-2xl bg-zinc-900' : ''}`}
         animate={{
           width: commandMode ? '40%' : '100%',
           height: commandMode ? '55%' : '100%',
@@ -3908,7 +4158,8 @@ export default function CommandCenter() {
             }
           }}
           paused={showDigitalTwin}
-          activeRiskFilter={expandedRiskLevel ?? 'critical'}
+          activeRiskFilter={expandedRiskLevel}
+          focusedHotspotId={focusedHotspot?.id}
           showFloodLayer={showFloodLayer}
           floodCenter={floodCenter}
           floodDepthOverride={floodDepthOverride}
@@ -3920,12 +4171,22 @@ export default function CommandCenter() {
           showHeavyRainLayer={showHeavyRainLayer}
           showDroughtLayer={showDroughtLayer}
           showUvLayer={showUvLayer}
+          showEarthquakeLayer={showEarthquakeLayer}
+          earthquakeMinMagnitude={earthquakeMinMagnitude}
+          showActiveIncidentsLayer={showActiveIncidentsLayer}
           anomalyCenter={floodCenter}
           highFidelityFloodScenarioId={highFidelityScenarioId}
           highFidelityWindScenarioId={highFidelityScenarioId}
           showGoogle3dLayer={showGoogle3dLayer}
+          showH3Layer={showZoneRiskVector ? true : showH3Layer}
+          h3Resolution={showZoneRiskVector ? zoneRiskVectorResolution : h3Resolution}
+          h3VectorDimension={showZoneRiskVector ? zoneRiskVectorDimension : null}
+          timeSliderValue={timeSliderValue}
+          onTimeSliderChange={(iso) => setTimeSliderValue(iso)}
+          czmlUrl={czmlUrl}
+          stressTestCzmlUrl={stressTestCzmlUrl}
           onClimateZoneDoubleClick={(info) => {
-            const cityId = CLIMATE_CITY_DISPLAY_TO_ID[info.cityName] ?? info.cityName.toLowerCase().replace(/\s+/g, '')
+            const cityId = CLIMATE_CITY_DISPLAY_TO_ID[info.cityName] ?? info.cityName.toLowerCase().replace(/\s+/g, '').replace(/,/g, '')
             const coords = CITY_COORDINATES[cityId]
             const hotspotData = HOTSPOT_DATA[cityId]
             const hotspot: FocusedHotspot = hotspotData ?? {
@@ -3948,7 +4209,6 @@ export default function CommandCenter() {
             }
             setFocusedHotspot(hotspot)
             store.addEvent(createPlatformEvent(EventTypes.ZONE_SELECTED, 'zone', cityId, { name: info.cityName }))
-            // Set dynamicAsset with coordinates so Digital Twin uses correct city location (not NYC fallback)
             const lat = coords?.lat ?? info.lat
             const lng = coords?.lng ?? info.lng
             setSelectedZoneAsset({
@@ -3960,9 +4220,26 @@ export default function CommandCenter() {
               exposure: coords?.exposure ?? 10,
               impactSeverity: coords?.risk ?? 0.5,
             })
+            // Set layer for the risk type clicked so Digital Twin shows impact zone
+            const rt = info.riskType
+            if (rt === 'flood') setShowFloodLayer(true)
+            else if (rt === 'metro') { setShowMetroFloodLayer(true); setShowFloodLayer(true) }
+            else if (rt === 'wind') setShowWindLayer(true)
+            else if (rt === 'heat') setShowHeatLayer(true)
+            else if (rt === 'heavy_rain') setShowHeavyRainLayer(true)
+            else if (rt === 'drought') setShowDroughtLayer(true)
+            else if (rt === 'uv') setShowUvLayer(true)
+            else if (rt === 'earthquake') setShowEarthquakeLayer(true)
+            setClimateTriggerRiskType(rt ?? null)
+            setClimateTriggerCityId(cityId)
             setShowDigitalTwin(true)
           }}
           focusCoordinates={focusCoordinatesForGlobe}
+          viewMode={viewMode}
+          selectedCountryCode={selectedCountryCode}
+          countryCompositeRisk={countryRiskData?.composite_risk}
+          onCountryClick={(country) => navigateToCountry(country.code, country.name)}
+          onCityClick={(city) => navigateToCity(city)}
         />
       </motion.div>
       
@@ -3987,193 +4264,349 @@ export default function CommandCenter() {
       <AnimatePresence>
         {isSceneReady && entryComplete && (
           <>
-            {/* TOP RIGHT - Disaster viz under Settings: icons only, aligned, a bit lower */}
-            {/* TOP RIGHT - Unified panel: layer checkboxes (when !commandMode) + quick nav icons, one style */}
-            <motion.div 
-              className="absolute top-6 right-8 pointer-events-auto z-50"
+            {/* ============================================ */}
+            {/* TOP LEFT - Search + Breadcrumb (hidden when Digital Twin is open so it does not overlay the panel) */}
+            {/* ============================================ */}
+            {!showDigitalTwin && (
+            <motion.div
+              className="absolute top-5 left-8 z-[60] pointer-events-auto max-w-[320px]"
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.5 }}
+              transition={{ duration: 0.5, delay: 0.3 }}
             >
-              <div className="flex items-center gap-2 flex-wrap rounded-full bg-black/50 backdrop-blur-sm border border-white/10 px-2.5 py-1.5">
-                {!commandMode && (
-                  <>
-                    <select
-                      value={highFidelityScenarioId ?? ''}
-                      onChange={(e) => setHighFidelityScenarioId(e.target.value || null)}
-                      className="rounded border border-slate-600 bg-slate-900/95 text-slate-300 text-[10px] py-1 px-1.5 focus:ring-white/30 max-w-[140px]"
-                      title="Flood/Wind: Open-Meteo or High-Fidelity"
-                    >
-                      <option value="">Open-Meteo (live)</option>
-                      {highFidelityScenarioIds.map((id) => (
-                        <option key={id} value={id}>
-                          {id === 'wrf_nyc_001' ? 'High-Fidelity: wrf_nyc_001' : `High-Fidelity: ${id}`}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="w-px h-4 bg-white/20" aria-hidden />
-                    <label className="flex items-center gap-1.5 cursor-pointer group" title="Google Photorealistic 3D">
-                      <input type="checkbox" checked={showGoogle3dLayer} onChange={(e) => setShowGoogle3dLayer(e.target.checked)} className="rounded border-slate-500 bg-slate-900/95 text-white/90 focus:ring-white/30 flex-shrink-0 accent-slate-400 w-3.5 h-3.5" />
-                      <span className="w-4 h-4 flex-shrink-0 text-slate-400 group-hover:text-white/80" aria-hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-full h-full"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></span>
-                    </label>
-                    <label className="flex items-center gap-1.5 cursor-pointer group" title="Flood">
-                      <input type="checkbox" checked={showFloodLayer} onChange={(e) => setShowFloodLayer(e.target.checked)} className="rounded border-slate-500 bg-slate-900/95 text-white/90 focus:ring-white/30 flex-shrink-0 accent-slate-400 w-3.5 h-3.5" />
-                      <span className="w-4 h-4 flex-shrink-0 text-slate-400 group-hover:text-white/80" aria-hidden><svg viewBox="0 0 24 24" fill="currentColor" className="w-full h-full"><path d="M12 2C8 6 4 8 4 12c0 3.3 2.7 6 6 6s6-2.7 6-6c0-4-4-6-8-10zm0 14c-1.1 0-2-.9-2-2 0-.7.4-1.4 1-1.7V12h2v2.3c.6.3 1 1 1 1.7 0 1.1-.9 2-2 2z"/></svg></span>
-                    </label>
-                    <label className="flex items-center gap-1.5 cursor-pointer group" title="Wind">
-                      <input type="checkbox" checked={showWindLayer} onChange={(e) => setShowWindLayer(e.target.checked)} className="rounded border-slate-500 bg-slate-900/95 text-white/90 focus:ring-white/30 flex-shrink-0 accent-slate-400 w-3.5 h-3.5" />
-                      <span className="w-4 h-4 flex-shrink-0 text-slate-400 group-hover:text-white/80" aria-hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-full h-full"><path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2 2 0 1 1 19 4H2m0 14h8a2 2 0 1 1 0 4H2"/></svg></span>
-                    </label>
-                    <label className="flex items-center gap-1.5 cursor-pointer group" title="Metro flood">
-                      <input type="checkbox" checked={showMetroFloodLayer} onChange={(e) => setShowMetroFloodLayer(e.target.checked)} className="rounded border-slate-500 bg-slate-900/95 text-white/90 focus:ring-white/30 flex-shrink-0 accent-slate-400 w-3.5 h-3.5" />
-                      <span className="w-4 h-4 flex-shrink-0 text-slate-400 group-hover:text-white/80" aria-hidden><svg viewBox="0 0 24 24" fill="currentColor" className="w-full h-full"><path d="M4 6h16v10H4V6zm2 2v6h3V8H6zm5 0v6h2V8h-2zm5 0v6h3V8h-3zM5 18h14v2H5v-2z"/></svg></span>
-                    </label>
-                    <label className="flex items-center gap-1.5 cursor-pointer group" title="Heat stress">
-                      <input type="checkbox" checked={showHeatLayer} onChange={(e) => setShowHeatLayer(e.target.checked)} className="rounded border-slate-500 bg-slate-900/95 text-white/90 focus:ring-white/30 flex-shrink-0 accent-slate-400 w-3.5 h-3.5" />
-                      <span className="w-4 h-4 flex-shrink-0 text-slate-400 group-hover:text-white/80" aria-hidden><svg viewBox="0 0 24 24" fill="currentColor" className="w-full h-full"><path d="M6.76 4.84l-1.8-1.79-1.41 1.41 1.79 1.79 1.42-1.41zM4 10.5H1v2h3v-2zm9-11.19h2V3.5h-2V-.69zM20 10.5v2h3v-2h-3zm-8-5c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm0 10c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4zm-1-9h2V7h-2V6.5zm1.09 7.5c.46 0 .84-.37.84-.84 0-.46-.38-.84-.84-.84-.46 0-.84.38-.84.84 0 .47.38.84.84.84z"/></svg></span>
-                    </label>
-                    <label className="flex items-center gap-1.5 cursor-pointer group" title="Heavy rain">
-                      <input type="checkbox" checked={showHeavyRainLayer} onChange={(e) => setShowHeavyRainLayer(e.target.checked)} className="rounded border-slate-500 bg-slate-900/95 text-white/90 focus:ring-white/30 flex-shrink-0 accent-slate-400 w-3.5 h-3.5" />
-                      <span className="w-4 h-4 flex-shrink-0 text-slate-400 group-hover:text-white/80" aria-hidden><svg viewBox="0 0 24 24" fill="currentColor" className="w-full h-full"><path d="M6.5 10c-.22 0-.4.18-.4.4v.2c0 .22.18.4.4.4h.01c.22 0 .4-.18.4-.4v-.2c-.01-.22-.19-.4-.4-.4z"/><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/></svg></span>
-                    </label>
-                    <label className="flex items-center gap-1.5 cursor-pointer group" title="Drought">
-                      <input type="checkbox" checked={showDroughtLayer} onChange={(e) => setShowDroughtLayer(e.target.checked)} className="rounded border-slate-500 bg-slate-900/95 text-white/90 focus:ring-white/30 flex-shrink-0 accent-slate-400 w-3.5 h-3.5" />
-                      <span className="w-4 h-4 flex-shrink-0 text-slate-400 group-hover:text-white/80" aria-hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-full h-full"><path d="M12 3v18M5 8h4l2 4 2-4h4M4 14h3l2 4 2-4h5M8 20h2M14 20h2"/></svg></span>
-                    </label>
-                    <label className="flex items-center gap-1.5 cursor-pointer group" title="UV index">
-                      <input type="checkbox" checked={showUvLayer} onChange={(e) => setShowUvLayer(e.target.checked)} className="rounded border-slate-500 bg-slate-900/95 text-white/90 focus:ring-white/30 flex-shrink-0 accent-slate-400 w-3.5 h-3.5" />
-                      <span className="w-4 h-4 flex-shrink-0 text-slate-400 group-hover:text-white/80" aria-hidden><svg viewBox="0 0 24 24" fill="currentColor" className="w-full h-full"><path d="M6.76 4.84l-1.8-1.79-1.41 1.41 1.79 1.79 1.42-1.41zM1 10.5h3v2H1v-2zm9-9.19h2V3.5h-2V1.31zM20 10.5v2h3v-2h-3zm-9 4.69h2v2.19h-2V15.19zM12 5.5c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm0 10c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4zm-1-4h2v2h-2v-2z"/></svg></span>
-                    </label>
-                    {showFloodLayer && (
-                      <div className="flex items-center gap-1">
-                        {FLOOD_LEVELS_M.map((m) => (
-                          <button key={m} type="button" onClick={() => setFloodDepthOverride(m)} className={`px-1.5 py-0.5 rounded text-[10px] transition-colors ${floodDepthOverride === m ? 'bg-slate-600 text-white border border-slate-500' : 'bg-slate-900/90 text-slate-400 hover:text-white/80 border border-slate-600'}`} title={`Water ${m} m`}>{m}</button>
-                        ))}
+              <div className="flex flex-col gap-2">
+                {/* Fixed row: Global + Search (never shifts) */}
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={navigateToGlobal}
+                    className={`px-2 py-0.5 rounded-full transition-all shrink-0 ${viewMode === 'global' ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800'}`}
+                  >
+                    Global
+                  </button>
+                  {/* Search input */}
+                  <div className="relative">
+                    <input
+                      ref={countrySearchInputRef}
+                      type="text"
+                      value={countrySearchQuery}
+                      onChange={(e) => {
+                        setCountrySearchQuery(e.target.value)
+                        setCountrySearchOpen(e.target.value.length > 0)
+                      }}
+                      onFocus={() => { if (countrySearchQuery.length > 0) setCountrySearchOpen(true) }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') {
+                          setCountrySearchOpen(false)
+                          setCountrySearchQuery('')
+                          countrySearchInputRef.current?.blur()
+                        }
+                      }}
+                      placeholder="Search country…"
+                      className="w-36 sm:w-40 pl-6 pr-2.5 py-1 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-100 text-xs placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-500/50 focus:border-zinc-500/50"
+                    />
+                    <svg className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                    </svg>
+
+                    {/* Search dropdown */}
+                    {countrySearchOpen && countrySearchQuery.length > 0 && (
+                      <>
+                        {/* Invisible backdrop to close on outside click */}
+                        <div className="fixed inset-0 z-[99]" onClick={() => setCountrySearchOpen(false)} />
+                      <div className="absolute top-full mt-1 left-0 w-64 max-h-64 overflow-y-auto rounded-md bg-zinc-900/95 border border-zinc-700 shadow-2xl z-[100]">
+                        {countriesList
+                          .filter(c => c.name.toLowerCase().includes(countrySearchQuery.toLowerCase()) || c.code.toLowerCase().includes(countrySearchQuery.toLowerCase()))
+                          .slice(0, 12)
+                          .map(c => (
+                            <button
+                              key={c.code}
+                              onClick={() => navigateToCountry(c.code, c.name)}
+                              className="w-full text-left px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-700 hover:text-zinc-100 flex items-center justify-between transition-colors"
+                            >
+                              <span className="font-medium">{c.name}</span>
+                              <span className="text-zinc-600 text-[10px]">{c.code} · {c.region}</span>
+                            </button>
+                          ))
+                        }
+                        {countriesList.filter(c => c.name.toLowerCase().includes(countrySearchQuery.toLowerCase())).length === 0 && (
+                          <div className="px-3 py-3 text-xs text-zinc-500 text-center">No countries found</div>
+                        )}
                       </div>
+                      </>
                     )}
-                    <span className="w-px h-4 bg-white/20" aria-hidden />
-                  </>
+                  </div>
+                </div>
+
+                {/* Dynamic row: selected country/city chips */}
+                {(selectedCountryName || selectedCountryCity) && viewMode !== 'country' && (
+                  <div className="flex items-center gap-1.5 text-[11px] font-medium flex-wrap min-h-[20px]">
+                    {selectedCountryName && (
+                      <button
+                        onClick={navigateBackToCountry}
+                        className="px-2 py-0.5 rounded-full transition-all shrink-0 truncate max-w-[140px] text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800"
+                      >
+                        {selectedCountryName}
+                      </button>
+                    )}
+                    {selectedCountryCity && (
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shrink-0 truncate max-w-[120px]">
+                        {selectedCountryCity.name}
+                      </span>
+                    )}
+                  </div>
                 )}
-                <Link 
-                  to="/dashboard"
-                  className="p-2 rounded-full text-white/50 hover:text-white hover:bg-white/10 transition-all"
-                  title="Dashboard"
-                >
-                  <HomeIcon className="w-4 h-4" />
-                </Link>
-                <Link 
-                  to="/assets"
-                  className="p-2 rounded-full text-white/50 hover:text-white hover:bg-white/10 transition-all"
-                  title="Assets"
-                >
-                  <BuildingOffice2Icon className="w-4 h-4" />
-                </Link>
-                <Link 
-                  to="/modules"
-                  className="p-2 rounded-full text-white/50 hover:text-white hover:bg-white/10 transition-all"
-                  title="Strategic Modules"
-                >
-                  <Square3Stack3DIcon className="w-4 h-4" />
-                </Link>
-                <Link 
-                  to="/analytics"
-                  className="p-2 rounded-full text-white/50 hover:text-white hover:bg-white/10 transition-all"
-                  title="Advanced Analytics"
-                >
-                  <CpuChipIcon className="w-4 h-4" />
-                </Link>
-                <Link 
-                  to="/visualizations"
-                  className="p-2 rounded-full text-white/50 hover:text-white hover:bg-white/10 transition-all"
-                  title="Visualizations & Risk Flow"
-                >
-                  <ChartBarIcon className="w-4 h-4" />
-                </Link>
-                <div className="w-px h-4 bg-white/20" /> {/* Divider */}
-                <Link 
-                  to="/projects"
-                  className="p-2 rounded-full text-white/50 hover:text-amber-400 hover:bg-amber-500/20 transition-all"
-                  title="Project Finance"
-                >
-                  <BriefcaseIcon className="w-4 h-4" />
-                </Link>
-                <Link 
-                  to="/portfolios"
-                  className="p-2 rounded-full text-white/50 hover:text-green-400 hover:bg-green-500/20 transition-all"
-                  title="Portfolios & REIT"
-                >
-                  <BanknotesIcon className="w-4 h-4" />
-                </Link>
-                <Link 
-                  to="/fraud"
-                  className="p-2 rounded-full text-white/50 hover:text-red-400 hover:bg-red-500/20 transition-all"
-                  title="Fraud Detection"
-                >
-                  <ShieldExclamationIcon className="w-4 h-4" />
-                </Link>
-                <div className="w-px h-4 bg-white/20" /> {/* Divider */}
-                <Link 
-                  to="/agents"
-                  className="p-2 rounded-full text-white/50 hover:text-purple-400 hover:bg-purple-500/20 transition-all"
-                  title="AI Agents Monitoring (NeMo)"
-                >
-                  <SparklesIcon className="w-4 h-4" />
-                </Link>
-                <div className="w-px h-4 bg-white/20" /> {/* Divider */}
-                <Link 
-                  to="/risk-zones-analysis"
-                  className="p-2 rounded-full text-white/50 hover:text-cyan-400 hover:bg-cyan-500/20 transition-all"
-                  title="Risk Zones Dependencies Analysis"
-                >
-                  <LinkIcon className="w-4 h-4" />
-                </Link>
-                <div className="w-px h-4 bg-white/20" /> {/* Divider */}
-                <Link 
-                  to="/action-plans"
-                  className="p-2 rounded-full text-white/50 hover:text-amber-400 hover:bg-amber-500/20 transition-all"
-                  title="Detailed sector plans"
-                >
-                  <DocumentTextIcon className="w-4 h-4" />
-                </Link>
-                <Link 
-                  to="/stress-planner"
-                  className="p-2 rounded-full text-white/50 hover:text-amber-400 hover:bg-amber-500/20 transition-all"
-                  title="Interactive Stress Planner"
-                >
-                  <BeakerIcon className="w-4 h-4" />
-                </Link>
-                <Link 
-                  to="/bcp-generator"
-                  className="p-2 rounded-full text-white/50 hover:text-amber-400 hover:bg-amber-500/20 transition-all"
-                  title="BCP Generator"
-                >
-                  <ClipboardDocumentListIcon className="w-4 h-4" />
-                </Link>
-                <Link 
-                  to="/settings"
-                  className="p-2 rounded-full text-white/50 hover:text-white hover:bg-white/10 transition-all"
-                  title="Settings"
-                >
-                  <Cog6ToothIcon className="w-4 h-4" />
-                </Link>
+
               </div>
             </motion.div>
+            )}
+
+            <CommandCenterTopBar
+              commandMode={commandMode}
+              topBarExpanded={topBarExpanded}
+              setTopBarExpanded={setTopBarExpanded}
+              highFidelityScenarioId={highFidelityScenarioId}
+              setHighFidelityScenarioId={setHighFidelityScenarioId}
+              highFidelityScenarioIds={highFidelityScenarioIds}
+              selectedCountryCode={selectedCountryCode}
+              selectedCountryCity={selectedCountryCity}
+              showGoogle3dLayer={showGoogle3dLayer}
+              setShowGoogle3dLayer={setShowGoogle3dLayer}
+              showZoneRiskVector={showZoneRiskVector}
+              showH3Layer={showH3Layer}
+              setShowH3Layer={setShowH3Layer}
+              setShowZoneRiskVector={setShowZoneRiskVector}
+              showZoneRiskVectorPanel={showZoneRiskVectorPanel}
+              setShowZoneRiskVectorPanel={setShowZoneRiskVectorPanel}
+              zoneRiskVectorDimension={zoneRiskVectorDimension}
+              setZoneRiskVectorDimension={setZoneRiskVectorDimension}
+              zoneRiskVectorResolution={zoneRiskVectorResolution}
+              setZoneRiskVectorResolution={setZoneRiskVectorResolution}
+              timeSliderValue={timeSliderValue}
+              setTimeSliderValue={setTimeSliderValue}
+              h3Resolution={h3Resolution}
+              setH3Resolution={setH3Resolution}
+              showFloodLayer={showFloodLayer}
+              setShowFloodLayer={setShowFloodLayer}
+              showWindLayer={showWindLayer}
+              setShowWindLayer={setShowWindLayer}
+              showMetroFloodLayer={showMetroFloodLayer}
+              setShowMetroFloodLayer={setShowMetroFloodLayer}
+              showHeatLayer={showHeatLayer}
+              setShowHeatLayer={setShowHeatLayer}
+              showHeavyRainLayer={showHeavyRainLayer}
+              setShowHeavyRainLayer={setShowHeavyRainLayer}
+              showDroughtLayer={showDroughtLayer}
+              setShowDroughtLayer={setShowDroughtLayer}
+              showUvLayer={showUvLayer}
+              setShowUvLayer={setShowUvLayer}
+              showActiveIncidentsLayer={showActiveIncidentsLayer}
+              setShowActiveIncidentsLayer={setShowActiveIncidentsLayer}
+              showEarthquakeLayer={showEarthquakeLayer}
+              setShowEarthquakeLayer={setShowEarthquakeLayer}
+              earthquakeMinMagnitude={earthquakeMinMagnitude}
+              setEarthquakeMinMagnitude={setEarthquakeMinMagnitude}
+              floodDepthOverride={floodDepthOverride}
+              setFloodDepthOverride={setFloodDepthOverride}
+            />
             
             {/* TOP LEFT - Institutional KPIs (Board-level, € denominated) */}
-            {!commandMode && (
+            {/* CITY MODE: ClimateShield Local label with back button */}
+            {!commandMode && viewMode === 'city' && selectedCountryCity && (
+              <motion.div
+                className="absolute top-16 left-8 pointer-events-auto z-50"
+                initial={{ opacity: 0, x: -30 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -30 }}
+                transition={{ duration: 0.4 }}
+              >
+                <div className="flex items-center gap-2 mb-3">
+                  <button onClick={navigateBackToCountry} className="text-zinc-500 hover:text-zinc-200 transition-colors" title="Back to Country">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" /></svg>
+                  </button>
+                  <div>
+                    <div className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 flex items-center gap-1">
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" /></svg>
+                      ClimateShield Local
+                    </div>
+                    <div className="text-zinc-100 text-lg font-bold tracking-wide">{selectedCountryCity.name}</div>
+                    {selectedCountryName && <div className="text-zinc-600 text-xs">{selectedCountryName}</div>}
+                  </div>
+                </div>
+                <div className="text-zinc-500 text-[10px] px-2 py-1 rounded bg-zinc-800 border border-zinc-700 inline-block">
+                  Risk Assessment · Adaptation · Grants · Early Warning
+                </div>
+              </motion.div>
+            )}
+
+            {/* COUNTRY MODE: Country KPIs + City list */}
+            {!commandMode && viewMode === 'country' && countryRiskData && (
               <motion.div 
-                className="absolute top-8 left-8 pointer-events-auto"
+                className="absolute top-16 left-8 pointer-events-auto max-h-[80vh] overflow-y-auto"
+                initial={{ opacity: 0, x: -30 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -30 }}
+                transition={{ duration: 0.5 }}
+              >
+                {/* Country name + back button */}
+                <div className="flex items-center gap-2 mb-4">
+                  <button onClick={navigateToGlobal} className="text-zinc-500 hover:text-zinc-200 transition-colors" title="Back to Globe">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" /></svg>
+                  </button>
+                  <div>
+                    <div className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Country Mode</div>
+                    <div className="text-zinc-100 text-lg font-bold tracking-wide">{selectedCountryName}</div>
+                  </div>
+                </div>
+
+                {/* Country Risk Score */}
+                <div className="mb-4">
+                  <div className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-1">Country Risk Posture</div>
+                  <div className={`text-2xl font-bold tracking-wide ${
+                    countryRiskData.risk_level === 'critical' ? 'text-red-400/80' :
+                    countryRiskData.risk_level === 'high' ? 'text-orange-400/80' :
+                    countryRiskData.risk_level === 'medium' ? 'text-yellow-400/80' :
+                    'text-emerald-400/80'
+                  }`}>
+                    {(countryRiskData.composite_risk * 100).toFixed(0)}%
+                    <span className="text-sm ml-2 font-normal uppercase">{countryRiskData.risk_level}</span>
+                  </div>
+                </div>
+
+                {/* Country Stats */}
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <div>
+                    <div className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-0.5">Cities Monitored</div>
+                    <div className="text-zinc-100 text-lg font-extralight">
+                      {countryCitiesFromData.length > 0 ? countryCitiesFromData.length : countryRiskData.cities_count}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-0.5">Total Exposure</div>
+                    <div className="text-zinc-100 text-lg font-extralight">${countryRiskData.total_exposure_b}B</div>
+                  </div>
+                </div>
+
+                {/* Hazard Breakdown */}
+                {Object.keys(countryRiskData.hazards).length > 0 && (
+                  <div className="mb-4">
+                    <div className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-2">Hazard Breakdown</div>
+                    <div className="space-y-1.5">
+                      {Object.entries(countryRiskData.hazards).sort(([,a], [,b]) => b - a).map(([hazard, score]) => (
+                        <div key={hazard} className="flex items-center gap-2">
+                          <div className="text-zinc-500 text-[10px] capitalize w-20 truncate">{hazard}</div>
+                          <div className="flex-1 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${
+                                score > 0.7 ? 'bg-red-400/80' : score > 0.5 ? 'bg-orange-400/80' : score > 0.3 ? 'bg-yellow-400/80' : 'bg-emerald-400/80'
+                              }`}
+                              style={{ width: `${Math.min(score * 100, 100)}%` }}
+                            />
+                          </div>
+                          <div className="text-zinc-400 text-[10px] font-mono w-8 text-right">{(score * 100).toFixed(0)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Cities — prefer 20 from cities-by-country; fallback to API top_cities */}
+                {((countryRiskData.top_cities.length > 0) || (countryCitiesFromData.length > 0)) && (
+                  <div>
+                    <div className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-2">
+                      Major Cities {countryCitiesFromData.length > 0 ? '(by population)' : '(risk from system)'}
+                    </div>
+                    <div className="space-y-1">
+                      {(
+                        countryCitiesFromData.length > 0
+                          ? countryCitiesFromData
+                          : countryRiskData.top_cities
+                      ).slice(0, 20).map((city, i) => {
+                        const riskCity = city as { risk_score?: number; exposure_b?: number }
+                        // Build API risk lookup from top_cities
+                        const apiCity = countryRiskData.top_cities.find(
+                          tc => tc.name.toLowerCase() === city.name.toLowerCase()
+                        )
+                        let risk: number
+                        if (typeof riskCity.risk_score === 'number') {
+                          risk = riskCity.risk_score
+                        } else if (apiCity) {
+                          risk = apiCity.risk_score
+                        } else {
+                          // Deterministic variation based on city name (same hash as CesiumGlobe)
+                          let hash = 0
+                          for (let j = 0; j < city.name.length; j++) {
+                            hash = ((hash << 5) - hash + city.name.charCodeAt(j)) | 0
+                          }
+                          const offset = ((hash % 40) - 20) / 100
+                          risk = Math.max(0.05, Math.min(0.98, countryRiskData.composite_risk + offset))
+                        }
+                        return (
+                          <button
+                            key={city.id}
+                            onClick={() => navigateToCity(city)}
+                            className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-zinc-800 transition-colors group text-left"
+                          >
+                            <span className="text-zinc-600 text-[10px] w-4">{i + 1}</span>
+                            <span className="flex-1 text-zinc-300 text-xs group-hover:text-zinc-100 transition-colors truncate">{city.name}</span>
+                            <span className={`text-[10px] font-mono ${
+                              risk >= 0.75 ? 'text-red-400/80' : risk >= 0.55 ? 'text-orange-400/80' : risk >= 0.35 ? 'text-yellow-400/80' : 'text-emerald-400/80'
+                            }`}>{(risk * 100).toFixed(0)}%</span>
+                            {typeof riskCity.exposure_b === 'number' && (
+                              <span className="text-zinc-600 text-[10px]">${riskCity.exposure_b}B</span>
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Country Stress Test Button */}
+                <div className="mt-4 pt-3 border-t border-white/5">
+                  <button
+                    onClick={() => setShowStressTestSelector(true)}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-300 text-xs font-medium hover:bg-zinc-700 transition-all"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+                    </svg>
+                    Run Stress Test for {selectedCountryName}
+                  </button>
+                  {selectedStressTest && (
+                    <div className="mt-2 px-2 py-1.5 rounded bg-zinc-800 border border-zinc-700">
+                      <div className="flex items-center justify-between">
+                        <span className="text-zinc-500 text-[10px]">Active:</span>
+                        <span className="text-zinc-300 text-[10px] truncate ml-1">{selectedStressTest.name}</span>
+                      </div>
+                      <div className="flex items-center justify-between mt-0.5">
+                        <span className="text-zinc-500 text-[10px]">Severity:</span>
+                        <span className="text-zinc-300 text-[10px]">{(selectedStressTest.severity * 100).toFixed(0)}%</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+
+            {/* GLOBAL MODE: Standard KPIs (below breadcrumb) */}
+            {!commandMode && viewMode === 'global' && (
+              <motion.div 
+                className="absolute top-14 left-8 pointer-events-auto min-w-[220px]"
                 initial={{ opacity: 0, x: -30 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.8, delay: 0.3 }}
               >
               {/* GLOBAL RISK POSTURE - Hero metric */}
               <div className="mb-5">
-                <div className="text-white/30 text-[10px] uppercase tracking-[0.2em] mb-1">
+                <div className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-1">
                   Global Risk Posture
                 </div>
                 <div className={`text-2xl font-bold tracking-wide ${getRiskPosture(portfolio.weightedRisk).color}`}>
                   {getRiskPosture(portfolio.weightedRisk).level} {getRiskPosture(portfolio.weightedRisk).arrow}
+                </div>
+                <div className="text-zinc-500 text-[10px] mt-1" title="Data refresh / risk model">
+                  Data: {portfolio.dataSourcesFreshness ?? '—'} · Risk model v{portfolio.riskModelVersion ?? 1}
+                  {portfolio.riskModelVersion === 2 && ' (live)'}
                 </div>
               </div>
               
@@ -4184,20 +4617,21 @@ export default function CommandCenter() {
                   onMouseEnter={() => setMetricTooltip('exposure')}
                   onMouseLeave={() => setMetricTooltip(null)}
                 >
-                  <div className="text-white/30 text-[10px] uppercase tracking-[0.2em] mb-1 flex items-center gap-1">
+                  <div className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-1 flex items-center gap-1">
                     Capital at Risk (30d)
-                    <InformationCircleIcon className="w-3 h-3 text-white/20 flex-shrink-0" />
+                    <InformationCircleIcon className="w-3 h-3 text-zinc-600 flex-shrink-0" />
                   </div>
                   {metricTooltip === 'exposure' && (
-                    <div className="absolute left-0 bottom-full mb-1 z-[100] min-w-[240px] max-w-[300px] px-3 py-2 rounded-lg bg-slate-900/95 border border-white/15 text-white/90 text-xs shadow-xl pointer-events-auto">
+                    <div className="absolute left-0 bottom-full mb-1 z-[100] min-w-[240px] max-w-[300px] px-3 py-2 rounded-md bg-zinc-900/95 border border-zinc-700 text-zinc-100 text-xs shadow-xl pointer-events-auto">
                       30-day Capital at Risk (CaR). Based on simulated loss scenarios across all monitored assets.
+                      <span className="block mt-2 pt-2 border-t border-zinc-700 text-cyan-300/90">90% CI: {formatEur((portfolio.atRisk ?? 0) * 0.93, 'millions')}–{formatEur((portfolio.atRisk ?? 0) * 1.07, 'millions')} <span className="text-zinc-500">(illustrative)</span></span>
                     </div>
                   )}
                 </div>
-                <div className="text-white text-3xl font-extralight tracking-tight">
-                  €{Math.round(portfolio.atRisk || 420)}M
-                  <span className="text-red-400/70 text-sm ml-2">+€65M WoW</span>
+                <div className="text-zinc-100 text-3xl font-extralight tracking-tight">
+                  {formatEur(portfolio.atRisk ?? 0, 'millions')}
                 </div>
+                <div className="text-zinc-500 text-[10px] mt-0.5 font-mono">± ~7% interval</div>
               </div>
               
               {/* Stress Loss P95 */}
@@ -4207,36 +4641,52 @@ export default function CommandCenter() {
                   onMouseEnter={() => setMetricTooltip('atRisk')}
                   onMouseLeave={() => setMetricTooltip(null)}
                 >
-                  <div className="text-white/30 text-[10px] uppercase tracking-[0.2em] mb-1 flex items-center gap-1">
+                  <div className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-1 flex items-center gap-1">
                     Stress Loss (P95)
-                    <InformationCircleIcon className="w-3 h-3 text-white/20 flex-shrink-0" />
+                    <InformationCircleIcon className="w-3 h-3 text-zinc-600 flex-shrink-0" />
                   </div>
                   {metricTooltip === 'atRisk' && (
-                    <div className="absolute left-0 bottom-full mb-1 z-[100] min-w-[240px] max-w-[300px] px-3 py-2 rounded-lg bg-slate-900/95 border border-white/15 text-white/90 text-xs shadow-xl pointer-events-auto">
+                    <div className="absolute left-0 bottom-full mb-1 z-[100] min-w-[240px] max-w-[300px] px-3 py-2 rounded-md bg-zinc-900/95 border border-zinc-700 text-zinc-100 text-xs shadow-xl pointer-events-auto">
                       95th percentile loss under severe but plausible scenarios. Used for capital allocation decisions.
+                      <span className="block mt-2 pt-2 border-t border-zinc-700 text-cyan-300/90">90% CI: {formatEur(((typeof portfolio.totalExpectedLoss === 'number' && portfolio.totalExpectedLoss > 0) ? portfolio.totalExpectedLoss : (portfolio.atRisk ?? 0) * 0.75) * 0.9, 'millions')}–{formatEur(((typeof portfolio.totalExpectedLoss === 'number' && portfolio.totalExpectedLoss > 0) ? portfolio.totalExpectedLoss : (portfolio.atRisk ?? 0) * 0.75) * 1.1, 'millions')} <span className="text-zinc-500">(illustrative)</span></span>
                     </div>
                   )}
                 </div>
                 <div className={`text-2xl font-extralight ${getRiskColor(portfolio.weightedRisk)}`}>
-                  €{Math.round((portfolio.atRisk || 420) * 0.75)}M
-                  <span className="text-orange-400/70 text-sm ml-2">+11%</span>
+                  {formatEur(
+                    (typeof portfolio.totalExpectedLoss === 'number' && portfolio.totalExpectedLoss > 0)
+                      ? portfolio.totalExpectedLoss
+                      : (portfolio.atRisk ?? 0) * 0.75,
+                    'millions'
+                  )}
                 </div>
+                <div className="text-zinc-500 text-[10px] mt-0.5 font-mono">± ~10% interval</div>
               </div>
               
               {/* Risk Velocity */}
               <div className="mb-4">
-                <div className="text-white/30 text-[10px] uppercase tracking-[0.2em] mb-1">
+                <div className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-1">
                   Risk Velocity
                 </div>
-                <div className={`text-xl font-extralight ${portfolio.weightedRisk > 0.5 ? 'text-red-400' : 'text-emerald-400'}`}>
-                  {portfolio.weightedRisk > 0.5 ? '+22%' : '-5%'}
-                  <span className="text-white/30 text-sm ml-2">MoM</span>
+                <div className="text-xl font-extralight text-zinc-500">
+                  {typeof portfolio.riskVelocityMomPct === 'number'
+                    ? `${portfolio.riskVelocityMomPct >= 0 ? '+' : ''}${Number(portfolio.riskVelocityMomPct).toFixed(1)}% MoM`
+                    : '—'}
+                  {typeof portfolio.riskVelocityMomPct === 'number' && portfolio.riskVelocityMomPct === 0 && (
+                    <span className="text-zinc-600 text-sm ml-2">(no change)</span>
+                  )}
+                  {typeof portfolio.riskVelocityMomPct !== 'number' && (
+                    <span className="text-zinc-600 text-sm ml-2">MoM (from posture snapshots)</span>
+                  )}
                 </div>
+                {typeof portfolio.riskVelocityMomPct !== 'number' && (
+                  <p className="text-zinc-600 text-[10px] mt-1">Run stress tests or save posture to see change vs last month.</p>
+                )}
               </div>
               
               {/* Risk Level Indicators - Clickable */}
               <div className="flex items-center justify-between mb-2">
-                <div className="text-white/30 text-[10px] uppercase tracking-[0.2em]">
+                <div className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">
                   Risk Zones
                 </div>
               </div>
@@ -4247,8 +4697,9 @@ export default function CommandCenter() {
                   label="Critical"
                   color="red"
                   zones={availableZones.filter(z => z.risk > 0.8)}
+                  countOverride={portfolio.criticalCount}
                   isExpanded={expandedRiskLevel === 'critical'}
-                  onToggle={() => setExpandedRiskLevel(expandedRiskLevel === 'critical' ? null : 'critical')}
+                  onToggle={() => setExpandedRiskLevel('critical')}
                   onZoneClick={(id) => { handleHotspotFocus(id) }}
                   onZoneLinksClick={(id) => {
                     handleHotspotFocus(id)
@@ -4257,7 +4708,7 @@ export default function CommandCenter() {
                   onHistoricalSelect={(eventId) => {
                     setSelectedHistoricalEvent(eventId)
                     setShowHistoricalPanel(true)
-                    setExpandedRiskLevel(null)
+                    setExpandedRiskLevel('critical')
                   }}
                   onOpenDigitalTwin={(cityId, cityName, eventId, eventName, eventCategory, timeHorizon) => {
                     // Find city coordinates from affectedRegions or use default
@@ -4283,7 +4734,7 @@ export default function CommandCenter() {
                     setSelectedDigitalTwinEventCategory(eventCategory || null)
                     setSelectedDigitalTwinTimeHorizon(timeHorizon || null)
                     setShowDigitalTwin(true)
-                    setExpandedRiskLevel(null)
+                    setExpandedRiskLevel('critical')
                   }}
                 />
                 {/* High */}
@@ -4292,8 +4743,9 @@ export default function CommandCenter() {
                   label="High"
                   color="orange"
                   zones={availableZones.filter(z => z.risk > 0.6 && z.risk <= 0.8)}
+                  countOverride={portfolio.highCount}
                   isExpanded={expandedRiskLevel === 'high'}
-                  onToggle={() => setExpandedRiskLevel(expandedRiskLevel === 'high' ? null : 'high')}
+                  onToggle={() => setExpandedRiskLevel(expandedRiskLevel === 'high' ? 'critical' : 'high')}
                   onZoneClick={(id) => { handleHotspotFocus(id) }}
                   onZoneLinksClick={(id) => {
                     handleHotspotFocus(id)
@@ -4302,7 +4754,7 @@ export default function CommandCenter() {
                   onHistoricalSelect={(eventId) => {
                     setSelectedHistoricalEvent(eventId)
                     setShowHistoricalPanel(true)
-                    setExpandedRiskLevel(null)
+                    setExpandedRiskLevel('critical')
                   }}
                   onOpenDigitalTwin={(cityId, cityName, eventId, eventName, eventCategory, timeHorizon) => {
                     const cityCoords = findCityCoordinates(cityId)
@@ -4324,7 +4776,7 @@ export default function CommandCenter() {
                     setSelectedDigitalTwinEventCategory(eventCategory || null)
                     setSelectedDigitalTwinTimeHorizon(timeHorizon || null)
                     setShowDigitalTwin(true)
-                    setExpandedRiskLevel(null)
+                    setExpandedRiskLevel('critical')
                   }}
                 />
                 {/* Medium */}
@@ -4333,8 +4785,9 @@ export default function CommandCenter() {
                   label="Medium"
                   color="yellow"
                   zones={availableZones.filter(z => z.risk > 0.4 && z.risk <= 0.6)}
+                  countOverride={portfolio.mediumCount}
                   isExpanded={expandedRiskLevel === 'medium'}
-                  onToggle={() => setExpandedRiskLevel(expandedRiskLevel === 'medium' ? null : 'medium')}
+                  onToggle={() => setExpandedRiskLevel(expandedRiskLevel === 'medium' ? 'critical' : 'medium')}
                   onZoneClick={(id) => { handleHotspotFocus(id) }}
                   onZoneLinksClick={(id) => {
                     handleHotspotFocus(id)
@@ -4343,7 +4796,7 @@ export default function CommandCenter() {
                   onHistoricalSelect={(eventId) => {
                     setSelectedHistoricalEvent(eventId)
                     setShowHistoricalPanel(true)
-                    setExpandedRiskLevel(null)
+                    setExpandedRiskLevel('critical')
                   }}
                   onOpenDigitalTwin={(cityId, cityName, eventId, eventName, eventCategory, timeHorizon) => {
                     const cityCoords = findCityCoordinates(cityId)
@@ -4365,7 +4818,7 @@ export default function CommandCenter() {
                     setSelectedDigitalTwinEventCategory(eventCategory || null)
                     setSelectedDigitalTwinTimeHorizon(timeHorizon || null)
                     setShowDigitalTwin(true)
-                    setExpandedRiskLevel(null)
+                    setExpandedRiskLevel('critical')
                   }}
                 />
                 {/* Low */}
@@ -4374,8 +4827,9 @@ export default function CommandCenter() {
                   label="Low"
                   color="green"
                   zones={availableZones.filter(z => z.risk <= 0.4)}
+                  countOverride={portfolio.lowCount}
                   isExpanded={expandedRiskLevel === 'low'}
-                  onToggle={() => setExpandedRiskLevel(expandedRiskLevel === 'low' ? null : 'low')}
+                  onToggle={() => setExpandedRiskLevel(expandedRiskLevel === 'low' ? 'critical' : 'low')}
                   onZoneClick={(id) => { handleHotspotFocus(id) }}
                   onZoneLinksClick={(id) => {
                     handleHotspotFocus(id)
@@ -4384,7 +4838,7 @@ export default function CommandCenter() {
                   onHistoricalSelect={(eventId) => {
                     setSelectedHistoricalEvent(eventId)
                     setShowHistoricalPanel(true)
-                    setExpandedRiskLevel(null)
+                    setExpandedRiskLevel('critical')
                   }}
                   onOpenDigitalTwin={(cityId, cityName, eventId, eventName, eventCategory, timeHorizon) => {
                     const cityCoords = findCityCoordinates(cityId)
@@ -4406,7 +4860,7 @@ export default function CommandCenter() {
                     setSelectedDigitalTwinEventCategory(eventCategory || null)
                     setSelectedDigitalTwinTimeHorizon(timeHorizon || null)
                     setShowDigitalTwin(true)
-                    setExpandedRiskLevel(null)
+                    setExpandedRiskLevel('critical')
                   }}
                 />
               </div>
@@ -4419,11 +4873,11 @@ export default function CommandCenter() {
             <AnimatePresence>
               {activeScenario && !commandMode && (
                 <motion.div
-                  className="absolute top-8 right-8 pointer-events-auto"
-                  initial={{ opacity: 0, x: 50, scale: 0.95 }}
-                  animate={{ opacity: 1, x: 0, scale: 1 }}
-                  exit={{ opacity: 0, x: 50, scale: 0.95 }}
-                  transition={{ duration: 0.4 }}
+                  className="absolute top-8 right-8 pointer-events-auto panel-glow-quantum-violet rounded-lg"
+                  initial={{ opacity: 0, scale: 0.98 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.98 }}
+                  transition={{ duration: 0.3, ease: 'easeOut' }}
                 >
                   <UnifiedStressTestPanel
                     activeScenario={activeScenario}
@@ -4500,48 +4954,136 @@ export default function CommandCenter() {
               )}
             </AnimatePresence>
 
-            {/* BOTTOM BAR - one row: [Live · time] | [Scenario Timeline when active] | [1-8 Jump …] */}
+            {/* BOTTOM BAR - one row: [Live · time] | [Scenario Timeline when active] | [1-8 Jump …] | Omniverse */}
             <motion.div
-              className="absolute bottom-8 left-8 right-8 flex items-end justify-between gap-4 pointer-events-none z-50"
+              className="absolute bottom-8 left-0 right-0 flex items-end justify-between gap-2 px-6 pointer-events-none z-50"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.6 }}
             >
-              {/* LEFT: NIM/E2CC/DFM + Overseer + Agents + Live + time */}
+              {/* LEFT: Agent Alerts + Full assessment + NIM/E2CC/DFM + Overseer + Agents + Live + time */}
               {!commandMode ? (
                 <div className="pointer-events-auto flex flex-col items-start gap-2 shrink-0">
-                  <div className="flex items-center gap-2 px-2 py-1 rounded bg-white/5 border border-white/10">
+                  <div className="w-[340px] mb-1">
+                    <AlertFeedPanel compact title="Agent Alerts" limit={6} />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const params = new URLSearchParams()
+                        if (selectedCountryCode) params.set('country', selectedCountryCode)
+                        if (selectedCountryName) params.set('country_name', selectedCountryName)
+                        if (selectedCountryCity?.id) params.set('city_id', String(selectedCountryCity.id))
+                        if (selectedCountryCity?.name) params.set('city', selectedCountryCity.name)
+                        const qs = params.toString()
+                        const url = `${window.location.origin}/unified-stress${qs ? `?${qs}` : ''}`
+                        window.open(url, '_blank', 'noopener,noreferrer')
+                      }}
+                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-600/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-600/30 text-[10px] font-medium transition-colors"
+                      title="Run full stress assessment for this location (opens in new window)"
+                    >
+                      <DocumentTextIcon className="w-3.5 h-3.5 shrink-0" />
+                      Full assessment
+                    </button>
+                    <span className="text-zinc-600">·</span>
+                    <div className="flex items-center gap-1.5">
+                      <div className={`w-1.5 h-1.5 rounded-full ${wsStatus === 'connected' ? 'bg-emerald-500' : 'bg-red-500/50'} animate-pulse`} />
+                      <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">{wsStatus === 'connected' ? 'Live' : 'Offline'}</span>
+                    </div>
+                    <span className="text-zinc-600">·</span>
+                    <span className="text-zinc-500 text-[10px] font-mono tabular-nums">{new Date().toLocaleTimeString()}</span>
+                  </div>
+                  <div className="flex items-center gap-2 px-2 py-1 rounded bg-zinc-800 border border-zinc-700">
                     {nimHealth?.fourcastnet?.status === 'healthy' && (
-                      <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" title="Stress tests use FourCastNet NIM on GPU">GPU mode</span>
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-emerald-500/20 text-emerald-400/80 border border-emerald-500/30" title="Stress tests use FourCastNet NIM on GPU">GPU mode</span>
                     )}
-                    <span className="text-[10px] text-white/50" title="FourCastNet NIM on GPU">NIM:</span>
-                    <span className={`text-[10px] ${nimHealth?.fourcastnet?.status === 'healthy' ? 'text-emerald-400' : 'text-amber-500/80'}`}>{nimHealth?.fourcastnet?.status === 'healthy' ? '✓ FourCastNet' : (nimHealth ? '✗' : '…')}</span>
-                    <span className="text-white/20">|</span>
-                    <span className="text-[10px] text-white/50" title="Earth-2 Command Center">E2CC:</span>
-                    <span className={`text-[10px] ${omniverseStatus?.e2cc_configured ? 'text-emerald-400' : 'text-amber-500/80'}`}>{omniverseStatus ? (omniverseStatus.e2cc_configured ? '✓' : 'not deployed') : '…'}</span>
-                    <span className="text-white/20">|</span>
-                    <span className="text-[10px] text-white/50">DFM:</span>
-                    <span className={`text-[10px] ${dfmStatus?.use_data_federation_pipelines ? 'text-emerald-400' : 'text-white/40'}`}>{dfmStatus ? (dfmStatus.use_data_federation_pipelines ? 'on' : 'off') : '…'}</span>
-                    <button type="button" onClick={handleTestWeatherNim} disabled={weatherTestLoading || nimHealth?.fourcastnet?.status !== 'healthy'} className="ml-1 px-2 py-0.5 rounded text-[10px] bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 disabled:opacity-50 disabled:cursor-not-allowed" title="Run weather_forecast pipeline (FourCastNet NIM on GPU)">
+                    <span className="text-[10px] text-zinc-500" title="FourCastNet NIM on GPU">NIM:</span>
+                    <span className={`text-[10px] ${nimHealth?.fourcastnet?.status === 'healthy' ? 'text-emerald-400/80' : 'text-amber-500/80'}`}>{nimHealth?.fourcastnet?.status === 'healthy' ? '✓ FourCastNet' : (nimHealth ? '✗' : '…')}</span>
+                    <span className="text-zinc-600">|</span>
+                    <span className="text-[10px] text-zinc-500" title="Earth-2 Command Center">E2CC:</span>
+                    <span className={`text-[10px] ${omniverseStatus?.e2cc_configured ? 'text-emerald-400/80' : 'text-amber-500/80'}`}>{omniverseStatus ? (omniverseStatus.e2cc_configured ? '✓' : 'not deployed') : '…'}</span>
+                    <span className="text-zinc-600">|</span>
+                    <span className="text-[10px] text-zinc-500">DFM:</span>
+                    <span className={`text-[10px] ${dfmStatus?.use_data_federation_pipelines ? 'text-emerald-400/80' : 'text-zinc-500'}`}>{dfmStatus ? (dfmStatus.use_data_federation_pipelines ? 'on' : 'off') : '…'}</span>
+                    <button type="button" onClick={handleTestWeatherNim} disabled={weatherTestLoading || nimHealth?.fourcastnet?.status !== 'healthy'} className="ml-1 px-2 py-0.5 rounded text-[10px] bg-amber-500/20 text-amber-400/80 hover:bg-amber-500/30 disabled:opacity-50 disabled:cursor-not-allowed" title="Run weather_forecast pipeline (FourCastNet NIM on GPU)">
                       {weatherTestLoading ? '…' : 'Test weather (NIM)'}
                     </button>
                     {weatherTestResult && <span className="text-[10px] text-emerald-400/90 max-w-[140px] truncate" title={weatherTestResult}>{weatherTestResult}</span>}
                   </div>
+                  {weatherForecastData && weatherForecastData.forecasts.length > 0 && (
+                    <div className="mt-2 rounded border border-emerald-500/30 bg-zinc-900/95 px-3 py-2 max-w-md">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[11px] font-medium text-emerald-400/90">FourCastNet NIM — данные прогноза</span>
+                        <button type="button" onClick={() => setWeatherForecastData(null)} className="text-zinc-500 hover:text-zinc-300 text-[10px] px-1" aria-label="Закрыть">✕</button>
+                      </div>
+                      <p className="text-[10px] text-zinc-500 mb-2">Широта {weatherForecastData.latitude.toFixed(2)}°, долгота {weatherForecastData.longitude.toFixed(2)}° · {weatherForecastData.model}</p>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-[10px] text-left">
+                          <thead>
+                            <tr className="border-b border-zinc-700 text-zinc-400">
+                              <th className="py-1 pr-2">Шаг</th>
+                              <th className="py-1 pr-2">Время</th>
+                              <th className="py-1 pr-2">T °C</th>
+                              <th className="py-1 pr-2">Осадки мм</th>
+                              <th className="py-1">Ветер м/с</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {weatherForecastData.forecasts.map((row, i) => {
+                              const tC = row.temperature_k != null ? (row.temperature_k - 273.15).toFixed(1) : '—'
+                              const wind = (row.wind_u_ms != null && row.wind_v_ms != null)
+                                ? (Math.sqrt(row.wind_u_ms ** 2 + row.wind_v_ms ** 2)).toFixed(1)
+                                : (row.wind_u_ms != null || row.wind_v_ms != null ? Number(row.wind_u_ms ?? row.wind_v_ms ?? 0).toFixed(1) : '—')
+                              const timeStr = row.forecast_time ? new Date(row.forecast_time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : `+${row.lead_hours ?? i * 6}h`
+                              return (
+                                <tr key={i} className="border-b border-zinc-800 text-zinc-300">
+                                  <td className="py-0.5 pr-2">{i + 1}</td>
+                                  <td className="py-0.5 pr-2">{timeStr}</td>
+                                  <td className="py-0.5 pr-2">{tC}</td>
+                                  <td className="py-0.5 pr-2">{row.precipitation_mm != null ? Number(row.precipitation_mm).toFixed(2) : '—'}</td>
+                                  <td className="py-0.5">{wind}</td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                   <div className="flex items-center gap-3 flex-wrap">
                     <SystemOverseerWidget compact />
-                    <span className="text-white/15">·</span>
+                    <span className="text-zinc-600">·</span>
                     <AgentMonitoringWidget compact />
-                    <span className="text-white/15">·</span>
-                    <div className="flex items-center gap-2">
-                      <div className={`w-1.5 h-1.5 rounded-full ${
-                        wsStatus === 'connected' ? 'bg-emerald-500/50' : 'bg-red-500/50'
-                      } animate-pulse`} />
-                      <span className="text-white/20 text-[10px] uppercase tracking-wider">
-                        {wsStatus === 'connected' ? 'Live' : 'Offline'}
-                      </span>
-                    </div>
-                    <span className="text-white/15">·</span>
-                    <span className="text-white/15 text-[10px]">{new Date().toLocaleTimeString()}</span>
+                    <span className="text-zinc-600">·</span>
+                    <SendToARINButton
+                      sourceModule="command_center"
+                      objectType="portfolio"
+                      objectId="portfolio_global"
+                      inputData={{
+                        total_exposure_b: portfolio?.totalExposure,
+                        at_risk_b: portfolio?.atRisk,
+                        critical_count: portfolio?.criticalCount,
+                      }}
+                      exportEntityId={selectedZone ? `zone_${selectedZone.name?.toLowerCase().replace(/\s+/g, '_')}_${activeScenario?.type || 'general'}` : 'portfolio_global'}
+                      exportEntityType={selectedZone ? 'zone' : 'portfolio'}
+                      exportAnalysisType="global_risk_assessment"
+                      exportData={{
+                        risk_score: (portfolio?.weightedRisk ?? 0.5) * 100,
+                        risk_level: (portfolio?.weightedRisk ?? 0) >= 0.7 ? 'HIGH' : (portfolio?.weightedRisk ?? 0) >= 0.5 ? 'MEDIUM' : 'LOW',
+                        summary: `Command Center: ${portfolio?.totalExposure ?? 0}B exposure, ${portfolio?.criticalCount ?? 0} critical.`,
+                        recommendations: ['Review hotspots', 'Update risk limits'],
+                        indicators: {
+                          total_exposure_b: portfolio?.totalExposure,
+                          at_risk_b: portfolio?.atRisk,
+                          critical_count: portfolio?.criticalCount,
+                        },
+                      }}
+                      captureRef={containerRef}
+                      dataSources={['FEMA', 'NOAA', 'CMIP6', 'local_sensors']}
+                      size="sm"
+                      compactPill
+                    />
                   </div>
                 </div>
               ) : (
@@ -4556,7 +5098,7 @@ export default function CommandCenter() {
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: 20 }}
-                      className="mb-4 px-6 py-3 bg-black/50 backdrop-blur-md rounded-xl border border-white/10"
+                      className="mb-4 px-6 py-3 bg-black/50 rounded-md border border-zinc-700"
                     >
                       <div className="flex items-center gap-8">
                         {['T0', 'T+1Y', 'T+2Y', 'T+3Y', 'T+5Y'].map((marker, i) => {
@@ -4565,10 +5107,10 @@ export default function CommandCenter() {
                             <div key={marker} className="flex flex-col items-center">
                               <div
                                 className={`w-3 h-3 rounded-full mb-1 transition-all ${
-                                  isActive ? 'bg-amber-400 ring-2 ring-amber-400/30' : 'bg-white/20 hover:bg-white/40'
+                                  isActive ? 'bg-amber-400/80 ring-2 ring-amber-400/30' : 'bg-white/20 hover:bg-white/40'
                                 }`}
                               />
-                              <span className={`text-[10px] ${isActive ? 'text-amber-400' : 'text-white/30'}`}>
+                              <span className={`text-[10px] ${isActive ? 'text-amber-400/80' : 'text-zinc-600'}`}>
                                 {marker}
                               </span>
                             </div>
@@ -4576,7 +5118,7 @@ export default function CommandCenter() {
                         })}
                       </div>
                       <div className="relative mt-1 -mb-1">
-                        <div className="absolute top-0 left-0 right-0 h-0.5 bg-white/10" style={{ marginLeft: '6px', marginRight: '6px', top: '-18px' }} />
+                        <div className="absolute top-0 left-0 right-0 h-0.5 bg-zinc-700" style={{ marginLeft: '6px', marginRight: '6px', top: '-18px' }} />
                         <motion.div
                           className="absolute top-0 left-0 h-0.5 bg-gradient-to-r from-amber-300/40 to-transparent"
                           style={{ marginLeft: '6px', top: '-18px' }}
@@ -4590,51 +5132,45 @@ export default function CommandCenter() {
                 </AnimatePresence>
               </div>
 
-              {/* RIGHT: Keyboard shortcuts */}
+              {/* RIGHT: ARIN · Live · time + Keyboard shortcuts + Omniverse */}
               <div className="pointer-events-none shrink-0">
-                <div className="flex gap-3 px-4 py-2.5 bg-black/60 backdrop-blur-md rounded-lg border border-white/10 pointer-events-auto">
+                <div className="flex items-center gap-3 px-4 py-2.5 bg-black/60 rounded-md border border-zinc-700 pointer-events-auto">
+                  <div className="flex items-center gap-2">
+                    <span className="text-zinc-600">·</span>
+                    <ARINVerdictBadge entityId={selectedZone ? `zone_${selectedZone.name?.toLowerCase().replace(/\s+/g, '_')}_${activeScenario?.type || 'general'}` : 'portfolio_global'} compact />
+                  </div>
                   <div className="flex items-center gap-1.5">
                     <Keycap>1-8</Keycap>
-                    <span className="text-white/50 text-[10px]">Jump</span>
+                    <span className="text-zinc-500 text-[10px]">Jump</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <Keycap>Z</Keycap>
-                    <span className="text-white/50 text-[10px]">Zones</span>
+                    <span className="text-zinc-500 text-[10px]">Zones</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <Keycap>S</Keycap>
-                    <span className="text-white/50 text-[10px]">Stress</span>
+                    <span className="text-zinc-500 text-[10px]">Stress</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <Keycap>D</Keycap>
-                    <span className="text-white/50 text-[10px]">Twin</span>
+                    <span className="text-zinc-500 text-[10px]">Twin</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <Keycap>A</Keycap>
-                    <span className="text-white/50 text-[10px]">Agents</span>
+                    <span className="text-zinc-500 text-[10px]">Agents</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <Keycap>R</Keycap>
-                    <span className="text-white/40 text-[10px]">Reset</span>
+                    <span className="text-zinc-500 text-[10px]">Reset</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <Keycap>ESC</Keycap>
-                    <span className="text-white/40 text-[10px]">Back</span>
+                    <span className="text-zinc-500 text-[10px]">Back</span>
                   </div>
-                  <span className="pointer-events-auto">
-                    <Link
-                      to="/nvidia-services"
-                      className="flex items-center gap-1.5 text-white/40 hover:text-emerald-400/80 text-[10px] transition-colors"
-                      title="NVIDIA Services status (live from GET /api/v1/health/nvidia)"
-                    >
-                      <ServerStackIcon className="w-3.5 h-3.5" />
-                      <span>NVIDIA</span>
-                    </Link>
-                  </span>
                   <span className="pointer-events-auto" title={omniverseStatus?.e2cc_use_port_forward ? 'Open E2CC. If tab is empty, on Mac: brev port-forward saaaliance → 8010, 8010' : 'Open Earth-2 Command Center'}>
                     <button
                       onClick={() => handleOmniverseOpen()}
-                      className="flex items-center gap-1.5 text-white/40 hover:text-amber-400/80 text-[10px] transition-colors"
+                      className="flex items-center gap-1.5 text-zinc-500 hover:text-amber-400/80 text-[10px] transition-colors"
                     >
                       <span>Omniverse</span>
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -4646,55 +5182,85 @@ export default function CommandCenter() {
               </div>
             </motion.div>
 
-            {/* RIGHT SIDE - Recent Activity (real data: risk alerts + platform events) */}
+            {/* Under top bar (quick icons / layers) - Active Incidents table, collapsed by default */}
+            {showActiveIncidentsLayer && (
+              <motion.div
+                className="absolute top-20 right-8 pointer-events-auto z-50 w-[532px]"
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <ActiveIncidentsPanel
+                  visible={showActiveIncidentsLayer}
+                  defaultCollapsed={true}
+                  maxHeight="280px"
+                />
+              </motion.div>
+            )}
+
+
+            {/* RIGHT SIDE - AI Assistant (same icon as other pages) above Recent Activity */}
             <motion.div 
-              className="absolute bottom-24 right-8 pointer-events-none min-w-[180px]"
+              className="absolute bottom-24 right-8 min-w-[180px]"
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.8, delay: 0.6 }}
             >
-              <div className="text-right">
-                <div className="text-white/30 text-[9px] uppercase tracking-wider mb-2">Recent Activity</div>
+              <div className="flex flex-col items-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => aiAssistantRef.current?.open()}
+                  className="pointer-events-auto p-3 rounded-md bg-zinc-800 border border-zinc-600 text-zinc-400 shadow-lg hover:border-zinc-500 hover:bg-zinc-700 transition-all"
+                  title="Open AI Assistant"
+                >
+                  <CpuChipIcon className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="text-right pointer-events-none mt-3">
+                <div className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-2">Recent Activity</div>
                 {(recentAlerts.length > 0 || recentEvents.length > 0) ? (
                   <div className="space-y-1.5">
-                    <AnimatePresence mode="popLayout">
+                    <AnimatePresence key="recent-alerts" mode="popLayout">
                       {recentAlerts.slice(0, 2).map((alert, i) => (
                         <motion.div
-                          key={`alert-${alert.hotspot_id}-${alert.timestamp}`}
+                          key={`alert-${i}-${alert.hotspot_id}-${alert.timestamp}`}
                           initial={{ opacity: 0, x: 20 }}
                           animate={{ opacity: 1 - i * 0.2, x: 0 }}
                           exit={{ opacity: 0, x: 20 }}
                           className="flex items-center gap-2 text-[11px] justify-end"
                         >
-                          <span className="text-white/50 capitalize truncate max-w-[80px]">{alert.hotspot_id}</span>
-                          <span className="text-white/70 font-mono">{(alert.risk_score * 100).toFixed(0)}%</span>
-                          <span className={`font-medium ${alert.risk_score > alert.previous_score ? 'text-red-400' : 'text-emerald-400'}`}>
+                          <span className="text-zinc-500 capitalize truncate max-w-[80px]">{alert.hotspot_id}</span>
+                          <span className="text-zinc-300 font-mono">{(alert.risk_score * 100).toFixed(0)}%</span>
+                          <span className={`font-medium ${alert.risk_score > alert.previous_score ? 'text-red-400/80' : 'text-emerald-400/80'}`}>
                             {alert.risk_score > alert.previous_score ? '↑' : '↓'}
                           </span>
                         </motion.div>
                       ))}
                     </AnimatePresence>
-                    {recentEvents.slice(0, 3).map((ev) => (
+                    {recentEvents.slice(0, 3).map((ev, i) => (
                       <motion.div
-                        key={ev.event_id}
+                        key={ev.event_id ?? `event-${i}-${ev.timestamp}`}
                         initial={{ opacity: 0, x: 20 }}
                         animate={{ opacity: 1, x: 0 }}
                         className="flex items-center gap-2 text-[11px] justify-end"
                       >
-                        <span className="text-white/50 truncate max-w-[100px]" title={ev.event_type}>
+                        <span className="text-zinc-500 truncate max-w-[100px]" title={ev.event_type}>
                           {ev.data?.name || ev.event_type.replace(/_/g, ' ').replace(/\./g, ': ')}
                         </span>
-                        <span className="text-white/40 text-[10px]">
+                        <span className="text-zinc-500 text-[10px]">
                           {formatRecentTime(ev.timestamp)}
                         </span>
                       </motion.div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-[11px] text-white/40 italic">No recent activity</p>
+                  <p className="text-[11px] text-zinc-500 italic">No recent activity</p>
                 )}
               </div>
             </motion.div>
+
+            {/* AI Assistant — same icon as other pages; panel opens at top so not under bottom bar */}
+            <AIAssistant ref={aiAssistantRef} floatingButton={false} placement="top" />
 
             {/* ============================================ */}
             {/* CONTEXT PANEL - Appears on hotspot focus */}
@@ -4702,25 +5268,26 @@ export default function CommandCenter() {
             <AnimatePresence>
               {focusedHotspot && (
                 <motion.div 
-                  className="absolute top-0 right-0 bottom-0 w-80 pointer-events-auto"
-                  initial={{ opacity: 0, x: 100 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 100 }}
-                  transition={{ duration: 0.4, ease: 'easeOut' }}
+                  className="absolute top-0 right-0 bottom-0 w-80 pointer-events-auto panel-glow-quantum rounded-l-lg"
+                  initial={{ opacity: 0, scale: 0.98 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.98 }}
+                  transition={{ duration: 0.3, ease: 'easeOut' }}
+                  style={{ transformOrigin: 'right center' }}
                 >
                   {/* Gradient fade on left edge */}
                   <div className="absolute inset-y-0 left-0 w-16 bg-gradient-to-r from-transparent to-black/60" />
                   
                   {/* Panel content */}
-                  <div className="absolute inset-0 bg-black/60 backdrop-blur-xl p-6 overflow-y-auto">
+                  <div className="absolute inset-0 bg-black/60 p-6 overflow-y-auto">
                     {/* Close hint */}
                     <div className="flex justify-between items-center mb-6">
-                      <div className="text-white/30 text-[10px] uppercase tracking-wider">
+                      <div className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">
                         Focused Zone
                       </div>
                       <button
                         onClick={() => handleHotspotFocus(null)}
-                        className="text-white/30 hover:text-white transition-colors"
+                        className="text-zinc-600 hover:text-zinc-100 transition-colors"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -4730,10 +5297,10 @@ export default function CommandCenter() {
                     
                     {/* Zone name */}
                     <div className="mb-6">
-                      <h2 className="text-white text-xl font-light mb-1">
+                      <h2 className="text-zinc-100 text-xl font-display font-light mb-1">
                         {focusedHotspot.name}
                       </h2>
-                      <div className="text-white/40 text-sm">
+                      <div className="text-zinc-500 text-sm">
                         {focusedHotspot.region}
                       </div>
                     </div>
@@ -4744,31 +5311,31 @@ export default function CommandCenter() {
                         <span className={`text-5xl font-extralight ${getRiskColor(focusedHotspot.risk)}`}>
                           {(focusedHotspot.risk * 100).toFixed(0)}
                         </span>
-                        <span className="text-white/30 text-lg mb-2">%</span>
+                        <span className="text-zinc-600 text-lg mb-2">%</span>
                         <span className={`text-sm mb-2 ${
-                          focusedHotspot.trend === 'up' ? 'text-red-400' : 'text-emerald-400'
+                          focusedHotspot.trend === 'up' ? 'text-red-400/80' : 'text-emerald-400/80'
                         }`}>
                           {focusedHotspot.trend === 'up' ? '↑' : '↓'}
                         </span>
                       </div>
-                      <div className="text-white/30 text-[10px] uppercase tracking-wider mt-1">
+                      <div className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mt-1">
                         Composite Risk Score
                       </div>
                     </div>
                     
                     {/* Exposure */}
                     <div className="mb-8">
-                      <div className="text-white/30 text-[10px] uppercase tracking-wider mb-2">
+                      <div className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-2">
                         Exposure
                       </div>
-                      <div className="text-white text-2xl font-extralight">
+                      <div className="text-zinc-100 text-2xl font-extralight">
                         ${formatBillions(focusedHotspot.exposure)}
                       </div>
                     </div>
                     
                     {/* Risk factors — each expands to show registry scenarios for that factor */}
                     <div className="mb-8">
-                      <div className="text-white/30 text-[10px] uppercase tracking-wider mb-4">
+                      <div className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-4">
                         Risk Factors
                       </div>
                       <div className="space-y-2">
@@ -4777,16 +5344,16 @@ export default function CommandCenter() {
                           const scenarioIds = FACTOR_TO_SCENARIO_IDS[key] ?? []
                           const scenarios = scenarioIds.map(id => registryScenariosFlat.find(s => s.id === id)).filter((s): s is NonNullable<typeof s> => Boolean(s))
                           return (
-                            <div key={key} className="border border-amber-500/10 rounded-lg overflow-hidden">
+                            <div key={key} className="border border-zinc-700 rounded-md overflow-hidden">
                               <button
                                 onClick={() => setExpandedFactorIds(prev => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n })}
-                                className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-amber-500/10 transition-colors"
+                                className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-zinc-800 transition-colors"
                               >
-                                <svg className={`w-3.5 h-3.5 text-white/40 shrink-0 transition-transform ${isExp ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                                <svg className={`w-3.5 h-3.5 text-zinc-500 shrink-0 transition-transform ${isExp ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                                 <div className="flex-1 min-w-0">
                                   <div className="flex justify-between text-xs">
-                                    <span className="text-white/70 capitalize">{key}</span>
-                                    <span className="font-mono text-white/80 shrink-0 ml-2">{(value * 100).toFixed(0)}%</span>
+                                    <span className="text-zinc-300 capitalize">{key}</span>
+                                    <span className="font-mono text-zinc-200 shrink-0 ml-2">{(value * 100).toFixed(0)}%</span>
                                   </div>
                                   <div className="h-1 bg-amber-500/15 rounded-full overflow-hidden mt-1">
                                     <motion.div className="h-full rounded-full bg-amber-400/65" initial={{ width: 0 }} animate={{ width: `${value * 100}%` }} transition={{ duration: 0.4 }} />
@@ -4794,18 +5361,18 @@ export default function CommandCenter() {
                                 </div>
                               </button>
                               {isExp && (
-                                <div className="border-t border-amber-500/10 px-3 pb-3 pt-2">
-                                  <div className="text-white/40 text-[10px] uppercase tracking-wider mb-2">Scenarios (Registry)</div>
+                                <div className="border-t border-zinc-700 px-3 pb-3 pt-2">
+                                  <div className="font-mono text-[10px] uppercase tracking-widest text-zinc-500 mb-2">Scenarios (Registry)</div>
                                   {scenarios.length === 0 ? (
-                                    <div className="text-white/30 text-xs py-1">{scenarioIds.length === 0 ? 'No scenarios' : 'Loading…'}</div>
+                                    <div className="text-zinc-600 text-xs py-1">{scenarioIds.length === 0 ? 'No scenarios' : 'Loading…'}</div>
                                   ) : (
                                     <div className="space-y-1 max-h-[200px] overflow-y-auto pr-1 custom-scrollbar">
                                       {scenarios.map((s) => {
                                         const sev = (s.severity_numeric ?? 0.5)
                                         return (
-                                          <div key={s.id} className="flex items-center justify-between gap-2 py-1.5 px-2 rounded bg-amber-500/5 text-[11px]">
-                                            <span className="text-white/80 truncate flex-1">{s.name}</span>
-                                            <span className="font-mono text-white/70 shrink-0">{(sev * 100).toFixed(0)}%</span>
+                                          <div key={s.id} className="flex items-center justify-between gap-2 py-1.5 px-2 rounded bg-zinc-800 text-[11px]">
+                                            <span className="text-zinc-200 truncate flex-1">{s.name}</span>
+                                            <span className="font-mono text-zinc-300 shrink-0">{(sev * 100).toFixed(0)}%</span>
                                           </div>
                                         )
                                       })}
@@ -4823,48 +5390,16 @@ export default function CommandCenter() {
                     <div className="space-y-2">
                       <button
                         onClick={() => {
-                          // Open Digital Twin with stress test ready to run
-                          if (focusedHotspot) {
-                            console.log('Opening Digital Twin for stress test:', focusedHotspot.id, focusedHotspot.name)
-                            const coords = findCityCoordinates(focusedHotspot.id)
-                            if (coords) {
-                              setSelectedZoneAsset({
-                                id: focusedHotspot.id,
-                                name: focusedHotspot.name,
-                                type: 'city' as const,
-                                latitude: coords.lat,
-                                longitude: coords.lng,
-                                exposure: focusedHotspot.exposure || 10,
-                                impactSeverity: focusedHotspot.risk || 0.5,
-                              })
-                            } else {
-                              const normalizedId = focusedHotspot.id.toLowerCase().replace(/[^a-z]/g, '')
-                              const fallbackCoords = CITY_COORDINATES[normalizedId]
-                              if (fallbackCoords) {
-                                setSelectedZoneAsset({
-                                  id: focusedHotspot.id,
-                                  name: focusedHotspot.name,
-                                  type: 'city',
-                                  latitude: fallbackCoords.lat,
-                                  longitude: fallbackCoords.lng,
-                                  exposure: focusedHotspot.exposure || 10,
-                                  impactSeverity: focusedHotspot.risk || 0.5,
-                                })
-                              }
-                            }
-                            // Determine event category based on city risk factors
-                            const riskCategory = focusedHotspot.risk > 0.8 ? 'conflict' : 
-                              focusedHotspot.risk > 0.6 ? 'climate' : 'financial'
-                            
-                            setSelectedDigitalTwinEvent('stress_test_scenario')
-                            setSelectedDigitalTwinEventName(`Stress Test: ${focusedHotspot.name}`)
-                            setSelectedDigitalTwinEventCategory(riskCategory)
-                            setSelectedDigitalTwinTimeHorizon('current')
-                          }
-                          setShowDigitalTwin(true)
+                          if (!focusedHotspot) return
+                          const params = new URLSearchParams()
+                          params.set('openTwin', '1')
+                          params.set('cityId', focusedHotspot.id)
+                          params.set('cityName', focusedHotspot.name || focusedHotspot.id)
+                          const url = `${window.location.origin}${window.location.pathname}?${params.toString()}`
+                          window.open(url, '_blank', 'noopener,noreferrer')
                         }}
-                        className="w-full py-2.5 px-4 bg-amber-500/20 border border-amber-500/40 rounded-lg
-                          text-amber-400 text-sm hover:bg-amber-500/30 hover:text-amber-300 transition-all
+                        className="w-full py-2.5 px-4 bg-amber-500/20 border border-amber-500/40 rounded-md
+                          text-amber-400/80 text-sm hover:bg-amber-500/30 hover:text-amber-300 transition-all
                           flex items-center justify-between font-medium"
                       >
                         <span>Open Digital Twin & Stress Test</span>
@@ -4884,8 +5419,8 @@ export default function CommandCenter() {
                           }
                           handleOmniverseOpen(params)
                         }}
-                        className="w-full py-2.5 px-4 bg-white/5 border border-white/20 rounded-lg
-                          text-white/70 text-sm hover:bg-white/10 hover:text-white transition-all
+                        className="w-full py-2.5 px-4 bg-zinc-800 border border-white/20 rounded-md
+                          text-zinc-300 text-sm hover:bg-zinc-700 hover:text-zinc-100 transition-all
                           flex items-center justify-between font-medium"
                       >
                         <span>Open in Omniverse</span>
@@ -4898,7 +5433,6 @@ export default function CommandCenter() {
                 </motion.div>
               )}
             </AnimatePresence>
-            <AIAssistant />
           </>
         )}
       </AnimatePresence>
@@ -4915,12 +5449,12 @@ export default function CommandCenter() {
             exit={{ opacity: 0, scale: 0.9 }}
             transition={{ duration: 0.2 }}
           >
-            <div className="bg-black/90 backdrop-blur-xl rounded-2xl border border-white/20 p-6 min-w-[400px]">
+            <div className="bg-black/90 rounded-md border border-white/20 p-6 min-w-[400px]">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-white text-lg font-light">Quick Navigation</h3>
+                <h3 className="text-zinc-100 text-lg font-display font-light">Quick Navigation</h3>
                 <button
                   onClick={() => setShowZoneNav(false)}
-                  className="text-white/40 hover:text-white"
+                  className="text-zinc-500 hover:text-zinc-100"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -4934,7 +5468,7 @@ export default function CommandCenter() {
                   {availableZones.sort((a, b) => b.risk - a.risk).map((zone, idx) => (
                     <div
                       key={zone.id}
-                      className="flex items-center gap-2 p-2 bg-amber-500/5 hover:bg-amber-500/10 rounded-lg transition-all text-left group"
+                      className="flex items-center gap-2 p-2 bg-zinc-800 hover:bg-zinc-800 rounded-md transition-all text-left group"
                     >
                       <button
                         onClick={() => {
@@ -4945,10 +5479,10 @@ export default function CommandCenter() {
                         className="flex items-center gap-3 flex-1 min-w-0"
                         title="Focus zone"
                       >
-                        <span className="text-white/30 text-xs font-mono w-5 flex-shrink-0">{idx + 1}</span>
+                        <span className="text-zinc-600 text-xs font-mono w-5 flex-shrink-0">{idx + 1}</span>
                         <div className="flex-1 min-w-0">
-                          <div className="text-white text-sm truncate">{zone.name}</div>
-                          <div className="text-xs text-white/60">
+                          <div className="text-zinc-100 text-sm truncate">{zone.name}</div>
+                          <div className="text-xs text-zinc-400">
                             Risk: {(zone.risk * 100).toFixed(0)}%
                           </div>
                         </div>
@@ -4961,7 +5495,7 @@ export default function CommandCenter() {
                           setDependencyZoneId((prev) => (prev === zone.id ? null : zone.id))
                           setShowZoneNav(false)
                         }}
-                        className="p-2 rounded-md border border-white/10 bg-black/20 text-white/60 hover:text-white hover:bg-white/10 transition-colors flex-shrink-0"
+                        className="p-2 rounded-md border border-zinc-700 bg-zinc-800 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700 transition-colors flex-shrink-0"
                         title="Show dependency links for this zone"
                       >
                         <LinkIcon className="w-4 h-4" />
@@ -4971,7 +5505,7 @@ export default function CommandCenter() {
                 </div>
               </div>
               
-              <div className="mt-4 pt-4 border-t border-white/10 flex justify-center gap-4 text-white/30 text-[11px]">
+              <div className="mt-4 pt-4 border-t border-zinc-700 flex justify-center gap-4 text-zinc-600 text-[11px]">
                 <span className="flex items-center gap-2"><Keycap>1-8</Keycap> Quick Jump</span>
                 <span className="flex items-center gap-2"><Keycap>ESC</Keycap> Close</span>
                 <span className="flex items-center gap-2"><Keycap>R</Keycap> Reset View</span>
@@ -5011,10 +5545,16 @@ export default function CommandCenter() {
           setSelectedDigitalTwinEventName(null)
           setSelectedDigitalTwinEventCategory(null)
           setSelectedDigitalTwinTimeHorizon(null)
+          setClimateTriggerRiskType(null)
+          setClimateTriggerCityId(null)
+          // If closing from city mode, navigate back to country
+          if (viewMode === 'city') {
+            navigateBackToCountry()
+          }
         }}
         pickerMode={digitalTwinPickerMode && !selectedZoneAsset}
         onCitySelected={(asset) => {
-          setSelectedZoneAsset(asset)
+          setSelectedZoneAsset(asset as ZoneAsset)
           setDigitalTwinPickerMode(false)
         }}
         assetId={focusAssetIdFromUrl || focusedHotspot?.id}
@@ -5031,6 +5571,9 @@ export default function CommandCenter() {
         showHeavyRainLayer={showHeavyRainLayer}
         showDroughtLayer={showDroughtLayer}
         showUvLayer={showUvLayer}
+        showEarthquakeLayer={showEarthquakeLayer}
+        climateTriggerRiskType={climateTriggerRiskType}
+        climateTriggerCityId={climateTriggerCityId}
         zoneTotalExposure={selectedZoneAsset && selectedZone ? selectedZone.total_exposure : undefined}
       />
 
@@ -5065,7 +5608,7 @@ export default function CommandCenter() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50"
+              className="fixed inset-0 bg-black/80 z-50"
               onClick={() => setShowStressTestSelector(false)}
             />
             <motion.div
@@ -5077,17 +5620,21 @@ export default function CommandCenter() {
               <div 
                 ref={stressTestModalRef}
                 tabIndex={-1}
-                className="bg-[#0a0f18] border border-white/10 rounded-xl p-6 max-w-md w-full pointer-events-auto shadow-2xl outline-none"
+                className="bg-zinc-950 border border-zinc-700 rounded-md p-6 max-w-md w-full pointer-events-auto shadow-2xl outline-none"
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <h2 className="text-white text-lg font-medium">Select Stress Test</h2>
-                    <p className="text-white/40 text-xs mt-1">Choose a scenario to analyze</p>
+                    <h2 className="text-zinc-100 text-lg font-display font-medium">Select Stress Test</h2>
+                    <p className="text-zinc-500 text-xs mt-1">
+                      {viewMode === 'country' && selectedCountryName
+                        ? `Scenarios filtered for ${selectedCountryName}`
+                        : 'Choose a scenario to analyze'}
+                    </p>
                   </div>
                   <button
                     onClick={() => setShowStressTestSelector(false)}
-                    className="text-white/40 hover:text-white transition-colors p-1"
+                    className="text-zinc-500 hover:text-zinc-100 transition-colors p-1"
                     title="Close (ESC)"
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -5118,6 +5665,7 @@ export default function CommandCenter() {
                     setSelectedStressTest(null)
                     deactivateScenario()
                   }}
+                  filterByCountryCode={viewMode === 'country' ? selectedCountryCode : null}
                 />
               </div>
             </motion.div>
@@ -5149,7 +5697,7 @@ export default function CommandCenter() {
                   latitude: coords.lat,
                   longitude: coords.lng,
                   exposure: coords.exposure ?? 10,
-                  impactSeverity: focusedHotspot.intensity ?? coords.risk ?? 0.5,
+                  impactSeverity: focusedHotspot.risk ?? coords.risk ?? 0.5,
                 })
               }
             }
@@ -5160,18 +5708,31 @@ export default function CommandCenter() {
           }
         }}
         onResetView={() => {
-          console.log('Action: Reset View')
-          handleHotspotFocus(null)
-          deactivateScenario()
-          setShowDigitalTwin(false)
-          setShowZoneNav(false)
-          setResetViewTrigger(prev => prev + 1) // Trigger globe reset
+          console.log('Action: Reset View (R)')
+          // Stepwise back: City → Country → Global (two presses from city to global)
+          if (viewMode === 'city') {
+            setShowDigitalTwin(false)
+            navigateBackToCountry()
+          } else if (viewMode === 'country') {
+            handleHotspotFocus(null)
+            deactivateScenario()
+            setShowZoneNav(false)
+            setResetViewTrigger(prev => prev + 1)
+            navigateToGlobal()
+          } else {
+            // Already global: reset camera, clear selection
+            handleHotspotFocus(null)
+            deactivateScenario()
+            setShowDigitalTwin(false)
+            setShowZoneNav(false)
+            setResetViewTrigger(prev => prev + 1)
+          }
         }}
         onAgents={async () => {
           console.log('Action: Agents Monitoring - Starting agents')
           try {
             // Start agents when hotkey is pressed
-            const res = await fetch('/api/v1/agents/monitoring/start', { method: 'POST' })
+            const res = await fetch(`${getCommandApi()}/agents/monitoring/start`, { method: 'POST' })
             if (res.ok) {
               // Navigate to agents page after starting
               navigate('/agents')
@@ -5188,6 +5749,9 @@ export default function CommandCenter() {
           console.log('Action: Escape')
           if (showStressTestSelector) {
             setShowStressTestSelector(false)
+          } else if (countrySearchOpen) {
+            setCountrySearchOpen(false)
+            setCountrySearchQuery('')
           } else if (showActionPlans) {
             setShowActionPlans(false)
           } else if (selectedZone) {
@@ -5195,6 +5759,11 @@ export default function CommandCenter() {
             setSelectedZone(null)
           } else if (showDigitalTwin) {
             setShowDigitalTwin(false)
+            if (viewMode === 'city') navigateBackToCountry()
+          } else if (viewMode === 'city') {
+            navigateBackToCountry()
+          } else if (viewMode === 'country') {
+            navigateToGlobal()
           } else if (showZoneNav) {
             setShowZoneNav(false)
           } else if (activeScenario) {
@@ -5212,6 +5781,9 @@ export default function CommandCenter() {
           const sorted = availableZones.slice().sort((a, b) => b.risk - a.risk)
           const z = sorted[n - 1]
           if (z) handleHotspotFocus(z.id)
+        }}
+        onSearchFocus={() => {
+          countrySearchInputRef.current?.focus()
         }}
       />
     </div>
@@ -5231,6 +5803,7 @@ function KeyboardHandler({
   onZoneNav,
   onZoneSelectByNumber,
   onAgents,
+  onSearchFocus,
 }: { 
   onStressTest: () => void
   onCommandMode: () => void
@@ -5240,9 +5813,10 @@ function KeyboardHandler({
   onZoneNav: () => void
   onZoneSelectByNumber?: (num: number) => void
   onAgents: () => void
+  onSearchFocus?: () => void
 }) {
-  const ref = useRef({ onStressTest, onCommandMode, onDigitalTwin, onResetView, onEscape, onZoneNav, onZoneSelectByNumber, onAgents })
-  ref.current = { onStressTest, onCommandMode, onDigitalTwin, onResetView, onEscape, onZoneNav, onZoneSelectByNumber, onAgents }
+  const ref = useRef({ onStressTest, onCommandMode, onDigitalTwin, onResetView, onEscape, onZoneNav, onZoneSelectByNumber, onAgents, onSearchFocus })
+  ref.current = { onStressTest, onCommandMode, onDigitalTwin, onResetView, onEscape, onZoneNav, onZoneSelectByNumber, onAgents, onSearchFocus }
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -5288,6 +5862,11 @@ function KeyboardHandler({
           e.preventDefault()
           e.stopPropagation()
           ref.current.onAgents()
+          break
+        case '/':
+          e.preventDefault()
+          e.stopPropagation()
+          ref.current.onSearchFocus?.()
           break
         case 'z':
         case 'n':

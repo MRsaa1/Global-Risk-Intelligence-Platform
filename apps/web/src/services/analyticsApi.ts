@@ -2,10 +2,15 @@
  * Analytics API Service
  * 
  * Provides typed functions to fetch analytics data from the backend API.
- * Used by Dashboard and other components for real data instead of mocks.
+ * Uses getApiV1Base() so requests work on server (same origin or VITE_API_URL) and with tunnel (?api=).
  */
 
-const API_BASE = '/api/v1/analytics'
+import { getApiV1Base } from '../config/env'
+
+function getAnalyticsBase(): string {
+  const v1 = getApiV1Base()
+  return v1 ? `${v1}/analytics` : '/api/v1/analytics'
+}
 
 // ==================== TYPES ====================
 
@@ -43,8 +48,10 @@ export interface RiskDistributionResponse {
 export interface TopRiskAsset {
   id: string
   label: string
-  value: number
+  value: number  // exposure in millions
   risk: number
+  expected_loss?: number | null  // in millions
+  risk_driver?: string | null    // climate | physical | network
   city?: string
   asset_type?: string
 }
@@ -87,13 +94,45 @@ export interface PortfolioSummary {
   avg_network_risk: number
 }
 
+export interface SectorImpact {
+  name: string
+  direction: 'positive' | 'negative' | 'neutral'
+  impact_bps: number
+  confidence: 'low' | 'medium' | 'high'
+}
+
+export interface HistoricalParallel {
+  event: string
+  date: string
+  actual_impact: string
+}
+
+export interface MarketContext {
+  current_vix: number | null
+  spx: number | null
+  expected_vol_delta: 'up' | 'down' | 'unchanged'
+}
+
+export interface HeadlineImpactResponse {
+  headline: string
+  sectors: string[]
+  sector_impacts: SectorImpact[]
+  direction: 'positive' | 'negative' | 'neutral'
+  volatility_estimate: 'low' | 'medium' | 'high'
+  market_context: MarketContext | null
+  portfolio_impact_pct: number | null
+  historical_parallel: HistoricalParallel | null
+  confidence: 'low' | 'medium' | 'high'
+  summary: string
+}
+
 // ==================== API FUNCTIONS ====================
 
 /**
  * Fetch risk trends over time
  */
 export async function getRiskTrends(timeRange: string = '1M'): Promise<RiskTrendsResponse> {
-  const response = await fetch(`${API_BASE}/risk-trends?time_range=${timeRange}`)
+  const response = await fetch(`${getAnalyticsBase()}/risk-trends?time_range=${timeRange}`)
   
   if (!response.ok) {
     throw new Error(`Failed to fetch risk trends: ${response.statusText}`)
@@ -106,7 +145,7 @@ export async function getRiskTrends(timeRange: string = '1M'): Promise<RiskTrend
  * Fetch risk distribution across assets
  */
 export async function getRiskDistribution(): Promise<RiskDistributionResponse> {
-  const response = await fetch(`${API_BASE}/risk-distribution`)
+  const response = await fetch(`${getAnalyticsBase()}/risk-distribution`)
   
   if (!response.ok) {
     throw new Error(`Failed to fetch risk distribution: ${response.statusText}`)
@@ -119,7 +158,7 @@ export async function getRiskDistribution(): Promise<RiskDistributionResponse> {
  * Fetch top risk assets
  */
 export async function getTopRiskAssets(limit: number = 10): Promise<TopRiskAssetsResponse> {
-  const response = await fetch(`${API_BASE}/top-risk-assets?limit=${limit}`)
+  const response = await fetch(`${getAnalyticsBase()}/top-risk-assets?limit=${limit}`)
   
   if (!response.ok) {
     throw new Error(`Failed to fetch top risk assets: ${response.statusText}`)
@@ -132,7 +171,7 @@ export async function getTopRiskAssets(limit: number = 10): Promise<TopRiskAsset
  * Fetch scenario comparison data
  */
 export async function getScenarioComparison(): Promise<ScenarioComparisonResponse> {
-  const response = await fetch(`${API_BASE}/scenario-comparison`)
+  const response = await fetch(`${getAnalyticsBase()}/scenario-comparison`)
   
   if (!response.ok) {
     throw new Error(`Failed to fetch scenario comparison: ${response.statusText}`)
@@ -145,12 +184,64 @@ export async function getScenarioComparison(): Promise<ScenarioComparisonRespons
  * Fetch portfolio summary
  */
 export async function getPortfolioSummary(): Promise<PortfolioSummary> {
-  const response = await fetch(`${API_BASE}/portfolio-summary`)
+  const response = await fetch(`${getAnalyticsBase()}/portfolio-summary`)
   
   if (!response.ok) {
     throw new Error(`Failed to fetch portfolio summary: ${response.statusText}`)
   }
   
+  return response.json()
+}
+
+/**
+ * Headline to PnL: assess impact of a headline on sectors and volatility
+ */
+export async function postHeadlineImpact(headline: string): Promise<HeadlineImpactResponse> {
+  const response = await fetch(`${getAnalyticsBase()}/headline-impact`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ headline }),
+  })
+  if (!response.ok) {
+    let detail = 'Failed to get headline impact'
+    try {
+      const body = await response.json()
+      if (body?.detail) detail = typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail)
+    } catch {
+      // ignore
+    }
+    throw new Error(detail)
+  }
+  return response.json()
+}
+
+/**
+ * Stress Duel: compare two scenarios and get a verdict
+ */
+export interface StressDuelRequest {
+  scenario_id_a: string
+  scenario_id_b: string
+}
+
+export interface StressDuelResponse {
+  scenario_a: ScenarioComparison
+  scenario_b: ScenarioComparison
+  verdict: string
+  more_dangerous: string
+  hedge_first: string
+  confidence: string
+}
+
+export async function postStressDuel(
+  scenarioIdA: string,
+  scenarioIdB: string,
+): Promise<StressDuelResponse> {
+  const response = await fetch(`${getAnalyticsBase()}/stress-duel`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ scenario_id_a: scenarioIdA, scenario_id_b: scenarioIdB }),
+  })
+  if (!response.ok) throw new Error('Failed to run stress duel')
   return response.json()
 }
 
@@ -162,6 +253,8 @@ export const analyticsApi = {
   getTopRiskAssets,
   getScenarioComparison,
   getPortfolioSummary,
+  postHeadlineImpact,
+  postStressDuel,
 }
 
 export default analyticsApi

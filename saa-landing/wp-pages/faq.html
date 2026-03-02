@@ -1,21 +1,18 @@
-<!-- Paste into Elementor HTML widget (it supports <style>). -->
-<!-- FAQ page restored from the legacy landing modal, as a direct URL page. -->
+<!-- Paste into Elementor HTML widget.
+     Elementor setup: Section → Layout: Full Width, Content Width: Full Width.
+     Section → Style → Background: #000000. Column padding: 0. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
 <style>
   .saa-wp-bleed{
-    position:relative;
-    left:50%;
-    margin-left:-50vw;
-    width:100vw;
-    max-width:100vw;
     background:#000;
     overflow:hidden;
   }
 
   .saa-wp{
+    position:relative;
     --bg-void:#000000;
     --bg-deep:#0a0908;
     --bg-surface:#0f0e0a;
@@ -33,9 +30,9 @@
     --border-subtle:rgba(255,255,255,0.06);
     --border-light:rgba(255,255,255,0.1);
 
-    --font-sans:'Space Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-    --font-display:'Space Grotesk',-apple-system,BlinkMacSystemFont,sans-serif;
-    --font-mono:'JetBrains Mono','SF Mono','Consolas',monospace;
+    --font-sans:'JetBrains Mono', monospace;
+    --font-display:'JetBrains Mono', monospace;
+    --font-mono:'JetBrains Mono', monospace;
 
     --text-xs:11px;
     --text-sm:12px;
@@ -46,34 +43,35 @@
     --text-3xl:32px;
 
     color:var(--text-primary);
-    font-family:var(--font-sans) !important;
+    font-family:var(--font-sans);
     line-height:1.6;
     -webkit-font-smoothing:antialiased;
     -moz-osx-font-smoothing:grayscale;
     text-rendering:optimizeLegibility;
     font-weight:400;
-    letter-spacing:-0.01em !important;
-    font-feature-settings:'cv02','cv03','cv04','cv11';
+    letter-spacing:0.02em;
     font-optical-sizing:auto;
   }
 
   .saa-wp *{box-sizing:border-box}
-  .saa-wp a{color:var(--accent-primary);text-decoration:none}
-  .saa-wp a:hover{color:var(--accent-primary-hover);text-decoration:underline}
-
-  /* Ensure Elementor/theme typography doesn't override the premium stack */
-  .saa-wp .content,
-  .saa-wp .content *{
+  .saa-wp-bleed,
+  .saa-wp-bleed .saa-wp{
+    font-family:'JetBrains Mono', monospace !important;
+  }
+  .saa-wp .saa-body,
+  .saa-wp .saa-body *{
     font-family:var(--font-sans) !important;
     font-feature-settings:inherit !important;
     font-optical-sizing:inherit !important;
-    letter-spacing:inherit !important;
+    letter-spacing:inherit;
   }
   .saa-wp .mono,
   .saa-wp .mono *{
     font-family:var(--font-mono) !important;
     letter-spacing:0.02em;
   }
+  .saa-wp a{color:var(--accent-primary);text-decoration:none}
+  .saa-wp a:hover{color:var(--accent-primary-hover);text-decoration:underline}
 
   .saa-wp .bg{
     position:absolute;
@@ -91,12 +89,13 @@
     66%{transform:translate(-2%,-2%) scale(0.95)}
   }
 
-  .saa-wp .content{
+  .saa-wp .saa-body{
     position:relative;
     z-index:1;
-    max-width:1200px;
+    width:100%;
+    max-width:1400px;
     margin:0 auto;
-    padding:48px 24px 72px;
+    padding:48px clamp(24px, 5vw, 48px) 72px;
   }
 
   .saa-wp .topbar{
@@ -108,21 +107,18 @@
     border-bottom:1px solid var(--border-subtle);
   }
   .saa-wp .topbar-inner{
-    max-width:1200px;
+    width:100%;
+    max-width:1400px;
     margin:0 auto;
-    padding:16px 24px;
+    padding:16px clamp(24px, 5vw, 48px);
     display:flex;
     align-items:center;
     justify-content:space-between;
     gap:12px;
   }
   .saa-wp .brand{display:flex;align-items:center;gap:12px;text-decoration:none}
-  .saa-wp .brand-mark{
-    width:36px;height:36px;border:1px solid var(--accent-primary);border-radius:8px;
-    display:flex;align-items:center;justify-content:center;
-    font-family:var(--font-mono) !important;font-size:12px;font-weight:600;color:var(--accent-primary);
-  }
-  .saa-wp .brand-text{color:var(--text-primary);font-size:13px;font-weight:500}
+  .saa-wp .brand-logo{height:36px;width:auto;display:inline-block;flex-shrink:0}
+  .saa-wp .brand-logo svg{height:36px;width:auto;display:block;vertical-align:top}
   .saa-wp .nav{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}
   .saa-wp .nav a{
     font-size:13px;color:var(--text-secondary);
@@ -156,7 +152,7 @@
     margin:28px 0 12px;
     font-size:var(--text-xl);
     font-weight:600;
-    letter-spacing:-0.01em;
+    letter-spacing:0.02em;
     font-family:var(--font-display) !important;
     color:var(--text-primary);
   }
@@ -212,7 +208,7 @@
     padding:0 16px 14px;
     color:var(--text-secondary);
     font-size:var(--text-base) !important;
-    letter-spacing:-0.01em !important;
+    letter-spacing:inherit;
   }
   .saa-wp .faq-a p{margin:10px 0}
 
@@ -242,8 +238,7 @@
     <div class="topbar">
       <div class="topbar-inner">
         <a class="brand" href="/" aria-label="SAA Alliance home">
-          <div class="brand-mark">SAA</div>
-          <div class="brand-text">Scientific Analytics Alliance</div>
+          <span class="brand-logo" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 200" role="img" aria-label="Scientific Analytics Alliance"><defs><radialGradient id="saa-wp-globe" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#b8962e" stop-opacity="0.2"/><stop offset="100%" stop-color="#b8962e" stop-opacity="0"/></radialGradient><filter id="saa-wp-glow"><feGaussianBlur stdDeviation="2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><rect width="900" height="200" fill="#080808"/><circle cx="100" cy="100" r="72" fill="url(#saa-wp-globe)"/><circle cx="100" cy="100" r="70" fill="none" stroke="#b8962e" stroke-width="0.9" opacity="0.45"/><ellipse cx="100" cy="100" rx="70" ry="15" fill="none" stroke="#b8962e" stroke-width="0.6" opacity="0.28"/><ellipse cx="100" cy="100" rx="61" ry="37" fill="none" stroke="#b8962e" stroke-width="0.6" opacity="0.22"/><ellipse cx="100" cy="100" rx="42" ry="54" fill="none" stroke="#b8962e" stroke-width="0.6" opacity="0.22"/><ellipse cx="100" cy="100" rx="17" ry="67" fill="none" stroke="#b8962e" stroke-width="0.6" opacity="0.22"/><path d="M100,30 Q174,100 100,170" fill="none" stroke="#b8962e" stroke-width="0.6" opacity="0.22"/><path d="M100,30 Q26,100 100,170" fill="none" stroke="#b8962e" stroke-width="0.6" opacity="0.22"/><circle cx="100" cy="38" r="4" fill="#b8962e" filter="url(#saa-wp-glow)"/><circle cx="148" cy="62" r="3" fill="#b8962e" opacity="0.88"/><circle cx="160" cy="108" r="3.5" fill="#b8962e" filter="url(#saa-wp-glow)"/><circle cx="136" cy="150" r="3" fill="#b8962e" opacity="0.85"/><circle cx="64" cy="150" r="3" fill="#b8962e" opacity="0.85"/><circle cx="40" cy="108" r="3.5" fill="#b8962e" filter="url(#saa-wp-glow)"/><circle cx="52" cy="62" r="3" fill="#b8962e" opacity="0.88"/><circle cx="100" cy="100" r="5" fill="#b8962e" filter="url(#saa-wp-glow)"/><g opacity="0.5"><line x1="100" y1="38" x2="148" y2="62" stroke="#b8962e" stroke-width="1.1"/><line x1="148" y1="62" x2="160" y2="108" stroke="#b8962e" stroke-width="1.1"/><line x1="160" y1="108" x2="136" y2="150" stroke="#b8962e" stroke-width="1.1"/><line x1="136" y1="150" x2="64" y2="150" stroke="#b8962e" stroke-width="1.1"/><line x1="64" y1="150" x2="40" y2="108" stroke="#b8962e" stroke-width="1.1"/><line x1="40" y1="108" x2="52" y2="62" stroke="#b8962e" stroke-width="1.1"/><line x1="52" y1="62" x2="100" y2="38" stroke="#b8962e" stroke-width="1.1"/></g><g opacity="0.45"><line x1="100" y1="38" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/><line x1="148" y1="62" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/><line x1="160" y1="108" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/><line x1="136" y1="150" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/><line x1="64" y1="150" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/><line x1="40" y1="108" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/><line x1="52" y1="62" x2="100" y2="100" stroke="#b8962e" stroke-width="0.9"/></g><g opacity="0.2"><line x1="100" y1="38" x2="160" y2="108" stroke="#b8962e" stroke-width="0.7"/><line x1="148" y1="62" x2="136" y2="150" stroke="#b8962e" stroke-width="0.7"/><line x1="160" y1="108" x2="64" y2="150" stroke="#b8962e" stroke-width="0.7"/><line x1="136" y1="150" x2="40" y2="108" stroke="#b8962e" stroke-width="0.7"/><line x1="64" y1="150" x2="52" y2="62" stroke="#b8962e" stroke-width="0.7"/><line x1="40" y1="108" x2="100" y2="38" stroke="#b8962e" stroke-width="0.7"/></g><line x1="196" y1="30" x2="196" y2="170" stroke="#b8962e" stroke-width="0.8" opacity="0.35"/><text x="375" y="90" font-family="Georgia,serif" font-size="62" font-weight="700" fill="#f0ece0" text-anchor="middle" letter-spacing="10">SAA</text><line x1="240" y1="106" x2="510" y2="106" stroke="#b8962e" stroke-width="1.6"/><text x="375" y="142" font-family="Georgia,serif" font-size="26" font-weight="400" fill="#b8962e" text-anchor="middle" letter-spacing="13">ALLIANCE</text><line x1="556" y1="30" x2="556" y2="170" stroke="#b8962e" stroke-width="0.8" opacity="0.35"/><text x="728" y="88" font-family="Georgia,serif" font-size="13" fill="#f0ece0" opacity="0.85" text-anchor="middle" letter-spacing="3">SCIENTIFIC ANALYTICS ALLIANCE</text><line x1="572" y1="100" x2="884" y2="100" stroke="#b8962e" stroke-width="0.7" opacity="0.4"/><text x="728" y="118" font-family="Georgia,serif" font-size="11" fill="#b8962e" opacity="0.75" text-anchor="middle" letter-spacing="2">AI-Powered Research &amp; Risk Intelligence</text></svg></span>
         </a>
         <nav class="nav" aria-label="SAA navigation">
           <a href="/about/">About</a>
@@ -255,7 +250,7 @@
       </div>
     </div>
 
-    <div class="content">
+    <div class="saa-body">
       <div class="eyebrow">Scientific Analytics Alliance</div>
       <h1>FAQ</h1>
       <p class="lead">Answers restored from the legacy landing FAQ, now available via a direct public URL.</p>
@@ -312,7 +307,7 @@
       </div>
 
       <footer class="page-footer" role="contentinfo">
-        <span class="page-footer-copy">© 2025 Scientific Analytics Alliance • Premium Research & Wealth Intelligence</span>
+        <span class="page-footer-copy">© 2026 Scientific Analytics Alliance Inc. • Premium Research & Wealth Intelligence</span>
         <div class="page-footer-legal">
           <a href="/privacy-policy/">Privacy Policy</a>
           <span class="muted" style="font-size:12px">•</span>

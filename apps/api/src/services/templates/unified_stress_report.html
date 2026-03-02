@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        @page {
+            size: A4;
+            margin: 2cm;
+            @top-right {
+                content: "Page " counter(page) " of " counter(pages);
+                font-size: 8pt;
+                color: #9ca3af;
+            }
+            @bottom-center {
+                content: "SAA Alliance · Physical-Financial Risk Platform · Confidential";
+                font-size: 7pt;
+                color: #9ca3af;
+            }
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 9.5pt;
+            line-height: 1.5;
+            color: #1f2937;
+        }
+
+        /* ── Cover ── */
+        .cover {
+            background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%);
+            color: white;
+            padding: 40px 30px;
+            margin: -2cm -2cm 30px -2cm;
+            width: calc(100% + 4cm);
+            min-height: 260px;
+            position: relative;
+        }
+        .cover .badge {
+            display: inline-block;
+            background: rgba(255,255,255,0.12);
+            padding: 4px 14px;
+            border-radius: 4px;
+            font-size: 7pt;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 12px;
+        }
+        .cover h1 { font-size: 26pt; font-weight: 800; margin-bottom: 6px; letter-spacing: -0.02em; }
+        .cover .subtitle { font-size: 14pt; opacity: 0.85; font-weight: 400; margin-bottom: 20px; }
+        .cover .meta { font-size: 9pt; opacity: 0.7; line-height: 1.8; }
+        .cover .meta strong { opacity: 1; }
+        .cover .logo-text {
+            position: absolute;
+            bottom: 20px;
+            right: 30px;
+            font-size: 8pt;
+            opacity: 0.4;
+            letter-spacing: 0.05em;
+        }
+
+        /* ── Sections ── */
+        .section { margin-bottom: 22px; page-break-inside: avoid; }
+        .section-title {
+            font-size: 13pt;
+            font-weight: 700;
+            color: #1e3a8a;
+            border-bottom: 2px solid #3b82f6;
+            padding-bottom: 4px;
+            margin-bottom: 12px;
+        }
+        .page-break { page-break-before: always; }
+
+        /* ── KPI strip ── */
+        .kpi-strip {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 18px;
+        }
+        .kpi-card {
+            flex: 1;
+            background: #f1f5f9;
+            border-radius: 6px;
+            padding: 12px;
+            text-align: center;
+            min-width: 90px;
+        }
+        .kpi-value { font-size: 18pt; font-weight: 700; color: #1e3a8a; }
+        .kpi-label { font-size: 8pt; color: #64748b; margin-top: 3px; }
+
+        /* ── Summary box ── */
+        .summary-box {
+            background: #f8fafc;
+            border-left: 4px solid #3b82f6;
+            padding: 14px;
+            margin-bottom: 16px;
+            font-size: 9.5pt;
+        }
+
+        /* ── Tables ── */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 14px;
+            font-size: 8.5pt;
+        }
+        .data-table th {
+            background: #1e3a8a;
+            color: white;
+            padding: 7px 8px;
+            text-align: left;
+            font-size: 8pt;
+            font-weight: 600;
+        }
+        .data-table td {
+            padding: 5px 8px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        .data-table tr:nth-child(even) { background: #f8fafc; }
+        .data-table .num { text-align: right; font-family: 'JetBrains Mono', monospace; font-size: 8pt; }
+
+        /* ── Risk badges ── */
+        .badge-critical { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 7pt; font-weight: 600; text-transform: uppercase; background: #fef2f2; color: #dc2626; }
+        .badge-high { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 7pt; font-weight: 600; text-transform: uppercase; background: #fff7ed; color: #ea580c; }
+        .badge-medium { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 7pt; font-weight: 600; text-transform: uppercase; background: #fefce8; color: #ca8a04; }
+        .badge-low { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 7pt; font-weight: 600; text-transform: uppercase; background: #f0fdf4; color: #16a34a; }
+
+        /* ── Category block ── */
+        .cat-block {
+            margin-bottom: 16px;
+            page-break-inside: avoid;
+        }
+        .cat-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #f1f5f9;
+            padding: 8px 12px;
+            border-radius: 6px 6px 0 0;
+            border-left: 4px solid #3b82f6;
+        }
+        .cat-header h3 { font-size: 11pt; font-weight: 700; color: #0f172a; }
+        .cat-score-bar {
+            width: 80px;
+            height: 8px;
+            background: #e2e8f0;
+            border-radius: 4px;
+            overflow: hidden;
+            display: inline-block;
+            vertical-align: middle;
+        }
+        .cat-score-fill { height: 100%; border-radius: 4px; }
+        .cat-body {
+            border: 1px solid #e2e8f0;
+            border-top: none;
+            border-radius: 0 0 6px 6px;
+            padding: 10px 12px;
+        }
+        .sub-label {
+            font-size: 8pt;
+            font-weight: 600;
+            color: #475569;
+            margin: 8px 0 3px 0;
+        }
+        .sub-label:first-child { margin-top: 0; }
+        .risk-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 2px 0;
+            font-size: 8pt;
+            color: #374151;
+        }
+        .risk-bar {
+            width: 50px;
+            height: 5px;
+            background: #e2e8f0;
+            border-radius: 2px;
+            overflow: hidden;
+            display: inline-block;
+        }
+        .risk-bar-fill { height: 100%; border-radius: 2px; }
+        .trend-up { color: #dc2626; font-size: 7pt; }
+        .trend-down { color: #16a34a; font-size: 7pt; }
+        .trend-stable { color: #9ca3af; font-size: 7pt; }
+
+        /* ── Metrics ── */
+        .metric-section {
+            background: #f8fafc;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 12px;
+        }
+        .metric-section h4 {
+            font-size: 9pt;
+            font-weight: 700;
+            color: #1e3a8a;
+            margin-bottom: 6px;
+        }
+        .metric-section p {
+            font-size: 8.5pt;
+            color: #374151;
+            margin-bottom: 3px;
+        }
+
+        /* ── Footer ── */
+        .footer {
+            margin-top: 30px;
+            text-align: center;
+            font-size: 8pt;
+            color: #9ca3af;
+        }
+        .disclaimer {
+            font-size: 7.5pt;
+            color: #6b7280;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 12px;
+            margin-top: 20px;
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+
+<!-- ═══════════════ COVER ═══════════════ -->
+<div class="cover">
+    <div class="badge">Confidential · City Meta Stress Report</div>
+    <h1>{{ city_name }}</h1>
+    <div class="subtitle">Unified Stress Assessment — {{ country_name or country_code }}</div>
+    <div class="meta">
+        <strong>Report ID:</strong> USR-{{ (generated_at or '')[:10] | replace('-','') }}-{{ country_code }}<br>
+        <strong>Generated:</strong> {{ generated_at_formatted or generated_at or 'N/A' }}<br>
+        <strong>Taxonomy:</strong> Complete City Risk Taxonomy — {{ risk_factor_count }} risk factors across {{ category_count }} categories<br>
+        <strong>Scenarios:</strong> {{ scenario_count }} stress tests executed
+    </div>
+    <div class="logo-text">SAA ALLIANCE · PHYSICAL-FINANCIAL RISK PLATFORM</div>
+</div>
+
+<!-- ═══════════════ EXECUTIVE SUMMARY ═══════════════ -->
+<div class="section">
+    <h2 class="section-title">Executive Summary</h2>
+    <div class="summary-box">
+        <p>{{ executive_summary }}</p>
+    </div>
+    <div class="kpi-strip">
+        <div class="kpi-card">
+            <div class="kpi-value">{{ scenario_count }}</div>
+            <div class="kpi-label">Scenarios Run</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-value">€{{ aggregate_loss_formatted }}</div>
+            <div class="kpi-label">Aggregate Loss</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-value">{{ top_risk_score_pct }}%</div>
+            <div class="kpi-label">Top Risk Score</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-value">{{ historical_count }}</div>
+            <div class="kpi-label">Historical Comparables</div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════ TOP 15 RISKS ═══════════════ -->
+{% if top_risks %}
+<div class="section">
+    <h2 class="section-title">Top 15 Risk Factors</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th style="width:30px">#</th>
+                <th>Risk Factor</th>
+                <th style="width:70px">Score</th>
+                <th style="width:80px">Category</th>
+                <th style="width:50px">Trend</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in top_risks %}
+            <tr>
+                <td class="num">{{ loop.index }}</td>
+                <td>{{ r.name }}</td>
+                <td class="num">{{ (r.score * 100) | int }}%</td>
+                <td>{{ r.category_id | replace('_',' ') | title }}</td>
+                <td>{% if r.trend == 'rising' %}<span class="trend-up">▲ rising</span>{% elif r.trend == 'declining' %}<span class="trend-down">▼ declining</span>{% else %}<span class="trend-stable">— stable</span>{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<!-- ═══════════════ RISK BY CATEGORY ═══════════════ -->
+<div class="section page-break">
+    <h2 class="section-title">Risk Assessment by Category</h2>
+    <p style="font-size: 8.5pt; color: #64748b; margin-bottom: 14px;">
+        Complete City Risk Taxonomy — {{ risk_factor_count }} risk factors across {{ category_count }} categories.
+        Score = f(Probability, Impact, Urgency, Confidence). Higher scores indicate greater risk exposure.
+    </p>
+
+    {% for cat in categories %}
+    <div class="cat-block">
+        <div class="cat-header">
+            <h3>{{ cat.name }}</h3>
+            <span style="font-size: 8pt; color: #475569;">
+                Score: <strong>{{ cat.score_pct }}%</strong>
+                <span class="cat-score-bar">
+                    <span class="cat-score-fill" style="width: {{ cat.score_pct }}%; background: {{ cat.color }};"></span>
+                </span>
+                · {{ cat.risk_count }} factors
+            </span>
+        </div>
+        <div class="cat-body">
+            {% for sub in cat.subcategories %}
+            <div class="sub-label">{{ sub.label }} ({{ sub.risk_count }})</div>
+            {% for rf in sub.top_risks %}
+            <div class="risk-row">
+                <span>{{ rf.name }}</span>
+                <span style="display: flex; align-items: center; gap: 6px;">
+                    <span class="risk-bar"><span class="risk-bar-fill" style="width: {{ rf.score_pct }}%; background: {{ rf.color }};"></span></span>
+                    <span class="num" style="width: 30px;">{{ rf.score_pct }}%</span>
+                    {% if rf.trend == 'rising' %}<span class="trend-up">▲</span>{% elif rf.trend == 'declining' %}<span class="trend-down">▼</span>{% else %}<span class="trend-stable">—</span>{% endif %}
+                </span>
+            </div>
+            {% endfor %}
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- ═══════════════ SCENARIO RESULTS ═══════════════ -->
+{% if scenarios %}
+<div class="section page-break">
+    <h2 class="section-title">Stress Test Scenario Results</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Scenario</th>
+                <th style="width:60px">Severity</th>
+                <th style="width:80px">Loss (€M)</th>
+                <th style="width:45px">Zones</th>
+                <th style="width:55px">Buildings</th>
+                <th style="width:60px">Population</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for s in scenarios %}
+            <tr>
+                <td>{{ s.type or s.get('event_id','') }}</td>
+                <td class="num">{{ ((s.severity or 0) * 100) | int }}%</td>
+                <td class="num">{% if s.loss_eur_m is not none %}{{ '{:,.1f}'.format(s.loss_eur_m) }}{% else %}—{% endif %}</td>
+                <td class="num">{{ s.zones_count or '—' }}</td>
+                <td class="num">{{ '{:,}'.format(s.total_buildings_affected or 0) }}</td>
+                <td class="num">{{ '{:,}'.format(s.total_population_affected or 0) }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <p style="font-size: 7.5pt; color: #9ca3af;">Total aggregate loss: €{{ aggregate_loss_formatted }}M across {{ scenario_count }} scenarios.</p>
+</div>
+{% endif %}
+
+<!-- ═══════════════ AGGREGATE METRICS ═══════════════ -->
+{% if report_v2 %}
+<div class="section page-break">
+    <h2 class="section-title">Aggregate Risk Metrics (Report v2.0)</h2>
+    <p style="font-size: 8.5pt; color: #64748b; margin-bottom: 12px;">Derived from the highest-severity scenario via Monte Carlo simulation.</p>
+
+    {% if report_v2.probabilistic_metrics %}
+    <div class="metric-section">
+        <h4>Probabilistic Metrics</h4>
+        <table class="data-table" style="max-width: 400px;">
+            <tbody>
+                <tr><td>Mean (μ)</td><td class="num">€{{ report_v2.probabilistic_metrics.mean_loss | default(0) | int }}M</td></tr>
+                <tr><td>VaR 95%</td><td class="num">€{{ report_v2.probabilistic_metrics.var_95 | default(0) | int }}M</td></tr>
+                <tr><td>VaR 99%</td><td class="num">€{{ report_v2.probabilistic_metrics.var_99 | default(0) | int }}M</td></tr>
+                <tr><td>CVaR 99%</td><td class="num">€{{ report_v2.probabilistic_metrics.cvar_99 | default(0) | int }}M</td></tr>
+                <tr><td>Std dev (σ)</td><td class="num">€{{ report_v2.probabilistic_metrics.std_dev | default(0) | int }}M</td></tr>
+            </tbody>
+        </table>
+        {% if report_v2.probabilistic_metrics.methodology %}
+        <p style="font-size: 7.5pt; color: #9ca3af;">{{ report_v2.probabilistic_metrics.methodology }}</p>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if report_v2.temporal_dynamics %}
+    <div class="metric-section">
+        <h4>Temporal Dynamics</h4>
+        <p>RTO: {{ report_v2.temporal_dynamics.rto_hours or '—' }}h · RPO: {{ report_v2.temporal_dynamics.rpo_hours or '—' }}h · Recovery: {{ (report_v2.temporal_dynamics.recovery_time_months or [0,0])[0] }}–{{ (report_v2.temporal_dynamics.recovery_time_months or [0,0])[1] }} months · Business interruption: {{ report_v2.temporal_dynamics.business_interruption_days or '—' }} days</p>
+    </div>
+    {% endif %}
+
+    {% if report_v2.financial_contagion %}
+    <div class="metric-section">
+        <h4>Financial Contagion (Cross-Sector)</h4>
+        {% if report_v2.financial_contagion.banking %}<p>Banking: NPL +{{ report_v2.financial_contagion.banking.npl_increase_pct or '—' }}%, provisions €{{ report_v2.financial_contagion.banking.provisions_eur_m or 0 }}M, CET1 {{ report_v2.financial_contagion.banking.cet1_impact_bps or '—' }} bps</p>{% endif %}
+        {% if report_v2.financial_contagion.insurance %}<p>Insurance: claims €{{ report_v2.financial_contagion.insurance.claims_gross_eur_m or 0 }}M, net €{{ report_v2.financial_contagion.insurance.net_retained_eur_m or 0 }}M, Solvency {{ report_v2.financial_contagion.insurance.solvency_impact_pp or '—' }} pp</p>{% endif %}
+        {% if report_v2.financial_contagion.real_estate %}<p>Real estate: value −{{ report_v2.financial_contagion.real_estate.value_decline_pct or '—' }}%, vacancy +{{ report_v2.financial_contagion.real_estate.vacancy_increase_pct or '—' }}%</p>{% endif %}
+        {% if report_v2.financial_contagion.total_economic_impact_eur_m is defined %}<p><strong>Total economic impact: €{{ report_v2.financial_contagion.total_economic_impact_eur_m | int }}M (×{{ report_v2.financial_contagion.economic_multiplier | default(1) }})</strong></p>{% endif %}
+    </div>
+    {% endif %}
+
+    {% if report_v2.predictive_indicators %}
+    <div class="metric-section">
+        <h4>Predictive Indicators</h4>
+        <p>Status: <strong>{{ report_v2.predictive_indicators.status or '—' }}</strong> · P(event): {{ ((report_v2.predictive_indicators.probability_event or 0) * 100) | int }}% · Signal: {{ report_v2.predictive_indicators.early_warning_signal or '—' }}</p>
+        {% if report_v2.predictive_indicators.recommended_actions %}
+        <p style="font-size: 8pt; margin-top: 4px;">Actions: {{ report_v2.predictive_indicators.recommended_actions[:4] | join('; ') }}</p>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if report_v2.network_risk %}
+    <div class="metric-section">
+        <h4>Network / Systemic Risk</h4>
+        <p>Critical nodes: {% for n in (report_v2.network_risk.critical_nodes or [])[:5] %}{{ n.get('name', n.get('id', '—')) }}{% if not loop.last %}, {% endif %}{% endfor %}{% if not (report_v2.network_risk.critical_nodes or []) %}—{% endif %}</p>
+        {% if report_v2.network_risk.cascade_path %}<p>Cascade path: {{ report_v2.network_risk.cascade_path }}</p>{% endif %}
+        {% if report_v2.network_risk.amplification_factor is defined %}<p>Amplification: {{ report_v2.network_risk.amplification_factor }}×</p>{% endif %}
+    </div>
+    {% endif %}
+
+    {% if report_v2.regulatory_relevance %}
+    <div class="metric-section">
+        <h4>Regulatory Relevance</h4>
+        <p>Entity: {{ report_v2.regulatory_relevance.entity_type or '—' }} · Jurisdiction: {{ report_v2.regulatory_relevance.jurisdiction or '—' }} · Disclosure required: {{ 'Yes' if report_v2.regulatory_relevance.disclosure_required else 'No' }}</p>
+        {% if report_v2.regulatory_relevance.regulation_labels %}<p>Applicable: {{ report_v2.regulatory_relevance.regulation_labels.values() | list | join(', ') }}</p>{% elif report_v2.regulatory_relevance.regulations %}<p>Applicable: {{ (report_v2.regulatory_relevance.regulations or [])[:8] | join(', ') }}</p>{% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- ═══════════════ HISTORICAL COMPARISON ═══════════════ -->
+{% if historical %}
+<div class="section">
+    <h2 class="section-title">Historical Comparison</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Event</th>
+                <th style="width:50px">Year</th>
+                <th>Similarity Reason</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for h in historical %}
+            <tr>
+                <td>{{ h.name }}</td>
+                <td class="num">{{ h.year or '—' }}</td>
+                <td>{{ h.similarity_reason or '—' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<!-- ═══════════════ METHODOLOGY ═══════════════ -->
+<div class="section page-break">
+    <h2 class="section-title">Methodology</h2>
+    <div class="metric-section">
+        <h4>Risk Scoring Formula</h4>
+        <p><strong>Risk Score = Probability × Impact × Urgency × Confidence</strong></p>
+        <p style="margin-top: 4px;">Probability: 0–100% (event likelihood) · Impact: 1–10 (consequence severity) · Urgency: 0.5–2.0 (temporal multiplier) · Confidence: 0.5–1.0 (data quality)</p>
+    </div>
+    <div class="metric-section">
+        <h4>Data Sources</h4>
+        <p>Satellite (Planet Labs, Sentinel-1/2/5, Landsat 8/9, GOES-16/17) · IoT sensors (traffic loops, air quality monitors, smart meters, SCADA) · Government APIs (NOAA, EPA, Census, FEMA, BLS) · Private data (Zillow, INRIX, CoStar) · Social/crowdsource (311, sentiment analysis)</p>
+    </div>
+    <div class="metric-section">
+        <h4>Analytics Engine</h4>
+        <p>Monte Carlo simulation (100,000 iterations) · Gaussian copula for correlated defaults · VaR/CVaR calculations · 5×5 cross-sector contagion matrix · GNN cascade propagation · Dynamic RTO/RPO with sector-specific recovery curves · Historical calibration and backtesting</p>
+    </div>
+    <div class="metric-section">
+        <h4>Taxonomy Reference</h4>
+        <p>Complete City Risk Taxonomy: {{ risk_factor_count }} risk factors across {{ category_count }} categories (Climate, Infrastructure, Socio-Economic, Health, Financial, Technology, Political, Transportation, Energy, Cross-cutting). Full documentation: <em>CITY_RISK_TAXONOMY_REPORT_STRUCTURE.md</em></p>
+    </div>
+</div>
+
+<!-- ═══════════════ DISCLAIMER & FOOTER ═══════════════ -->
+<div class="disclaimer">
+    <p><strong>Regulatory Notice:</strong> Estimates and projections are indicative and based on models, assumptions, and data as of the report date. This report is generated for internal risk management purposes. Not intended for regulatory submission without independent review and validation. Model outputs are subject to uncertainty and should be considered alongside expert judgment.</p>
+    <p style="margin-top: 6px;">Platform: Physical-Financial Risk Platform v1.5.0 · Taxonomy: Complete City Risk Taxonomy v2.0 · Engine: Monte Carlo + GNN Cascade + Cross-Sector Contagion</p>
+</div>
+<div class="footer">
+    <p>Generated {{ generated_at_formatted or generated_at or 'N/A' }} · Report ID: USR-{{ (generated_at or '')[:10] | replace('-','') }}-{{ country_code }}</p>
+    <p>© 2026 Scientific Analytics Alliance Inc. All rights reserved.</p>
+</div>
+</body>
+</html>

@@ -1,9 +1,14 @@
 version: '3.8'
 
 # Production Docker Compose for risk.saa-alliance.com
+# Usage:
+#   docker compose -f docker-compose.prod.yml up -d --build
+#   docker compose -f docker-compose.prod.yml logs -f api
+#
+# .env in apps/api/.env is NOT overwritten — keys and secrets are preserved.
+# Database (SQLite) is persisted via the api-data volume.
 
 services:
-  # Nginx reverse proxy
   nginx:
     image: nginx:alpine
     ports:
@@ -14,23 +19,27 @@ services:
       - ./apps/web/dist:/usr/share/nginx/html:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     restart: unless-stopped
 
-  # FastAPI Backend
   api:
     build:
-      context: ./apps/api
-      dockerfile: Dockerfile
-    ports:
-      - "9002:9002"
+      context: .
+      dockerfile: apps/api/Dockerfile
+    expose:
+      - "9002"
+    env_file:
+      - apps/api/.env
     environment:
       - DATABASE_URL=sqlite:///./data/prod.db
       - USE_SQLITE=true
       - DEBUG=false
+      - ENABLE_NEO4J=false
       - CORS_ORIGINS=["https://risk.saa-alliance.com"]
       - NVIDIA_API_KEY=${NVIDIA_API_KEY:-}
       - NVIDIA_LLM_API_KEY=${NVIDIA_LLM_API_KEY:-}
+      - NOAA_API_TOKEN=${NOAA_API_TOKEN:-}
     volumes:
       - api-data:/app/data
     restart: unless-stopped
@@ -38,16 +47,8 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:9002/api/v1/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
-
-  # Frontend (built static files served by nginx)
-  web:
-    build:
-      context: ./apps/web
-      dockerfile: Dockerfile
-    ports:
-      - "5180:80"
-    restart: unless-stopped
+      retries: 5
+      start_period: 30s
 
 volumes:
   api-data:

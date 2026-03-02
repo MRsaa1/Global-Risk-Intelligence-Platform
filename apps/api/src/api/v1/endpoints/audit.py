@@ -249,3 +249,52 @@ async def get_available_actions():
         "categories": [c.value for c in AuditCategory],
         "severities": [s.value for s in AuditSeverity],
     }
+
+
+# ==================== DECISION OBJECT (Risk & Intelligence OS) ====================
+
+@router.get("/decisions/{decision_id}")
+async def get_decision(decision_id: str):
+    """
+    Get Decision Object by ID with full trace.
+    Part of Risk & Intelligence OS - audit/reproducibility layer.
+    """
+    stored = await audit_service.get_decision(decision_id)
+    if not stored:
+        raise HTTPException(status_code=404, detail="Decision not found")
+    return stored
+
+
+@router.post("/decisions/{decision_id}/replay")
+async def replay_decision(decision_id: str):
+    """
+    Replay a historical decision. Returns stored DO with replay metadata.
+    Full re-execution with same inputs requires ARIN orchestrator.
+    """
+    result = await audit_service.replay_decision(decision_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Decision not found")
+    return result
+
+
+@router.get("/export/dora")
+async def export_dora(
+    start_time: Optional[datetime] = Query(None),
+    end_time: Optional[datetime] = Query(None),
+    limit: int = Query(100, ge=1, le=1000),
+):
+    """
+    Export audit data in DORA-compliant format.
+    Returns decision objects and audit trail for regulatory review.
+    """
+    logs = await audit_service.query(
+        start_time=start_time,
+        end_time=end_time,
+        limit=limit,
+    )
+    return {
+        "format": "DORA",
+        "exported_at": datetime.utcnow().isoformat() + "Z",
+        "count": len(logs),
+        "entries": [_entry_to_response(e) for e in logs],
+    }

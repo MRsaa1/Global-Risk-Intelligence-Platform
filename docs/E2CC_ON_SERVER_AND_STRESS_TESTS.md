@@ -340,6 +340,8 @@ cd ~/earth2-weather-analytics
 
 **Segmentation fault при запуске streamer:** приложение падает при старте (например «Segmentation fault (core dumped)» в `deploy_e2cc.sh`). Возможные причины: несовместимость виртуального дисплея с RTX/Kit, драйвер или окружение. Что сделать: (1) Проверить, что X и GLX работают: `DISPLAY=:0 glxinfo 2>/dev/null | head -30` или `xdpyinfo -display :0`. (2) Попробовать **desktop** вместо streamer: `export DISPLAY=:0; ./deploy/deploy_e2cc.sh -d` — если desktop тоже падает, проблема в дисплее/GPU. (3) См. [07_troubleshooting](https://github.com/NVIDIA-Omniverse-blueprints/earth2-weather-analytics/blob/main/docs/07_troubleshooting.md) blueprint. (4) На чисто headless Brev E2CC streamer может быть неустойчив; платформа (NIM, стресс-тесты, Command Center) работает без E2CC; кнопка «Open in Omniverse» тогда будет открывать URL только при запущенном E2CC на машине с дисплеем или в подходящем окружении.
 
+**Конкретно: AWS g6e (L40S) + driver 580 + Xvfb.** При запуске streamer с `Xvfb :99` падение в `librtx.mdltranslator`, `carb.scenerenderer-rtx`, `omni.hydra.rtx` — типично. RTX/Hydra ожидают полноценный GPU-контекст; Xvfb его не даёт. На таких инстансах E2CC streamer **не поддерживается**. Рекомендация: считать E2CC опциональным; использовать NIM (FourCastNet), стресс-тесты и Command Center без «Open in Omniverse».
+
 **Ссылки:** [Omniverse Kit — Linux Troubleshooting](https://docs.omniverse.nvidia.com/kit/docs/kit-manual/latest/guide/linux_troubleshooting.html) (Q6, Q7 — physical display / headless with `--no-window`), [earth2-weather-analytics Troubleshooting](https://github.com/NVIDIA-Omniverse-blueprints/earth2-weather-analytics/blob/main/docs/07_troubleshooting.md).
 
 ---

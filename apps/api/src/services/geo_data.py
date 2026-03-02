@@ -26,8 +26,30 @@ from .city_risk_calculator import CityRiskCalculator, CityRiskScore, get_city_ri
 from .external.usgs_client import USGSClient
 from .external.weather_client import WeatherClient
 from ..data.cities import get_all_cities, get_city, CITIES_DATABASE
+from ..core.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+# Map risk factor names to dominant risk type for zone grading (geopolitical, climate, economic, seismic, other)
+_FACTOR_TO_DOMINANT_TYPE: Dict[str, str] = {
+    "conflict": "geopolitical",
+    "political": "geopolitical",
+    "sanctions": "geopolitical",
+    "logistics": "geopolitical",
+    "flood": "climate",
+    "hurricane": "climate",
+    "flood_external": "climate",
+    "seismic": "seismic",
+    "economic": "economic",
+}
+
+
+def _dominant_risk_type_from_factors(risk_factors_dict: Dict[str, float]) -> str:
+    """Pick dominant risk type from factor names (max value); fallback 'other'."""
+    if not risk_factors_dict:
+        return "other"
+    best_name = max(risk_factors_dict.keys(), key=lambda k: risk_factors_dict.get(k, 0.0))
+    return _FACTOR_TO_DOMINANT_TYPE.get(best_name, "other")
 
 
 class GeoDataService:
@@ -40,7 +62,8 @@ class GeoDataService:
         self._calculator: Optional[CityRiskCalculator] = None
         self._cached_scores: Dict[str, CityRiskScore] = {}
         self._cache_time: Optional[datetime] = None
-        self._cache_ttl_hours = 24
+        # Long TTL so risk levels stay stable; configurable via RISK_CACHE_TTL_HOURS on server
+        self._cache_ttl_hours = get_settings().risk_cache_ttl_hours
         self._calc_lock = asyncio.Lock()
 
     def invalidate_cache(self) -> None:
@@ -52,6 +75,41 @@ class GeoDataService:
         """
         self._cached_scores = {}
         self._cache_time = None
+
+    async def recalculate_cities(self, city_ids: List[str], max_cities: int = 300) -> None:
+        """
+        Recalculate risk scores only for the given city IDs and update cache.
+        Used by ingestion pipeline when affected_city_ids is set (e.g. from GDELT, USGS).
+        Limits to max_cities to avoid overloading external APIs.
+        """
+        if not city_ids:
+            return
+        ids = list(dict.fromkeys(city_ids))[:max_cities]  # dedupe and cap
+        calculator = self._get_calculator()
+        use_v2 = get_settings().risk_model_version == 2
+        concurrency = 15
+        updated = 0
+        for i in range(0, len(ids), concurrency):
+            batch = ids[i : i + concurrency]
+            tasks = [
+                calculator.calculate_risk(
+                    cid,
+                    force_recalculate=True,
+                    use_external_data=True,
+                    use_risk_model_v2=use_v2,
+                )
+                for cid in batch
+            ]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for cid, result in zip(batch, results):
+                if isinstance(result, Exception):
+                    logger.debug("Recalc city %s failed: %s", cid, result)
+                    continue
+                if result is not None:
+                    self._cached_scores[result.city_id] = result
+                    updated += 1
+        if updated > 0:
+            logger.info("Recalculated risk for %s cities (ingestion trigger)", updated)
     
     def _get_calculator(self) -> CityRiskCalculator:
         """Get or create risk calculator with API clients."""
@@ -82,15 +140,18 @@ class GeoDataService:
                 and self._cached_scores):
                 return self._cached_scores
 
-            # Default: fast scoring (no external APIs). External calls are slow and can
-            # cause the first page load to time out (frontend falls back to demo hotspots).
-            use_external_data = bool(force_recalculate)
+            # When cache expired (we had scores before) or force_recalculate: use external APIs
+            # (USGS, weather) so zone counts and globe reflect changing situation. First load only
+            # uses static data to avoid slow timeout.
+            use_external_data = bool(force_recalculate) or bool(self._cached_scores)
 
             calculator = self._get_calculator()
+            use_v2 = get_settings().risk_model_version == 2
             scores = await calculator.calculate_all_cities(
                 force_recalculate=force_recalculate,
                 use_external_data=use_external_data,
                 max_concurrency=25,
+                use_risk_model_v2=use_v2,
             )
 
             # Cache results
@@ -109,12 +170,15 @@ class GeoDataService:
         min_risk: float = 0.0,
         max_risk: float = 1.0,
         scenario: Optional[str] = None,
+        risk_type: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Returns risk hotspots as GeoJSON FeatureCollection.
         
         Optimized for Deck.gl/CesiumJS rendering.
         Uses CityRiskCalculator for dynamic risk scoring.
+        Each feature includes dominant_risk_type (geopolitical, climate, economic, seismic, other).
+        If risk_type is set, only features with that dominant_risk_type are returned.
         """
         # Run async calculation in sync context
         try:
@@ -159,6 +223,10 @@ class GeoDataService:
             pd_1y = 0.02 + adjusted_risk * 0.03  # 2-5% based on risk
             lgd = 0.30 + adjusted_risk * 0.25   # 30-55% based on risk
             
+            dominant_risk_type = _dominant_risk_type_from_factors(risk_factors_dict)
+            if risk_type is not None and dominant_risk_type != risk_type:
+                continue
+            
             feature = {
                 "type": "Feature",
                 "id": city_id,
@@ -173,6 +241,7 @@ class GeoDataService:
                     "base_risk": round(score.risk_score, 3),
                     "confidence": round(score.confidence, 2),
                     "calculation_method": score.calculation_method,
+                    "dominant_risk_type": dominant_risk_type,
                     "risk_factors": {
                         name: {
                             "value": round(factor.value, 2),
@@ -325,11 +394,24 @@ class GeoDataService:
             },
         }
 
-    def get_portfolio_summary(self) -> Dict[str, Any]:
-        """Returns aggregated portfolio metrics using dynamic risk scores."""
+    def get_portfolio_summary(
+        self,
+        country_code: Optional[str] = None,
+        city_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Returns aggregated portfolio metrics using dynamic risk scores.
+        When country_code or city_id is set, metrics are scoped to that country or city only.
+        """
         scores = self._cached_scores or {}
         score_list = list(scores.values())
-        
+
+        if city_id:
+            score_list = [s for s in score_list if s.city_id == city_id]
+        elif country_code:
+            code = (country_code or "").strip().upper()
+            if code:
+                score_list = [s for s in score_list if get_city(s.city_id) and (get_city(s.city_id).country_code or "").upper() == code]
+
         if not score_list:
             return {
                 "total_exposure": 0,
@@ -339,6 +421,10 @@ class GeoDataService:
                 "critical_exposure": 0,
                 "hotspot_count": 0,
                 "total_assets": 0,
+                "critical_count": 0,
+                "high_count": 0,
+                "medium_count": 0,
+                "low_count": 0,
             }
         
         total_exposure = sum(s.exposure for s in score_list)
@@ -352,7 +438,23 @@ class GeoDataService:
         
         at_risk = sum(s.exposure for s in score_list if s.risk_score > 0.6)
         critical = sum(s.exposure for s in score_list if s.risk_score > 0.8)
-        
+
+        # Zone counts: use hysteresis zone when present (v2), else score bands
+        def _zone_of(s: CityRiskScore) -> str:
+            if getattr(s, "zone", None):
+                return s.zone
+            if s.risk_score > 0.8:
+                return "CRITICAL"
+            if s.risk_score > 0.6:
+                return "HIGH"
+            if s.risk_score > 0.4:
+                return "MEDIUM"
+            return "LOW"
+        critical_count = sum(1 for s in score_list if _zone_of(s) == "CRITICAL")
+        high_count = sum(1 for s in score_list if _zone_of(s) == "HIGH")
+        medium_count = sum(1 for s in score_list if _zone_of(s) == "MEDIUM")
+        low_count = sum(1 for s in score_list if _zone_of(s) == "LOW")
+
         # Find highest risk and exposure
         highest_risk = max(score_list, key=lambda x: x.risk_score)
         highest_exposure = max(score_list, key=lambda x: x.exposure)
@@ -365,6 +467,10 @@ class GeoDataService:
             "critical_exposure": round(critical, 1),
             "hotspot_count": len(score_list),
             "total_assets": sum(s.assets_count for s in score_list),
+            "critical_count": critical_count,
+            "high_count": high_count,
+            "medium_count": medium_count,
+            "low_count": low_count,
             "highest_risk": {
                 "id": highest_risk.city_id,
                 "name": highest_risk.name,

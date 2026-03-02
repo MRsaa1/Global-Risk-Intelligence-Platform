@@ -87,8 +87,10 @@ def run_gpu_monte_carlo(
     lgd_array: np.ndarray,
     correlation_matrix: np.ndarray,
     stress_factor: float = 1.0,
-    n_simulations: int = 10000,
-    seed: Optional[int] = None
+    n_simulations: int = 100000,
+    seed: Optional[int] = None,
+    distribution: str = "gaussian",
+    degrees_of_freedom: int = 5,
 ) -> Dict[str, Any]:
     """
     Run Monte Carlo simulation with GPU acceleration.
@@ -113,13 +115,15 @@ def run_gpu_monte_carlo(
         logger.info(f"Running GPU Monte Carlo with {n_simulations} simulations")
         return _gpu_monte_carlo_cupy(
             ead_array, pd_array, lgd_array, correlation_matrix,
-            stress_factor, n_simulations, seed
+            stress_factor, n_simulations, seed,
+            distribution=distribution, degrees_of_freedom=degrees_of_freedom,
         )
     else:
         logger.info(f"Running CPU Monte Carlo with {n_simulations} simulations (GPU not available)")
         return _cpu_monte_carlo(
             ead_array, pd_array, lgd_array, correlation_matrix,
-            stress_factor, n_simulations, seed
+            stress_factor, n_simulations, seed,
+            distribution=distribution, degrees_of_freedom=degrees_of_freedom,
         )
 
 
@@ -130,7 +134,9 @@ def _gpu_monte_carlo_cupy(
     correlation_matrix: np.ndarray,
     stress_factor: float,
     n_simulations: int,
-    seed: Optional[int]
+    seed: Optional[int],
+    distribution: str = "gaussian",
+    degrees_of_freedom: int = 5,
 ) -> Dict[str, Any]:
     """GPU Monte Carlo using CuPy."""
     import cupy as cp
@@ -156,8 +162,11 @@ def _gpu_monte_carlo_cupy(
     except cp.linalg.LinAlgError:
         chol = cp.eye(n_assets)
     
-    # Generate correlated random samples
-    z = cp.random.standard_normal((n_simulations, n_assets))
+    # Generate correlated random samples (Gaussian or Student-t)
+    if distribution == "student_t":
+        z = cp.random.standard_t(degrees_of_freedom, size=(n_simulations, n_assets))
+    else:
+        z = cp.random.standard_normal((n_simulations, n_assets))
     correlated_z = z @ chol.T
     
     # Convert PDs to thresholds
@@ -194,7 +203,9 @@ def _cpu_monte_carlo(
     correlation_matrix: np.ndarray,
     stress_factor: float,
     n_simulations: int,
-    seed: Optional[int]
+    seed: Optional[int],
+    distribution: str = "gaussian",
+    degrees_of_freedom: int = 5,
 ) -> Dict[str, Any]:
     """CPU Monte Carlo fallback using NumPy."""
     from scipy import stats
@@ -213,8 +224,11 @@ def _cpu_monte_carlo(
     except np.linalg.LinAlgError:
         chol = np.eye(n_assets)
     
-    # Generate correlated random samples
-    z = np.random.standard_normal((n_simulations, n_assets))
+    # Generate correlated random samples (Gaussian or Student-t)
+    if distribution == "student_t":
+        z = np.random.standard_t(degrees_of_freedom, size=(n_simulations, n_assets))
+    else:
+        z = np.random.standard_normal((n_simulations, n_assets))
     correlated_z = z @ chol.T
     
     # Convert PDs to thresholds

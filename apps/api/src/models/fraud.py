@@ -9,6 +9,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Integer,
     String,
     Text,
 )
@@ -239,3 +240,22 @@ class DamageClaimEvidence(Base):
     
     def __repr__(self) -> str:
         return f"<DamageClaimEvidence {self.evidence_type}: {self.file_name}>"
+
+
+class FraudDetectionRule(Base):
+    """
+    Configurable rule for fraud detector: threshold on amount, frequency, or anomaly.
+    When rule matches, a SENTINEL alert is created.
+    """
+    __tablename__ = "fraud_detection_rules"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    rule_type: Mapped[str] = mapped_column(String(50), nullable=False)  # amount_threshold, frequency_per_claimant, anomaly
+    # For amount_threshold: field = claimed_loss_amount, threshold = value
+    field_name: Mapped[Optional[str]] = mapped_column(String(100))
+    threshold_value: Mapped[Optional[float]] = mapped_column(Float)
+    window_hours: Mapped[Optional[int]] = mapped_column(Integer)  # For frequency: count in last N hours
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, onupdate=datetime.utcnow)

@@ -18,6 +18,10 @@
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
+### Agent-first: Risk Agent
+
+This is not "a platform with an AI feature" — the **Risk Agent** is a first-class citizen. It monitors portfolios and infrastructure 24/7, triages alerts, runs stress scenarios, and suggests or executes remediation; it is trained on domain risk data (stress tests, geo, regulatory modules). In narrative terms, AI-Q (conversation), Overseer (self-healing), and SENTINEL (monitoring) are one specialized agent with different modes. We position on **outcomes** (less manual effort, faster decisions, fewer missed risks), not on technology alone. **Governance and observability:** audit trail of agent actions, human-in-the-loop (ARIN escalation), and explainability (consensus, DAE, orchestrator steps) are described in [docs/AGENT_OPS_AND_GOVERNANCE.md](docs/AGENT_OPS_AND_GOVERNANCE.md).
+
 ### System Classification
 
 | Attribute | Value |
@@ -140,6 +144,10 @@ No decorative elements. No "nice to have" information. If it doesn't help the de
 > Critical decision must be possible in 30 seconds.
 
 From opening the system to executing a protective action. Everything else is optimization.
+
+### Probabilistic Aesthetic and the Observer
+
+Risk is represented as probability; the visual language supports uncertainty (confidence intervals on metrics, depth of background, a single accent of “light” on the selected object). The scene reacts to the observer: focus and selection change context rather than navigating to another page. One active focus at a time keeps the instrument readable and aligned with the decision flow.
 
 ---
 
@@ -292,8 +300,9 @@ If the answer to any of these is "no" — reconsider.
 
 ## Related
 
+- **Целевая модель данных и пластов риска** описана в [docs/RISK_LAYERS_AND_QUANTUM_ZONES_VISION.md](docs/RISK_LAYERS_AND_QUANTUM_ZONES_VISION.md): десять пластов данных (макро, геополитика, технологии, экология, ончейн, инфосфера, биология, энергетика, психоакустика, космос, право), матрица вероятностных амплитуд и три квантовые зоны влияния (конфайнмент, радиация, коллапс поля).
 - **Product Model (3D + AI in FinTech):** [docs/PRODUCT_MODEL_3D_FINTECH.md](docs/PRODUCT_MODEL_3D_FINTECH.md) — шесть направлений: оценка рисков по физическим активам, кредитование/страхование сложных объектов, REIT, fraud, project finance, иммерсивная аналитика.
 
 ---
 
-*Last updated: January 2026*
+*Last updated: February 2026*

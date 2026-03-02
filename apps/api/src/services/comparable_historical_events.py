@@ -103,6 +103,10 @@ CITY_TO_COUNTRY: dict[str, str] = {
     "brazil": "BR",
     "toronto": "CA",
     "vancouver": "CA",
+    "montreal": "CA",
+    "quebec": "CA",
+    "calgary": "CA",
+    "ottawa": "CA",
     "canada": "CA",
 }
 

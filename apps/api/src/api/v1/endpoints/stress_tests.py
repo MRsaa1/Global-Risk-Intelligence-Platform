@@ -4,11 +4,14 @@ Stress Tests API endpoints.
 CRUD operations for stress tests, risk zones, and reports.
 Integrates with NVIDIA LLM for intelligent report generation.
 """
+import asyncio
 import json
 import logging
 import re
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 from uuid import uuid4
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel, Field
@@ -37,14 +40,23 @@ from src.models.stress_test import (
     ActionPlan,
     OrganizationType,
 )
+from src.models.compliance_verification import ComplianceVerification
 from src.models.asset import Asset
 from src.services.event_emitter import event_emitter
 from src.models.events import EventTypes
+from src.services.arin_export import export_stress_test, make_scenario_entity_id
+from src.services.scenario_replay import replay_service
+from fastapi.responses import JSONResponse
 
 router = APIRouter(prefix="/stress-tests", tags=["Stress Tests"])
 
 # Currency by city/region (San Francisco = USD, Tokyo = JPY, Frankfurt/London = EUR/GBP)
 REGION_CURRENCY = {
+    "Montreal": "CAD",
+    "Toronto": "CAD",
+    "Vancouver": "CAD",
+    "Calgary": "CAD",
+    "Quebec": "CAD",
     "San Francisco": "USD",
     "Oakland": "USD",
     "New York": "USD",
@@ -62,7 +74,7 @@ REGION_CURRENCY = {
     "Melbourne": "AUD",
 }
 
-# Jurisdiction by city/region for regulatory relevance (Japan, EU, USA)
+# Jurisdiction by city/region for regulatory relevance (Japan, EU, USA, Canada)
 REGION_JURISDICTION = {
     "Tokyo": "Japan",
     "Japan": "Japan",
@@ -80,6 +92,12 @@ REGION_JURISDICTION = {
     "Amsterdam": "EU",
     "Melbourne": "Australia",
     "Sydney": "Australia",
+    "Montreal": "Canada",
+    "Toronto": "Canada",
+    "Vancouver": "Canada",
+    "Calgary": "Canada",
+    "Quebec": "Canada",
+    "Canada": "Canada",
 }
 
 
@@ -99,7 +117,7 @@ def _get_currency_for_city(city_name: str) -> str:
 
 
 def _get_jurisdiction_for_city(city_name: str) -> str:
-    """Return jurisdiction for regulatory relevance (Japan, EU, USA, UK, Australia). Default EU."""
+    """Return jurisdiction for regulatory relevance (Japan, EU, USA, UK, Australia, Canada). Default EU."""
     if not city_name:
         return "EU"
     c = (city_name or "").strip()
@@ -110,6 +128,8 @@ def _get_jurisdiction_for_city(city_name: str) -> str:
         return "USA"
     if "Japan" in c or "Tokyo" in c:
         return "Japan"
+    if "Canada" in c or "Quebec" in c:
+        return "Canada"
     return "EU"
 
 
@@ -123,6 +143,7 @@ def _is_llm_fallback(text: Optional[str]) -> bool:
         or "configure nvidia_api_key" in t
         or "nvidia_llm_api_key" in t
         or "simulated response" in t
+        or "demo response" in t
         or "mock " in t
         or "this is a simulated" in t
     )
@@ -274,6 +295,7 @@ class StressTestResponse(BaseModel):
     created_at: Optional[str]
     updated_at: Optional[str]
     zones: List[RiskZoneResponse] = []
+    compliance_verification: Optional[dict] = None  # { verified: bool, verifications: [{ framework_id, status, id }], verified_at: iso }
 
     class Config:
         from_attributes = True
@@ -483,6 +505,42 @@ async def get_extended_scenarios():
         return {"categories": []}
 
 
+class SyntheticStressRequest(BaseModel):
+    """Request for synthetic black-swan scenario generation."""
+    portfolio_context: Optional[Dict[str, Any]] = Field(None, description="Portfolio/asset context")
+    count: int = Field(10, ge=1, le=50, description="Number of synthetic scenarios to generate")
+
+
+@router.post("/synthetic")
+async def generate_synthetic_stress(body: Optional[SyntheticStressRequest] = None):
+    """
+    Generate synthetic black-swan stress scenarios.
+    Uses SyntheticScenarioGenerator (LLM) to produce plausible unprecedented event combinations.
+    """
+    from src.services.synthetic_scenarios import get_synthetic_scenario_generator
+    req = body or SyntheticStressRequest()
+    generator = get_synthetic_scenario_generator()
+    scenarios = await generator.generate_black_swans(
+        portfolio_context=req.portfolio_context or {},
+        count=req.count,
+    )
+    return {
+        "scenarios": [
+            {
+                "scenario_id": s.scenario_id,
+                "name": s.name,
+                "description": s.description,
+                "probability_estimate": s.probability_estimate,
+                "affected_domains": s.affected_domains,
+                "cascade_path": s.cascade_path,
+                "compound_events": s.compound_events,
+            }
+            for s in scenarios
+        ],
+        "count": len(scenarios),
+    }
+
+
 @router.post("/admin/seed")
 async def seed_stress_tests(session: AsyncSession = Depends(get_db)):
     """
@@ -490,9 +548,17 @@ async def seed_stress_tests(session: AsyncSession = Depends(get_db)):
     Idempotent: no-op if 10+ tests exist. Use to populate the scenario
     dropdown on Visualizations/Command Center on a fresh server.
     Path /admin/seed avoids conflict with /{test_id} (which would match /seed).
+    Times out after 60s to avoid hanging if DB is slow or locked.
     """
+    import asyncio
     from src.services.stress_test_seed import seed_stress_tests_db
-    n = await seed_stress_tests_db(session)
+    try:
+        n = await asyncio.wait_for(seed_stress_tests_db(session), timeout=60.0)
+    except asyncio.TimeoutError:
+        raise HTTPException(
+            status_code=504,
+            detail="Seed timed out (60s). Database may be slow or locked; retry later.",
+        )
     return {"status": "success", "message": "Stress tests seeded", "inserted": n}
 
 
@@ -515,7 +581,24 @@ async def get_stress_test(
         select(RiskZone).where(RiskZone.stress_test_id == test_id)
     )
     zones = zones_result.scalars().all()
-    
+
+    # Compliance verifications for this stress test
+    comp_result = await session.execute(
+        select(ComplianceVerification)
+        .where(ComplianceVerification.stress_test_id == test_id)
+        .order_by(ComplianceVerification.checked_at.desc())
+    )
+    comp_list = comp_result.scalars().all()
+    compliance_verification = None
+    if comp_list:
+        verified = any(c.status == "passed" for c in comp_list)
+        verified_at = comp_list[0].checked_at.isoformat() if comp_list[0].checked_at else None
+        compliance_verification = {
+            "verified": verified,
+            "verifications": [{"framework_id": c.framework_id, "status": c.status, "id": c.id} for c in comp_list],
+            "verified_at": verified_at,
+        }
+
     return {
         "id": test.id,
         "name": test.name,
@@ -556,7 +639,33 @@ async def get_stress_test(
             }
             for z in zones
         ],
+        "compliance_verification": compliance_verification,
     }
+
+
+@router.get("/{test_id}/czml")
+async def get_stress_test_czml(
+    test_id: str,
+    session: AsyncSession = Depends(get_db),
+):
+    """Get CZML document for 4D timeline animation of stress test zones (T0 -> T+12m).
+    If test_id is not found in DB (e.g. catalog scenario id like climate_tipping), returns
+    synthetic CZML for that scenario so the 4D timeline still plays with visible impact zone."""
+    result = await session.execute(
+        select(StressTest).where(StressTest.id == test_id)
+    )
+    test = result.scalar_one_or_none()
+    if test:
+        zones_result = await session.execute(
+            select(RiskZone).where(RiskZone.stress_test_id == test_id)
+        )
+        zones = zones_result.scalars().all()
+        duration_months = float(getattr(test, "time_horizon_months", 12) or 12)
+        czml = replay_service.generate_stress_test_czml(test, zones, duration_months=duration_months)
+        return JSONResponse(content=czml, media_type="application/json")
+    # Fallback: catalog scenario id (no DB row) — generate synthetic CZML so 4D timeline works
+    czml = replay_service.generate_catalog_scenario_czml(test_id)
+    return JSONResponse(content=czml, media_type="application/json")
 
 
 @router.patch("/{test_id}", response_model=StressTestResponse)
@@ -746,6 +855,10 @@ class QuickStressTestRequest(BaseModel):
         False,
         description="Use NVIDIA AI Orchestration (multi-model consensus: fast + deep analysis, weighted summary). Requires use_llm=True.",
     )
+    source: Optional[str] = Field(
+        None,
+        description="Optional label for report origin, e.g. 'zone_simulation' for Municipal zone stress test on 3D.",
+    )
 
 
 class QuickZoneResponse(BaseModel):
@@ -815,6 +928,8 @@ class NVIDIAEnhancedResponse(BaseModel):
     physics_context: Optional[dict] = None
     region_action_plan: Optional["RegionActionPlanResponse"] = None
     report_v2: Optional[dict] = None
+    methodology: Optional[dict] = None  # ISO 31000:2018 (Gap C6)
+    eu_taxonomy_alignment: Optional[dict] = None  # EU Taxonomy (Gap C5)
 
 
 class RegionActionPlanResponse(BaseModel):
@@ -854,6 +969,9 @@ class QuickStressTestResponse(BaseModel):
     resolved_entity_type: Optional[str] = None  # from OpenCorporates/Wikidata when available
     nvidia_orchestration: Optional[dict] = None  # when use_nvidia_orchestration: confidence, model_agreement, flag_for_human_review
     currency: str = "EUR"  # USD for US cities, EUR/GBP for EU/UK
+    decision_object: Optional[dict] = None  # Risk & Intelligence OS - ARIN Decision Object
+    report_source: Optional[str] = None  # e.g. zone_simulation when stress test run from Municipal/3D zone flow
+    compliance_verification: Optional[dict] = None  # { verified: bool, verifications: [{ framework_id, status, id }], verified_at: iso }
 
 
 # =============================================================================
@@ -1212,8 +1330,11 @@ Write 3-4 short paragraphs. Be explicit. Use plain text only, no markdown. Engli
     )
     session.add(stress_test)
     
-    # Create risk zones
+    # Create risk zones (include polygon for 4D CZML when available)
     for zone in result.zones:
+        poly_json = None
+        if getattr(zone, "polygon", None) and isinstance(zone.polygon, (list, tuple)) and len(zone.polygon) >= 3:
+            poly_json = json.dumps({"type": "Polygon", "coordinates": [zone.polygon]})
         risk_zone = RiskZone(
             id=str(uuid4()),
             stress_test_id=test_id,
@@ -1221,6 +1342,7 @@ Write 3-4 short paragraphs. Be explicit. Use plain text only, no markdown. Engli
             center_latitude=zone.position["lat"],
             center_longitude=zone.position["lng"],
             radius_km=zone.radius / 1000,
+            polygon=poly_json,
             risk_score={"critical": 0.9, "high": 0.7, "medium": 0.5, "low": 0.3}.get(zone.risk_level.value, 0.5),
             affected_assets_count=zone.affected_buildings,
             total_exposure=zone.estimated_loss * 1000000,
@@ -1329,6 +1451,27 @@ Write 3-4 short paragraphs. Be explicit. Use plain text only, no markdown. Engli
 
     await session.commit()
 
+    # Compliance verification (real check against norms for this jurisdiction)
+    compliance_verification_payload: Optional[dict] = None
+    try:
+        from src.services.compliance_agent import run_verification
+        verifications = await run_verification(
+            db=session,
+            entity_type=entity_type_for_reg,
+            jurisdiction=jurisdiction,
+            stress_test_id=test_id,
+            context={"severity": result.severity, "total_loss": result.total_loss},
+        )
+        await session.commit()
+        if verifications:
+            compliance_verification_payload = {
+                "verified": any(v.status == "passed" for v in verifications),
+                "verifications": [{"framework_id": v.framework_id, "status": v.status, "id": v.id} for v in verifications],
+                "verified_at": verifications[0].checked_at.isoformat() if verifications else None,
+            }
+    except Exception as e:
+        logger.debug("Compliance verification skipped: %s", e)
+
     # Attach region action plan if available (e.g. Australia/Melbourne flood)
     from src.services.region_action_plans import get_plan, plan_to_dict
 
@@ -1346,7 +1489,46 @@ Write 3-4 short paragraphs. Be explicit. Use plain text only, no markdown. Engli
         },
         caused_by=started_event.event_id,
     )
-    
+
+    # ARIN Decision Object (Risk & Intelligence OS)
+    decision_object = None
+    try:
+        from src.services.arin_orchestrator import get_arin_orchestrator
+        orch = get_arin_orchestrator()
+        do = await orch.assess(
+            source_module="stress_test",
+            object_type="scenario",
+            object_id=test_id,
+            input_data={
+                "severity": result.severity,
+                "total_loss": result.total_loss,
+                "zones_count": len(result.zones),
+                "city_name": result.city_name,
+                "event_type": result.event_type.value,
+            },
+            shared_context={"portfolio_id": test_id, "source": "stress_test"},
+        )
+        decision_object = do.model_dump(mode="json")
+    except Exception as e:
+        logger.debug("ARIN assess skipped: %s", e)
+
+    # ARIN Platform export (fire-and-forget) with compliance verification when available
+    if settings.arin_export_url:
+        export_kw: dict = {
+            "entity_id": make_scenario_entity_id(result.event_name, str(result.severity)),
+            "scenario_name": result.event_name,
+            "risk_score": result.severity * 100,
+            "portfolio_loss": -(result.total_loss / 100) if result.total_loss else None,
+            "recovery_days": None,
+            "summary": executive_summary,
+            "recommendations": [a.get("action", "") for a in mitigation_actions[:3] if isinstance(a, dict) and a.get("action")],
+        }
+        if compliance_verification_payload:
+            export_kw["compliance_verification_passed"] = compliance_verification_payload.get("verified", False)
+            export_kw["compliance_verification_id"] = compliance_verification_payload.get("verifications", [{}])[0].get("id") if compliance_verification_payload.get("verifications") else None
+            export_kw["frameworks_checked"] = [v.get("framework_id") for v in compliance_verification_payload.get("verifications", [])]
+        asyncio.create_task(export_stress_test(**export_kw))
+
     return QuickStressTestResponse(
         id=test_id,
         event_name=result.event_name,
@@ -1386,6 +1568,9 @@ Write 3-4 short paragraphs. Be explicit. Use plain text only, no markdown. Engli
         resolved_entity_type=resolved_entity_type,
         nvidia_orchestration=nvidia_orchestration_result,
         currency=currency,
+        decision_object=decision_object,
+        report_source=getattr(request, "source", None),
+        compliance_verification=compliance_verification_payload,
     )
 
 
@@ -1619,6 +1804,8 @@ async def execute_nvidia_enhanced_stress_test(
         ),
         weather_context=weather_ctx,
         physics_context=physics_ctx,
+        methodology=getattr(zones_result, "methodology", None),
+        eu_taxonomy_alignment=getattr(zones_result, "eu_taxonomy_alignment", None),
     )
 
 
@@ -1757,6 +1944,20 @@ async def run_stress_test(
             },
             caused_by=started_event.event_id,
         )
+
+        # ARIN Platform export (fire-and-forget)
+        if getattr(settings, "arin_export_url", None):
+            asyncio.create_task(
+                export_stress_test(
+                    entity_id=make_scenario_entity_id(test.name, str(test.severity or 0.5)),
+                    scenario_name=test.name,
+                    risk_score=test.severity * 100 if test.severity else 50,
+                    portfolio_loss=-(test.expected_loss / 1e6) if test.expected_loss else None,
+                    recovery_days=None,
+                    summary=f"Stress test {test.name}: {test.affected_assets_count or 0} assets, €{test.expected_loss or 0:,.0f} expected loss.",
+                    recommendations=["Review exposure", "Update risk limits"],
+                )
+            )
         
     except Exception as e:
         test.status = StressTestStatus.FAILED.value

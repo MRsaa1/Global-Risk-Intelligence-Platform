@@ -14,7 +14,7 @@ Risk factors are based on publicly available data:
 - Political: Based on regional stability indicators
 """
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from enum import Enum
 
 
@@ -53,20 +53,21 @@ class CityData:
     country: str
     lat: float
     lng: float
-    
+    country_code: str = ""  # ISO 3166-1 alpha-2 (US, DE, etc.) for filtering and consistency
+
     # Economic data
     exposure: float = 0.0  # Billions USD
     assets_count: int = 0
     gdp_contribution: float = 0.0  # Percentage of country GDP
-    
+
     # Risk zones
     seismic_zone: SeismicZone = SeismicZone.STABLE
     climate_zone: ClimateZone = ClimateZone.TEMPERATE
     political_region: PoliticalRegion = PoliticalRegion.OECD_STABLE
-    
+
     # Known risk factors (0.0 - 1.0)
     known_risks: Dict[str, float] = field(default_factory=dict)
-    
+
     # Historical events
     major_events: List[str] = field(default_factory=list)
 
@@ -98,6 +99,27 @@ POLITICAL_BASE_RISK = {
     PoliticalRegion.CONFLICT_ZONE: 0.90,
 }
 
+# Country name -> ISO 3166-1 alpha-2 for consistent filtering across modules
+COUNTRY_TO_ISO: Dict[str, str] = {
+    "USA": "US", "Canada": "CA", "Mexico": "MX", "Brazil": "BR", "Argentina": "AR",
+    "Chile": "CL", "Colombia": "CO", "Venezuela": "VE",
+    "UK": "GB", "France": "FR", "Germany": "DE", "Italy": "IT", "Spain": "ES",
+    "Portugal": "PT", "Netherlands": "NL", "Belgium": "BE", "Switzerland": "CH",
+    "Austria": "AT", "Sweden": "SE", "Norway": "NO", "Finland": "FI", "Denmark": "DK",
+    "Ireland": "IE", "Greece": "GR", "Poland": "PL", "Russia": "RU", "Ukraine": "UA",
+    "Turkey": "TR", "Belarus": "BY",
+    "Japan": "JP", "China": "CN", "South Korea": "KR", "Taiwan": "TW", "Hong Kong": "HK",
+    "India": "IN", "Singapore": "SG", "Thailand": "TH", "Indonesia": "ID",
+    "Philippines": "PH", "Vietnam": "VN", "Bangladesh": "BD", "Pakistan": "PK",
+    "Malaysia": "MY", "Afghanistan": "AF", "North Korea": "KP",
+    "UAE": "AE", "Qatar": "QA", "Saudi Arabia": "SA", "Israel": "IL", "Egypt": "EG",
+    "Iran": "IR", "Lebanon": "LB", "Libya": "LY", "Palestine": "PS",
+    "Nigeria": "NG", "South Africa": "ZA", "Kenya": "KE", "Morocco": "MA",
+    "Syria": "SY", "Yemen": "YE", "Sudan": "SD",
+    "Australia": "AU", "New Zealand": "NZ",
+    "Czech Republic": "CZ", "Hungary": "HU", "Romania": "RO", "Peru": "PE", "Ecuador": "EC",
+}
+
 
 # ============================================================================
 # CITIES DATABASE - 72 Cities with Known Risk Factors
@@ -111,7 +133,7 @@ CITIES_DATABASE: Dict[str, CityData] = {
         seismic_zone=SeismicZone.STABLE,
         climate_zone=ClimateZone.COASTAL_FLOOD,
         political_region=PoliticalRegion.OECD_STABLE,
-        known_risks={"flood": 0.65, "hurricane": 0.55, "infrastructure": 0.40},
+        known_risks={"flood": 0.65, "hurricane": 0.55, "infrastructure": 0.40, "pandemic": 0.35},
         major_events=["Hurricane Sandy 2012", "9/11 2001"]
     ),
     "losangeles": CityData(
@@ -120,7 +142,7 @@ CITIES_DATABASE: Dict[str, CityData] = {
         seismic_zone=SeismicZone.PACIFIC_RING,
         climate_zone=ClimateZone.ARID,
         political_region=PoliticalRegion.OECD_STABLE,
-        known_risks={"earthquake": 0.85, "wildfire": 0.70, "drought": 0.55},
+        known_risks={"earthquake": 0.85, "wildfire": 0.70, "drought": 0.55, "ai": 0.55},
         major_events=["Northridge Earthquake 1994", "LA Wildfires 2020"]
     ),
     "sanfrancisco": CityData(
@@ -129,7 +151,7 @@ CITIES_DATABASE: Dict[str, CityData] = {
         seismic_zone=SeismicZone.PACIFIC_RING,
         climate_zone=ClimateZone.TEMPERATE,
         political_region=PoliticalRegion.OECD_STABLE,
-        known_risks={"earthquake": 0.92, "wildfire": 0.45, "sea_level": 0.50},
+        known_risks={"earthquake": 0.92, "wildfire": 0.45, "sea_level": 0.50, "ai": 0.50},
         major_events=["1906 Earthquake", "Loma Prieta 1989"]
     ),
     "chicago": CityData(
@@ -138,7 +160,7 @@ CITIES_DATABASE: Dict[str, CityData] = {
         seismic_zone=SeismicZone.STABLE,
         climate_zone=ClimateZone.CONTINENTAL,
         political_region=PoliticalRegion.OECD_STABLE,
-        known_risks={"flood": 0.45, "winter_storm": 0.55, "infrastructure": 0.35},
+        known_risks={"flood": 0.45, "winter_storm": 0.55, "infrastructure": 0.35, "ai": 0.45},
         major_events=["Great Chicago Fire 1871", "1967 Blizzard"]
     ),
     "miami": CityData(
@@ -165,7 +187,7 @@ CITIES_DATABASE: Dict[str, CityData] = {
         seismic_zone=SeismicZone.STABLE,
         climate_zone=ClimateZone.COASTAL_FLOOD,
         political_region=PoliticalRegion.OECD_STABLE,
-        known_risks={"flood": 0.55, "hurricane": 0.40, "winter_storm": 0.50},
+        known_risks={"flood": 0.55, "hurricane": 0.40, "winter_storm": 0.50, "pandemic": 0.30},
         major_events=["Blizzard of 1978", "Boston Molasses Disaster 1919"]
     ),
     "washington": CityData(
@@ -174,7 +196,7 @@ CITIES_DATABASE: Dict[str, CityData] = {
         seismic_zone=SeismicZone.STABLE,
         climate_zone=ClimateZone.TEMPERATE,
         political_region=PoliticalRegion.OECD_STABLE,
-        known_risks={"flood": 0.45, "hurricane": 0.35, "cyber": 0.60},
+        known_risks={"flood": 0.45, "hurricane": 0.35, "cyber": 0.60, "ai": 0.60, "pandemic": 0.40},
         major_events=["Hurricane Isabel 2003", "Derecho 2012"]
     ),
     "denver": CityData(
@@ -228,7 +250,7 @@ CITIES_DATABASE: Dict[str, CityData] = {
         seismic_zone=SeismicZone.PACIFIC_RING,
         climate_zone=ClimateZone.TEMPERATE,
         political_region=PoliticalRegion.EMERGING_STABLE,
-        known_risks={"earthquake": 0.90, "subsidence": 0.75, "air_quality": 0.60},
+        known_risks={"earthquake": 0.90, "subsidence": 0.75, "air_quality": 0.60, "pandemic": 0.45},
         major_events=["1985 Earthquake", "2017 Earthquake"]
     ),
     
@@ -239,7 +261,7 @@ CITIES_DATABASE: Dict[str, CityData] = {
         seismic_zone=SeismicZone.PACIFIC_RING,
         climate_zone=ClimateZone.TROPICAL_CYCLONE,
         political_region=PoliticalRegion.OECD_STABLE,
-        known_risks={"earthquake": 0.95, "typhoon": 0.75, "flood": 0.60, "tsunami": 0.70},
+        known_risks={"earthquake": 0.95, "typhoon": 0.75, "flood": 0.60, "tsunami": 0.70, "ai": 0.40, "pandemic": 0.50},
         major_events=["1923 Great Kanto Earthquake", "2011 Tohoku Earthquake"]
     ),
     "shanghai": CityData(
@@ -248,7 +270,7 @@ CITIES_DATABASE: Dict[str, CityData] = {
         seismic_zone=SeismicZone.STABLE,
         climate_zone=ClimateZone.MONSOON,
         political_region=PoliticalRegion.EMERGING_STABLE,
-        known_risks={"typhoon": 0.70, "flood": 0.75, "subsidence": 0.55},
+        known_risks={"typhoon": 0.70, "flood": 0.75, "subsidence": 0.55, "pandemic": 0.35},
         major_events=["Typhoon Lekima 2019"]
     ),
     "beijing": CityData(
@@ -257,7 +279,7 @@ CITIES_DATABASE: Dict[str, CityData] = {
         seismic_zone=SeismicZone.ALPINE_HIMALAYAN,
         climate_zone=ClimateZone.CONTINENTAL,
         political_region=PoliticalRegion.EMERGING_STABLE,
-        known_risks={"earthquake": 0.55, "air_quality": 0.70, "water_stress": 0.65},
+        known_risks={"earthquake": 0.55, "air_quality": 0.70, "water_stress": 0.65, "ai": 0.35},
         major_events=["1976 Tangshan Earthquake (nearby)"]
     ),
     "hongkong": CityData(
@@ -266,7 +288,7 @@ CITIES_DATABASE: Dict[str, CityData] = {
         seismic_zone=SeismicZone.STABLE,
         climate_zone=ClimateZone.TROPICAL_CYCLONE,
         political_region=PoliticalRegion.EMERGING_VOLATILE,
-        known_risks={"typhoon": 0.80, "flood": 0.65, "political": 0.55},
+        known_risks={"typhoon": 0.80, "flood": 0.65, "political": 0.55, "pandemic": 0.40},
         major_events=["Typhoon Mangkhut 2018", "2019 Protests"]
     ),
     "singapore": CityData(
@@ -412,7 +434,7 @@ CITIES_DATABASE: Dict[str, CityData] = {
         seismic_zone=SeismicZone.STABLE,
         climate_zone=ClimateZone.CONTINENTAL,
         political_region=PoliticalRegion.OECD_STABLE,
-        known_risks={"cyber": 0.45, "infrastructure": 0.40, "energy": 0.50},
+        known_risks={"cyber": 0.45, "infrastructure": 0.40, "energy": 0.50, "ai": 0.50, "pandemic": 0.35},
         major_events=[]
     ),
     "munich": CityData(
@@ -660,6 +682,24 @@ CITIES_DATABASE: Dict[str, CityData] = {
         known_risks={"heat": 0.75, "sand_storm": 0.55, "water_stress": 0.70},
         major_events=["2024 Floods"]
     ),
+    "abudhabi": CityData(
+        id="abudhabi", name="Abu Dhabi", country="UAE",
+        lat=24.4539, lng=54.3773, exposure=28.0, assets_count=412,
+        seismic_zone=SeismicZone.STABLE,
+        climate_zone=ClimateZone.ARID,
+        political_region=PoliticalRegion.EMERGING_STABLE,
+        known_risks={"heat": 0.75, "water_stress": 0.70},
+        major_events=["2024 Floods"]
+    ),
+    "doha": CityData(
+        id="doha", name="Doha", country="Qatar",
+        lat=25.2854, lng=51.5310, exposure=24.0, assets_count=298,
+        seismic_zone=SeismicZone.STABLE,
+        climate_zone=ClimateZone.ARID,
+        political_region=PoliticalRegion.EMERGING_STABLE,
+        known_risks={"heat": 0.80, "water_stress": 0.75},
+        major_events=[]
+    ),
     "telaviv": CityData(
         id="telaviv", name="Tel Aviv", country="Israel",
         lat=32.0853, lng=34.7818, exposure=35.2, assets_count=567,
@@ -733,6 +773,33 @@ CITIES_DATABASE: Dict[str, CityData] = {
         political_region=PoliticalRegion.EMERGING_STABLE,
         known_risks={"flood": 0.75, "landslide": 0.70, "crime": 0.60},
         major_events=["2011 Landslides", "2022 Floods"]
+    ),
+    "santiago": CityData(
+        id="santiago", name="Santiago", country="Chile",
+        lat=-33.4489, lng=-70.6693, exposure=28.5, assets_count=567,
+        seismic_zone=SeismicZone.PACIFIC_RING,
+        climate_zone=ClimateZone.TEMPERATE,
+        political_region=PoliticalRegion.EMERGING_STABLE,
+        known_risks={"earthquake": 0.85, "drought": 0.65, "wildfire": 0.55},
+        major_events=["2010 Earthquake", "2017 Wildfires", "Megadrought"]
+    ),
+    "bogota": CityData(
+        id="bogota", name="Bogotá", country="Colombia",
+        lat=4.7110, lng=-74.0721, exposure=22.5, assets_count=456,
+        seismic_zone=SeismicZone.PACIFIC_RING,
+        climate_zone=ClimateZone.TEMPERATE,
+        political_region=PoliticalRegion.EMERGING_STABLE,
+        known_risks={"flood": 0.60, "landslide": 0.55, "earthquake": 0.50},
+        major_events=["2017 Mocoa Landslide", "La Niña Floods"]
+    ),
+    "medellin": CityData(
+        id="medellin", name="Medellín", country="Colombia",
+        lat=6.2476, lng=-75.5658, exposure=18.5, assets_count=345,
+        seismic_zone=SeismicZone.PACIFIC_RING,
+        climate_zone=ClimateZone.TEMPERATE,
+        political_region=PoliticalRegion.EMERGING_STABLE,
+        known_risks={"flood": 0.55, "landslide": 0.60, "heavy_rain": 0.50},
+        major_events=["2022 Landslides", "Seasonal Flooding"]
     ),
     
     # ==================== OCEANIA ====================
@@ -911,7 +978,102 @@ CITIES_DATABASE: Dict[str, CityData] = {
         known_risks={"conflict": 0.85, "political": 0.88, "infrastructure": 0.75},
         major_events=["Libyan Civil War 2011-present", "2023 Floods"],
     ),
+    # Additional cities (multiple per country for full coverage)
+    "porto": CityData(
+        id="porto", name="Porto", country="Portugal",
+        lat=41.1579, lng=-8.6291, exposure=12.5, assets_count=234,
+        seismic_zone=SeismicZone.MID_ATLANTIC,
+        climate_zone=ClimateZone.TEMPERATE,
+        political_region=PoliticalRegion.OECD_STABLE,
+        known_risks={"flood": 0.50, "wildfire": 0.40},
+        major_events=["2022 Wildfires"],
+    ),
+    "cork": CityData(
+        id="cork", name="Cork", country="Ireland",
+        lat=51.8985, lng=-8.4756, exposure=8.5, assets_count=145,
+        seismic_zone=SeismicZone.STABLE,
+        climate_zone=ClimateZone.TEMPERATE,
+        political_region=PoliticalRegion.OECD_STABLE,
+        known_risks={"flood": 0.55, "wind": 0.45},
+        major_events=["2009 Floods"],
+    ),
+    "auckland": CityData(
+        id="auckland", name="Auckland", country="New Zealand",
+        lat=-36.8509, lng=174.7645, exposure=22.5, assets_count=412,
+        seismic_zone=SeismicZone.PACIFIC_RING,
+        climate_zone=ClimateZone.TEMPERATE,
+        political_region=PoliticalRegion.OECD_STABLE,
+        known_risks={"earthquake": 0.45, "volcanic": 0.55, "flood": 0.40},
+        major_events=["Auckland Floods 2023"],
+    ),
+    "casablanca": CityData(
+        id="casablanca", name="Casablanca", country="Morocco",
+        lat=33.5731, lng=-7.5898, exposure=18.5, assets_count=298,
+        seismic_zone=SeismicZone.ALPINE_HIMALAYAN,
+        climate_zone=ClimateZone.TEMPERATE,
+        political_region=PoliticalRegion.EMERGING_STABLE,
+        known_risks={"earthquake": 0.50, "water_stress": 0.55},
+        major_events=[],
+    ),
+    "nairobi": CityData(
+        id="nairobi", name="Nairobi", country="Kenya",
+        lat=-1.2921, lng=36.8219, exposure=12.5, assets_count=267,
+        seismic_zone=SeismicZone.STABLE,
+        climate_zone=ClimateZone.TEMPERATE,
+        political_region=PoliticalRegion.EMERGING_STABLE,
+        known_risks={"flood": 0.55, "infrastructure": 0.50},
+        major_events=["2018 Floods"],
+    ),
+    "prague": CityData(
+        id="prague", name="Prague", country="Czech Republic",
+        lat=50.0755, lng=14.4378, exposure=28.5, assets_count=456,
+        seismic_zone=SeismicZone.STABLE,
+        climate_zone=ClimateZone.CONTINENTAL,
+        political_region=PoliticalRegion.OECD_STABLE,
+        known_risks={"flood": 0.60, "infrastructure": 0.35},
+        major_events=["2002 Floods"],
+    ),
+    "budapest": CityData(
+        id="budapest", name="Budapest", country="Hungary",
+        lat=47.4979, lng=19.0402, exposure=22.5, assets_count=389,
+        seismic_zone=SeismicZone.STABLE,
+        climate_zone=ClimateZone.CONTINENTAL,
+        political_region=PoliticalRegion.OECD_STABLE,
+        known_risks={"flood": 0.55, "heat": 0.50},
+        major_events=["2013 Danube Floods"],
+    ),
+    "bucharest": CityData(
+        id="bucharest", name="Bucharest", country="Romania",
+        lat=44.4268, lng=26.1025, exposure=18.5, assets_count=312,
+        seismic_zone=SeismicZone.ALPINE_HIMALAYAN,
+        climate_zone=ClimateZone.CONTINENTAL,
+        political_region=PoliticalRegion.OECD_MODERATE,
+        known_risks={"earthquake": 0.75, "flood": 0.40},
+        major_events=["1977 Earthquake", "2005 Floods"],
+    ),
+    "kualalumpur": CityData(
+        id="kualalumpur", name="Kuala Lumpur", country="Malaysia",
+        lat=3.1390, lng=101.6869, exposure=28.5, assets_count=478,
+        seismic_zone=SeismicZone.STABLE,
+        climate_zone=ClimateZone.TROPICAL_CYCLONE,
+        political_region=PoliticalRegion.EMERGING_STABLE,
+        known_risks={"flood": 0.70, "haze": 0.55},
+        major_events=["2021 Floods"],
+    ),
+    "lima": CityData(
+        id="lima", name="Lima", country="Peru",
+        lat=-12.0464, lng=-77.0428, exposure=22.5, assets_count=398,
+        seismic_zone=SeismicZone.PACIFIC_RING,
+        climate_zone=ClimateZone.ARID,
+        political_region=PoliticalRegion.EMERGING_STABLE,
+        known_risks={"earthquake": 0.85, "tsunami": 0.60, "water_stress": 0.50},
+        major_events=["1970 Earthquake", "2007 Earthquake"],
+    ),
 }
+
+# Set ISO country_code on all cities for consistent filtering across modules
+for _c in CITIES_DATABASE.values():
+    _c.country_code = COUNTRY_TO_ISO.get(_c.country, "")
 
 
 def get_city(city_id: str) -> Optional[CityData]:
@@ -922,6 +1084,14 @@ def get_city(city_id: str) -> Optional[CityData]:
 def get_all_cities() -> List[CityData]:
     """Get all cities."""
     return list(CITIES_DATABASE.values())
+
+
+def get_cities_by_country_code(country_code_iso: str) -> List[CityData]:
+    """Get all cities in a country by ISO 3166-1 alpha-2 code (e.g. US, DE)."""
+    code = (country_code_iso or "").strip().upper()
+    if not code:
+        return []
+    return [c for c in CITIES_DATABASE.values() if (c.country_code or "").upper() == code]
 
 
 def get_cities_by_risk_zone(zone: SeismicZone) -> List[CityData]:
@@ -937,3 +1107,45 @@ def get_cities_by_climate(zone: ClimateZone) -> List[CityData]:
 def get_cities_by_political_region(region: PoliticalRegion) -> List[CityData]:
     """Get cities in a specific political region."""
     return [c for c in CITIES_DATABASE.values() if c.political_region == region]
+
+
+def composite_risk_score(city: CityData) -> float:
+    """Composite 0-1 risk score for climate-haven comparison (lower = safer)."""
+    seismic = SEISMIC_BASE_RISK.get(city.seismic_zone, 0.2)
+    climate = CLIMATE_BASE_RISK.get(city.climate_zone, 0.35)
+    political = POLITICAL_BASE_RISK.get(city.political_region, 0.2)
+    base = (seismic + climate + political) / 3.0
+    if city.known_risks:
+        avg_known = sum(city.known_risks.values()) / len(city.known_risks)
+        return (base + avg_known) / 2.0
+    return base
+
+
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Distance in km between two points (WGS84)."""
+    import math
+    R = 6371.0
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlam = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return R * c
+
+
+def get_haven_for_location(lat: float, lng: float) -> Tuple[Optional[CityData], str]:
+    """
+    For a given (lat, lng), return the recommended climate haven (city with lowest composite risk).
+    Prefer same country as the nearest city; else global minimum.
+    Returns (CityData or None, reason string).
+    """
+    cities = get_all_cities()
+    if not cities:
+        return None, "No city data."
+    nearest = min(cities, key=lambda c: _haversine_km(lat, lng, c.lat, c.lng))
+    same_country = [c for c in cities if c.country == nearest.country]
+    pool = same_country if same_country else cities
+    haven = min(pool, key=composite_risk_score)
+    score = round(composite_risk_score(haven), 3)
+    reason = f"Lowest composite risk in {haven.country}" if same_country else "Lowest composite risk globally"
+    return haven, reason

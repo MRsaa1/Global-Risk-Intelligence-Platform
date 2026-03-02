@@ -80,7 +80,7 @@ export default function ChartControls({
     
     try {
       const canvas = await html2canvas(chartRef.current, {
-        backgroundColor: '#0a0f18',
+        backgroundColor: '#09090b',
         scale: 2,
       })
       
@@ -135,15 +135,15 @@ export default function ChartControls({
     <div className={`flex items-center gap-2 flex-wrap ${className}`}>
       {/* Time Range Selector */}
       {showTimeRange && (
-        <div className="flex bg-white/5 rounded-lg p-0.5">
+        <div className="flex bg-zinc-800 rounded-lg p-0.5">
           {timeRanges.map(range => (
             <button
               key={range}
               onClick={() => onTimeRangeChange?.(range)}
               className={`px-2 py-1 text-xs rounded transition-all ${
                 timeRange === range
-                  ? 'bg-white/10 text-white'
-                  : 'text-white/40 hover:text-white/60'
+                  ? 'bg-zinc-700 text-zinc-100'
+                  : 'text-zinc-500 hover:text-zinc-400'
               }`}
             >
               {range}
@@ -161,8 +161,8 @@ export default function ChartControls({
               onClick={() => toggleFilter(filter)}
               className={`px-2 py-1 text-xs rounded transition-all ${
                 activeFilters.includes(filter)
-                  ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                  : 'bg-white/5 text-white/40 border border-transparent hover:bg-white/10'
+                  ? 'bg-zinc-700 text-zinc-300 border border-zinc-600'
+                  : 'bg-zinc-800 text-zinc-500 border border-transparent hover:bg-zinc-700'
               }`}
             >
               {filter}
@@ -179,7 +179,7 @@ export default function ChartControls({
         <button
           onClick={onRefresh}
           disabled={isRefreshing}
-          className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/40 hover:text-white/60 transition-all disabled:opacity-50"
+          className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-500 hover:text-zinc-400 transition-all disabled:opacity-50"
           title="Refresh"
         >
           <motion.svg
@@ -199,7 +199,7 @@ export default function ChartControls({
       {showZoomReset && (
         <button
           onClick={onZoomReset}
-          className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/40 hover:text-white/60 transition-all"
+          className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-500 hover:text-zinc-400 transition-all"
           title="Reset Zoom"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -213,7 +213,7 @@ export default function ChartControls({
         <div className="relative">
           <button
             onClick={() => setExportMenuOpen(!exportMenuOpen)}
-            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/40 hover:text-white/60 transition-all"
+            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-500 hover:text-zinc-400 transition-all"
             title="Export"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -230,11 +230,11 @@ export default function ChartControls({
               <motion.div
                 initial={{ opacity: 0, y: -5 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="absolute right-0 top-full mt-1 bg-[#1a1f2e] border border-white/10 rounded-lg shadow-xl z-50 overflow-hidden min-w-[120px]"
+                className="absolute right-0 top-full mt-1 bg-[#18181b] border border-zinc-700 rounded-lg shadow-xl z-50 overflow-hidden min-w-[120px]"
               >
                 <button
                   onClick={exportToPng}
-                  className="w-full px-3 py-2 text-left text-xs text-white/70 hover:bg-white/5 transition-colors flex items-center gap-2"
+                  className="w-full px-3 py-2 text-left text-xs text-zinc-300 hover:bg-zinc-800 transition-colors flex items-center gap-2"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -243,7 +243,7 @@ export default function ChartControls({
                 </button>
                 <button
                   onClick={exportToSvg}
-                  className="w-full px-3 py-2 text-left text-xs text-white/70 hover:bg-white/5 transition-colors flex items-center gap-2"
+                  className="w-full px-3 py-2 text-left text-xs text-zinc-300 hover:bg-zinc-800 transition-colors flex items-center gap-2"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
@@ -260,7 +260,7 @@ export default function ChartControls({
       {showFullscreen && (
         <button
           onClick={onFullscreenToggle}
-          className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/40 hover:text-white/60 transition-all"
+          className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-500 hover:text-zinc-400 transition-all"
           title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
         >
           {isFullscreen ? (

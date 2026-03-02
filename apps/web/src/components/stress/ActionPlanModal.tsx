@@ -50,26 +50,27 @@ const SECTOR_ICONS: Record<string, JSX.Element> = {
 }
 
 const SECTOR_COLORS: Record<string, string> = {
-  '1': 'purple',
-  '2': 'blue',
-  '3': 'emerald',
-  '4': 'cyan',
-  '5': 'orange',
+  '1': 'zinc',
+  '2': 'zinc',
+  '3': 'zinc',
+  '4': 'zinc',
+  '5': 'zinc',
 }
 
 const CRITICALITY_STYLES: Record<string, string> = {
-  CRITICAL: 'text-red-400 bg-red-500/20 border-red-500/30',
-  HIGH: 'text-orange-400 bg-orange-500/20 border-orange-500/30',
-  MEDIUM: 'text-yellow-400 bg-yellow-500/20 border-yellow-500/30',
-  LOW: 'text-emerald-400 bg-emerald-500/20 border-emerald-500/30',
+  CRITICAL: 'text-red-400/80 bg-red-500/20 border-red-500/30',
+  HIGH: 'text-orange-400/80 bg-orange-500/20 border-orange-500/30',
+  MEDIUM: 'text-yellow-400/80 bg-yellow-500/20 border-yellow-500/30',
+  LOW: 'text-emerald-400/80 bg-emerald-500/20 border-emerald-500/30',
 }
 
 const COLOR_CLASSES: Record<string, { text: string; border: string }> = {
-  purple: { text: 'text-purple-400', border: 'border-purple-500/30' },
-  blue: { text: 'text-blue-400', border: 'border-blue-500/30' },
-  emerald: { text: 'text-emerald-400', border: 'border-emerald-500/30' },
-  cyan: { text: 'text-amber-400', border: 'border-amber-500/30' },
-  orange: { text: 'text-orange-400', border: 'border-orange-500/30' },
+  purple: { text: 'text-zinc-400', border: 'border-zinc-600' },
+  blue: { text: 'text-zinc-400', border: 'border-zinc-600' },
+  emerald: { text: 'text-zinc-400', border: 'border-zinc-600' },
+  cyan: { text: 'text-zinc-400', border: 'border-zinc-600' },
+  orange: { text: 'text-zinc-400', border: 'border-zinc-600' },
+  zinc: { text: 'text-zinc-400', border: 'border-zinc-600' },
 }
 
 export default function ActionPlanModal({
@@ -139,7 +140,7 @@ export default function ActionPlanModal({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+          className="absolute inset-0 bg-black/80"
           onClick={onClose}
         />
         <motion.div
@@ -147,17 +148,18 @@ export default function ActionPlanModal({
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.98, y: 10 }}
           transition={{ duration: 0.25 }}
-          className="relative w-full max-w-4xl max-h-[90vh] bg-[#0a0f18] border border-white/10 rounded-2xl overflow-hidden shadow-2xl flex flex-col"
+          className="relative w-full max-w-[94vw] max-h-[90vh] bg-[#09090b] border border-zinc-800 rounded-md overflow-hidden shadow-2xl flex flex-col font-sans"
+          style={{ fontFamily: "'JetBrains Mono', monospace" }}
         >
           {/* Header */}
-          <div className="px-6 py-4 border-b border-white/10 bg-gradient-to-r from-amber-500/10 to-transparent shrink-0">
+          <div className="px-6 py-4 border-b border-zinc-800 bg-gradient-to-r from-zinc-800 to-transparent shrink-0">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="flex items-center gap-2 mb-1">
-                  <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                  <h2 className="text-white text-lg font-medium tracking-wide">{template.title}</h2>
+                  <div className="w-2 h-2 rounded-full bg-zinc-500 animate-pulse" />
+                  <h2 className="text-zinc-100 text-lg font-medium tracking-wide">{template.title}</h2>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-0.5 text-[11px] text-white/50 mt-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-0.5 text-[11px] text-zinc-500 mt-2">
                   <span>DATE CREATED: {template.dateCreated}</span>
                   <span>OWNER: {template.owner}</span>
                   {(stressTestName || zoneName) && (
@@ -170,7 +172,7 @@ export default function ActionPlanModal({
               </div>
               <button
                 onClick={onClose}
-                className="p-2 text-white/40 hover:text-white rounded-lg hover:bg-white/5"
+                className="p-2 text-zinc-500 hover:text-zinc-100 rounded-md hover:bg-zinc-800"
                 aria-label="Close"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -181,7 +183,7 @@ export default function ActionPlanModal({
           </div>
 
           {/* Body */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10">
+          <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-zinc-800">
             {template.sectors.map((sector) => (
               <SectorCard
                 key={sector.id}
@@ -192,43 +194,43 @@ export default function ActionPlanModal({
             ))}
 
             {/* General principles */}
-            <section className="border border-white/10 rounded-xl p-4 bg-white/[0.02]">
-              <h3 className="text-amber-400/90 text-sm font-medium uppercase tracking-wider mb-3">
+            <section className="border border-zinc-800 rounded-md p-4 bg-zinc-900">
+              <h3 className="text-zinc-400 text-sm font-medium uppercase tracking-wider mb-3">
                 General principles for action plans
               </h3>
               <div className="space-y-4">
                 <div>
-                  <h4 className="text-white/70 text-xs font-medium mb-2">1. Priority hierarchy</h4>
-                  <div className="border border-white/10 rounded-lg overflow-hidden">
+                  <h4 className="text-zinc-300 text-xs font-medium mb-2">1. Priority hierarchy</h4>
+                  <div className="border border-zinc-800 rounded-md overflow-hidden">
                     {template.priorityHierarchy.map((p) => (
                       <div
                         key={p.level}
-                        className="flex items-center gap-3 px-3 py-2 border-b border-white/5 last:border-0"
+                        className="flex items-center gap-3 px-3 py-2 border-b border-zinc-800 last:border-0"
                       >
-                        <span className="text-white/40 text-xs w-6">{p.level}.</span>
-                        <span className="text-white/80 text-xs">{p.label}</span>
-                        <span className="text-white/40 text-[10px]">← {p.note}</span>
+                        <span className="text-zinc-500 text-xs w-6">{p.level}.</span>
+                        <span className="text-zinc-200 text-xs">{p.label}</span>
+                        <span className="text-zinc-500 text-[10px]">← {p.note}</span>
                       </div>
                     ))}
                   </div>
                 </div>
                 <div>
-                  <h4 className="text-white/70 text-xs font-medium mb-2">2. Key monitoring metrics</h4>
+                  <h4 className="text-zinc-300 text-xs font-medium mb-2">2. Key monitoring metrics</h4>
                   <div className="overflow-x-auto">
-                    <table className="w-full text-[11px] border border-white/10 rounded-lg overflow-hidden">
+                    <table className="w-full text-[11px] border border-zinc-800 rounded-md overflow-hidden">
                       <thead>
-                        <tr className="bg-white/5">
-                          <th className="text-left px-3 py-2 text-white/60 font-medium">Type</th>
-                          <th className="text-left px-3 py-2 text-white/60 font-medium">Examples</th>
-                          <th className="text-left px-3 py-2 text-white/60 font-medium">Frequency</th>
+                        <tr className="bg-zinc-800">
+                          <th className="text-left px-3 py-2 text-zinc-400 font-medium">Type</th>
+                          <th className="text-left px-3 py-2 text-zinc-400 font-medium">Examples</th>
+                          <th className="text-left px-3 py-2 text-zinc-400 font-medium">Frequency</th>
                         </tr>
                       </thead>
                       <tbody>
                         {template.monitoringMetrics.map((m, i) => (
-                          <tr key={i} className="border-t border-white/5">
-                            <td className="px-3 py-2 text-white/80">{m.type}</td>
-                            <td className="px-3 py-2 text-white/60">{m.examples}</td>
-                            <td className="px-3 py-2 text-white/50">{m.frequency}</td>
+                          <tr key={i} className="border-t border-zinc-800">
+                            <td className="px-3 py-2 text-zinc-200">{m.type}</td>
+                            <td className="px-3 py-2 text-zinc-400">{m.examples}</td>
+                            <td className="px-3 py-2 text-zinc-500">{m.frequency}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -236,24 +238,24 @@ export default function ActionPlanModal({
                   </div>
                 </div>
                 <div>
-                  <h4 className="text-white/70 text-xs font-medium mb-2">3. Escalation matrix</h4>
+                  <h4 className="text-zinc-300 text-xs font-medium mb-2">3. Escalation matrix</h4>
                   <div className="overflow-x-auto">
-                    <table className="w-full text-[11px] border border-white/10 rounded-lg overflow-hidden">
+                    <table className="w-full text-[11px] border border-zinc-800 rounded-md overflow-hidden">
                       <thead>
-                        <tr className="bg-white/5">
-                          <th className="text-left px-3 py-2 text-white/60 font-medium">Trigger level</th>
-                          <th className="text-left px-3 py-2 text-white/60 font-medium">Authority</th>
-                          <th className="text-left px-3 py-2 text-white/60 font-medium">Response time</th>
-                          <th className="text-left px-3 py-2 text-white/60 font-medium">Actions</th>
+                        <tr className="bg-zinc-800">
+                          <th className="text-left px-3 py-2 text-zinc-400 font-medium">Trigger level</th>
+                          <th className="text-left px-3 py-2 text-zinc-400 font-medium">Authority</th>
+                          <th className="text-left px-3 py-2 text-zinc-400 font-medium">Response time</th>
+                          <th className="text-left px-3 py-2 text-zinc-400 font-medium">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
                         {template.escalationMatrix.map((e, i) => (
-                          <tr key={i} className="border-t border-white/5">
-                            <td className="px-3 py-2 text-white/80">{e.trigger}</td>
-                            <td className="px-3 py-2 text-white/60">{e.authority}</td>
-                            <td className="px-3 py-2 text-white/60">{e.responseTime}</td>
-                            <td className="px-3 py-2 text-white/60">{e.actions}</td>
+                          <tr key={i} className="border-t border-zinc-800">
+                            <td className="px-3 py-2 text-zinc-200">{e.trigger}</td>
+                            <td className="px-3 py-2 text-zinc-400">{e.authority}</td>
+                            <td className="px-3 py-2 text-zinc-400">{e.responseTime}</td>
+                            <td className="px-3 py-2 text-zinc-400">{e.actions}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -261,8 +263,8 @@ export default function ActionPlanModal({
                   </div>
                 </div>
                 <div>
-                  <h4 className="text-white/70 text-xs font-medium mb-2">4. Mandatory elements of each plan</h4>
-                  <ul className="list-disc list-inside text-[11px] text-white/60 space-y-0.5">
+                  <h4 className="text-zinc-300 text-xs font-medium mb-2">4. Mandatory elements of each plan</h4>
+                  <ul className="list-disc list-inside text-[11px] text-zinc-400 space-y-0.5">
                     {template.mandatoryElements.map((el, i) => (
                       <li key={i}>{el}</li>
                     ))}
@@ -272,12 +274,12 @@ export default function ActionPlanModal({
             </section>
 
             {/* Cross-sector dependencies */}
-            <section className="border border-amber-500/20 rounded-xl p-4 bg-amber-500/5">
-              <h3 className="text-amber-400/90 text-sm font-medium uppercase tracking-wider mb-2">
+            <section className="border border-zinc-700 rounded-md p-4 bg-zinc-800/50">
+              <h3 className="text-zinc-400 text-sm font-medium uppercase tracking-wider mb-2">
                 Cross-sector dependencies
               </h3>
-              <p className="text-white/60 text-xs leading-relaxed mb-3">{template.crossSectorDependenciesNote}</p>
-              <div className="text-[11px] text-white/40 font-mono bg-black/20 rounded-lg p-3 overflow-x-auto">
+              <p className="text-zinc-400 text-xs leading-relaxed mb-3">{template.crossSectorDependenciesNote}</p>
+              <div className="text-[11px] text-zinc-500 font-mono bg-black/20 rounded-md p-3 overflow-x-auto">
                 Financial → Real Estate (credit) | Financial → Insurance (policies) | Financial → Enterprises (working capital) |
                 Real Estate → Financial (collateral) | Insurance → Financial (investment) | Insurance → Real Estate & Enterprises (coverage) |
                 Defense & Security → Financial (stability) | Defense & Security → Enterprises (contracts)
@@ -286,11 +288,11 @@ export default function ActionPlanModal({
           </div>
 
           {/* Footer */}
-          <div className="px-6 py-4 border-t border-white/10 bg-white/5 flex items-center justify-between shrink-0">
-            <div className="text-white/40 text-xs">
+          <div className="px-6 py-4 border-t border-zinc-800 bg-zinc-800 flex items-center justify-between shrink-0">
+            <div className="text-zinc-500 text-xs">
               {template.sectors.length} sectors • {template.sectors.filter((s) => s.criticality === 'CRITICAL').length} critical
               {exportError && (
-                <span className="ml-2 text-red-400 flex items-center gap-1">
+                <span className="ml-2 text-red-400/80 flex items-center gap-1">
                   <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                   </svg>
@@ -302,8 +304,8 @@ export default function ActionPlanModal({
               <button
                 onClick={handleExportPdf}
                 disabled={isExporting}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg border border-white/10 text-sm transition-all ${
-                  isExporting ? 'text-white/40 cursor-not-allowed' : 'text-white/70 hover:text-white hover:bg-white/5'
+                className={`flex items-center gap-2 px-4 py-2 rounded-md border border-zinc-800 text-sm transition-all ${
+                  isExporting ? 'text-zinc-500 cursor-not-allowed' : 'text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800'
                 }`}
               >
                 {isExporting ? (
@@ -325,7 +327,7 @@ export default function ActionPlanModal({
               </button>
               <button
                 onClick={onClose}
-                className="px-4 py-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 text-sm text-amber-400"
+                className="px-4 py-2 rounded-md bg-zinc-700 hover:bg-zinc-600 border border-zinc-600 text-sm text-zinc-300"
               >
                 Close
               </button>
@@ -352,11 +354,12 @@ function SectorCard({
   const icon = SECTOR_ICONS[sector.id]
 
   return (
-    <div className={`border rounded-xl overflow-hidden transition-colors ${isExpanded ? styles.border : 'border-white/10'}`}>
+    <div className={`border rounded-md overflow-hidden transition-colors ${isExpanded ? styles.border : 'border-zinc-800'}`}>
       <button
         type="button"
         onClick={onToggle}
-        className="w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-white/5 transition-colors"
+        className="w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-zinc-800 transition-colors"
+
       >
         <span className={styles.text}>{icon}</span>
         <div className="flex-1 min-w-0">
@@ -367,13 +370,13 @@ function SectorCard({
             <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium uppercase border ${critStyle}`}>
               {sector.criticality}
             </span>
-            <span className="text-white/50 text-xs">
+            <span className="text-zinc-500 text-xs">
               ({sector.responseTime}, -{sector.riskReductionPercent}% risk)
             </span>
           </div>
         </div>
         <svg
-          className={`w-4 h-4 text-white/30 shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+          className={`w-4 h-4 text-zinc-600 shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -390,26 +393,26 @@ function SectorCard({
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="px-4 pb-4 pt-0 border-t border-white/5 space-y-4">
+            <div className="px-4 pb-4 pt-0 border-t border-zinc-800 space-y-4">
               <div>
-                <h4 className="text-white/60 text-[10px] uppercase tracking-wider mb-2">Key focus areas</h4>
-                <div className="overflow-x-auto rounded-lg border border-white/10">
+                <h4 className="text-zinc-400 text-[10px] uppercase tracking-wider mb-2">Key focus areas</h4>
+                <div className="overflow-x-auto rounded-md border border-zinc-800">
                   <table className="w-full text-[11px] min-w-[400px]">
                     <thead>
-                      <tr className="bg-white/5">
-                        <th className="text-left px-3 py-2 text-white/50 font-medium">Category</th>
-                        <th className="text-left px-3 py-2 text-white/50 font-medium">Stress scenarios</th>
-                        <th className="text-left px-3 py-2 text-white/50 font-medium">Actions</th>
-                        <th className="text-left px-3 py-2 text-white/50 font-medium">Success metrics</th>
+                      <tr className="bg-zinc-800">
+                        <th className="text-left px-3 py-2 text-zinc-500 font-medium">Category</th>
+                        <th className="text-left px-3 py-2 text-zinc-500 font-medium">Stress scenarios</th>
+                        <th className="text-left px-3 py-2 text-zinc-500 font-medium">Actions</th>
+                        <th className="text-left px-3 py-2 text-zinc-500 font-medium">Success metrics</th>
                       </tr>
                     </thead>
                     <tbody>
                       {sector.focusAreas.map((fa, i) => (
-                        <tr key={i} className="border-t border-white/5">
-                          <td className="px-3 py-2 text-white/80">{fa.category}</td>
-                          <td className="px-3 py-2 text-white/60">{fa.stressScenarios}</td>
-                          <td className="px-3 py-2 text-white/60">{fa.actions}</td>
-                          <td className="px-3 py-2 text-white/50">{fa.successMetrics}</td>
+                        <tr key={i} className="border-t border-zinc-800">
+                          <td className="px-3 py-2 text-zinc-200">{fa.category}</td>
+                          <td className="px-3 py-2 text-zinc-400">{fa.stressScenarios}</td>
+                          <td className="px-3 py-2 text-zinc-400">{fa.actions}</td>
+                          <td className="px-3 py-2 text-zinc-500">{fa.successMetrics}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -417,17 +420,17 @@ function SectorCard({
                 </div>
               </div>
               <div>
-                <h4 className="text-white/60 text-[10px] uppercase tracking-wider mb-2">Action plan structure</h4>
+                <h4 className="text-zinc-400 text-[10px] uppercase tracking-wider mb-2">Action plan structure</h4>
                 <div className="space-y-3">
                   {sector.phases.map((phase, pi) => (
-                    <div key={pi} className="border border-white/10 rounded-lg overflow-hidden">
-                      <div className="px-3 py-2 bg-white/5 text-[11px] font-medium text-white/80 border-b border-white/5">
+                    <div key={pi} className="border border-zinc-800 rounded-md overflow-hidden">
+                      <div className="px-3 py-2 bg-zinc-800 text-[11px] font-medium text-zinc-200 border-b border-zinc-800">
                         {phase.name}
                       </div>
                       <ul className="px-3 py-2 space-y-1">
                         {phase.items.map((item, ii) => (
-                          <li key={ii} className="flex items-start gap-2 text-[11px] text-white/70">
-                            <span className="text-white/40 mt-0.5">├</span>
+                          <li key={ii} className="flex items-start gap-2 text-[11px] text-zinc-300">
+                            <span className="text-zinc-500 mt-0.5">├</span>
                             <span>{item}</span>
                           </li>
                         ))}

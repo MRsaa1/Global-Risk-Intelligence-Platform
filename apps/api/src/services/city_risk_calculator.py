@@ -24,7 +24,7 @@ from typing import Dict, List, Optional, Any
 import logging
 
 from ..data.cities import (
-    CityData, 
+    CityData,
     CITIES_DATABASE,
     SEISMIC_BASE_RISK,
     CLIMATE_BASE_RISK,
@@ -35,6 +35,8 @@ from ..data.cities import (
     get_city,
     get_all_cities,
 )
+from ..core.config import get_settings
+from .risk_signal_aggregator import risk_signal_aggregator
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +52,26 @@ RISK_WEIGHTS = {
     "historical": 0.10,
 }
 
+# Risk model v2: multi-factor with external data (GDELT, World Bank, OFAC, Open-Meteo)
+RISK_WEIGHTS_V2 = {
+    "climate": 0.22,   # seismic + flood + hurricane merged
+    "conflict": 0.22,
+    "political": 0.15,
+    "economic": 0.18,
+    "sanctions": 0.08,
+    "logistics": 0.08,
+    "infrastructure": 0.07,
+}
+# Hysteresis: enter/exit thresholds to avoid zone flicker
+HYSTERESIS = {
+    "critical_enter": 0.80,
+    "critical_exit": 0.75,
+    "high_enter": 0.60,
+    "high_exit": 0.55,
+    "medium_enter": 0.40,
+    "medium_exit": 0.35,
+}
+
 
 @dataclass
 class RiskFactor:
@@ -59,6 +81,37 @@ class RiskFactor:
     last_updated: datetime
     details: str = ""
     confidence: float = 1.0  # 0.0 - 1.0
+
+
+def apply_hysteresis(score: float, prev_zone: Optional[str]) -> str:
+    """Apply hysteresis to avoid zone flicker. Returns LOW, MEDIUM, HIGH, or CRITICAL.
+
+    Logic:
+    - Upward promotion always happens when score >= next zone's enter threshold.
+    - Downward demotion is delayed: stay in current zone until score drops below the exit threshold.
+    """
+    # 1. Check upward entry first (always allow promotion)
+    if score >= HYSTERESIS["critical_enter"]:
+        return "CRITICAL"
+    if score >= HYSTERESIS["high_enter"]:
+        # Could be promoted from MEDIUM or first assignment, but not demoted from CRITICAL yet
+        if prev_zone == "CRITICAL" and score >= HYSTERESIS["critical_exit"]:
+            return "CRITICAL"
+        return "HIGH"
+    if score >= HYSTERESIS["medium_enter"]:
+        if prev_zone == "CRITICAL" and score >= HYSTERESIS["critical_exit"]:
+            return "CRITICAL"
+        if prev_zone == "HIGH" and score >= HYSTERESIS["high_exit"]:
+            return "HIGH"
+        return "MEDIUM"
+    # Below medium_enter — check hysteresis holds
+    if prev_zone == "CRITICAL" and score >= HYSTERESIS["critical_exit"]:
+        return "CRITICAL"
+    if prev_zone == "HIGH" and score >= HYSTERESIS["high_exit"]:
+        return "HIGH"
+    if prev_zone == "MEDIUM" and score >= HYSTERESIS["medium_exit"]:
+        return "MEDIUM"
+    return "LOW"
 
 
 @dataclass
@@ -74,6 +127,7 @@ class CityRiskScore:
     data_freshness: datetime = field(default_factory=datetime.utcnow)
     exposure: float = 0.0
     assets_count: int = 0
+    zone: Optional[str] = None  # LOW|MEDIUM|HIGH|CRITICAL when hysteresis used
 
 
 class CityRiskCalculator:
@@ -95,24 +149,29 @@ class CityRiskCalculator:
         self.usgs_client = usgs_client
         self.weather_client = weather_client
         self.worldbank_client = worldbank_client
-        
-        # In-memory cache for calculated risk scores
+
+        # In-memory cache for calculated risk scores; TTL from RISK_CACHE_TTL_HOURS (default 24) for stable display
         self._cache: Dict[str, CityRiskScore] = {}
-        self._cache_ttl = timedelta(hours=24)
+        self._cache_ttl = timedelta(hours=get_settings().risk_cache_ttl_hours)
+        # Previous zone per city for hysteresis (v2)
+        self._prev_zone: Dict[str, str] = {}
     
     async def calculate_risk(
         self,
         city_id: str,
         force_recalculate: bool = False,
         use_external_data: bool = True,
+        use_risk_model_v2: bool = False,
     ) -> Optional[CityRiskScore]:
         """
         Calculate risk score for a city.
-        
+
         Args:
             city_id: City identifier
             force_recalculate: If True, bypass cache
-            
+            use_external_data: If True, call USGS/weather and (when v2) GDELT/World Bank/OFAC
+            use_risk_model_v2: If True, use RISK_WEIGHTS_V2, aggregator, quality-aware formula, hysteresis
+
         Returns:
             CityRiskScore or None if city not found
         """
@@ -121,70 +180,60 @@ class CityRiskCalculator:
             cached = self._cache[city_id]
             if datetime.utcnow() - cached.data_freshness < self._cache_ttl:
                 return cached
-        
+
         # Get city data
         city = get_city(city_id)
         if not city:
             logger.warning(f"City not found: {city_id}")
             return None
-        
-        # Calculate individual risk factors
+
+        if use_risk_model_v2 and use_external_data:
+            result = await self._calculate_risk_v2(city)
+            if result:
+                self._cache[city_id] = result
+            return result
+
+        # Legacy path: individual risk factors
         risk_factors = await self._calculate_all_factors(city, use_external_data=use_external_data)
-        
+
         # Calculate weighted average
         total_score = 0.0
         total_weight = 0.0
         total_confidence = 0.0
-        
+
         for factor_name, weight in RISK_WEIGHTS.items():
             if factor_name in risk_factors:
                 factor = risk_factors[factor_name]
                 total_score += factor.value * weight * factor.confidence
                 total_weight += weight * factor.confidence
                 total_confidence += factor.confidence
-        
+
         # Normalize score
         if total_weight > 0:
             final_score = total_score / total_weight
         else:
             final_score = 0.5  # Default moderate risk
-        
-        # =============================================
+
         # CRITICAL OVERRIDE: Conflict zones and extreme risks
-        # =============================================
-        # If city is in active conflict zone or has extreme political risk,
-        # the base weighted formula underestimates the risk.
-        # Apply boosters for critical situations.
-        
         political_factor = risk_factors.get("political")
         infra_factor = risk_factors.get("infrastructure")
-        
-        # Active conflict zone boost (political >= 0.85)
         if political_factor and political_factor.value >= 0.85:
-            # Conflict zone: minimum risk is 0.75 + political contribution
-            conflict_boost = political_factor.value * 0.3  # Add 25-30% for conflict
+            conflict_boost = political_factor.value * 0.3
             final_score = max(final_score, 0.70) + conflict_boost
             logger.info(f"{city_id}: Conflict zone boost applied (+{conflict_boost:.2f})")
-        
-        # High political instability boost (political >= 0.70)
         elif political_factor and political_factor.value >= 0.70:
-            political_boost = political_factor.value * 0.15  # Add 10-15%
+            political_boost = political_factor.value * 0.15
             final_score = final_score + political_boost
             logger.info(f"{city_id}: Political instability boost applied (+{political_boost:.2f})")
-        
-        # Infrastructure crisis boost (infra >= 0.75 and political >= 0.60)
-        if (infra_factor and infra_factor.value >= 0.75 and 
-            political_factor and political_factor.value >= 0.60):
-            infra_boost = 0.10
-            final_score = final_score + infra_boost
-            logger.info(f"{city_id}: Infrastructure crisis boost applied (+{infra_boost:.2f})")
-        
+        if (infra_factor and infra_factor.value >= 0.75 and
+                political_factor and political_factor.value >= 0.60):
+            final_score = final_score + 0.10
+            logger.info(f"{city_id}: Infrastructure crisis boost applied")
+
         # Clamp to [0, 1]
         final_score = max(0.0, min(1.0, final_score))
-        
-        # Average confidence
         avg_confidence = total_confidence / len(risk_factors) if risk_factors else 0.5
-        
+
         result = CityRiskScore(
             city_id=city_id,
             name=city.name,
@@ -197,28 +246,109 @@ class CityRiskCalculator:
             exposure=city.exposure,
             assets_count=city.assets_count,
         )
-        
-        # Cache result
         self._cache[city_id] = result
-        
         return result
+
+    async def _calculate_risk_v2(self, city: CityData) -> Optional[CityRiskScore]:
+        """V2: aggregator signals + climate from USGS/weather, quality-aware score, hysteresis."""
+        try:
+            loc_signals = await risk_signal_aggregator.get_signals_for_city(
+                city.id, city.name, city.country, city.lat, city.lng,
+                use_gdelt=True, use_economic=True, use_sanctions=True, use_weather=True,
+            )
+        except Exception as e:
+            logger.warning("Risk aggregator for %s: %s", city.id, e)
+            return None
+
+        # Climate: seismic + flood + hurricane (existing logic, then merge)
+        seismic_r = await self._calculate_seismic_risk(city, use_external_data=True)
+        flood_r = await self._calculate_flood_risk(city, use_external_data=True)
+        hurricane_r = await self._calculate_hurricane_risk(city)
+        climate_value = 0.45 * seismic_r.value + 0.35 * flood_r.value + 0.20 * hurricane_r.value
+        climate_value = max(0.0, min(1.0, climate_value))
+        climate_q = (seismic_r.confidence + flood_r.confidence + hurricane_r.confidence) / 3.0
+
+        # Build v2 factor dict: s_raw, q_quality from aggregator + climate
+        factors_v2: Dict[str, tuple] = {
+            "climate": (climate_value, climate_q),
+        }
+        for name, sig in loc_signals.signals.items():
+            if name == "flood_external":
+                continue  # already in climate via flood_r
+            factors_v2[name] = (sig.s_smooth, sig.q_quality)
+        # Ensure all v2 keys exist with fallbacks
+        for k in RISK_WEIGHTS_V2:
+            if k not in factors_v2:
+                factors_v2[k] = (0.3 if k == "political" else 0.2, 0.3)
+
+        # Quality-aware: R = sum(w_i * s_i * q_i) / sum(w_i * q_i), confidence = sum(w_i * q_i) / sum(w_i)
+        total_w = 0.0
+        total_wsq = 0.0
+        total_wq = 0.0
+        for fname, weight in RISK_WEIGHTS_V2.items():
+            if fname not in factors_v2:
+                continue
+            s, q = factors_v2[fname]
+            total_wsq += weight * s * q
+            total_wq += weight * q
+            total_w += weight
+        if total_wq > 0:
+            final_score = total_wsq / total_wq
+        else:
+            final_score = 0.5
+        final_score = max(0.0, min(1.0, final_score))
+        # Active war / military escalation: elevate only when conflict is high; Critical only when
+        # both conflict and political instability are very high (avoids one-off violence spikes)
+        conflict_val = factors_v2.get("conflict", (0.0, 0.0))[0]
+        political_val = factors_v2.get("political", (0.0, 0.0))[0]
+        if conflict_val >= 0.90 and political_val >= 0.55:
+            final_score = max(final_score, 0.82)  # Critical: sustained war + instability
+        elif conflict_val >= 0.78:
+            final_score = max(final_score, 0.62)  # High: serious conflict
+        final_score = max(0.0, min(1.0, final_score))
+
+        confidence = total_wq / total_w if total_w > 0 else 0.5
+
+        prev_zone = self._prev_zone.get(city.id)
+        zone = apply_hysteresis(final_score, prev_zone)
+        self._prev_zone[city.id] = zone
+
+        risk_factors: Dict[str, RiskFactor] = {}
+        for fname, (s, q) in factors_v2.items():
+            risk_factors[fname] = RiskFactor(
+                value=s, source="RiskSignalAggregator" if fname != "climate" else "USGS+Weather",
+                last_updated=datetime.utcnow(), details="", confidence=q,
+            )
+
+        return CityRiskScore(
+            city_id=city.id,
+            name=city.name,
+            coordinates=(city.lng, city.lat),
+            risk_score=final_score,
+            risk_factors=risk_factors,
+            calculation_method="weighted_average_v2",
+            confidence=confidence,
+            data_freshness=datetime.utcnow(),
+            exposure=city.exposure,
+            assets_count=city.assets_count,
+            zone=zone,
+        )
     
     async def calculate_all_cities(
         self,
         force_recalculate: bool = False,
         use_external_data: bool = True,
         max_concurrency: int = 25,
+        use_risk_model_v2: bool = False,
     ) -> List[CityRiskScore]:
         """
         Calculate risk scores for all cities.
 
         Notes:
-        - External data (USGS/OpenWeather) can be slow and rate-limited; default is enabled
-          for backwards compatibility but should usually be disabled for real-time API usage.
-        - Concurrency is limited to avoid bursting external APIs.
+        - External data (USGS/OpenWeather/GDELT/World Bank) can be slow; concurrency limited.
+        - use_risk_model_v2: use RISK_WEIGHTS_V2, aggregator, hysteresis.
         """
         cities = get_all_cities()
-
         sem = asyncio.Semaphore(max(1, max_concurrency))
 
         async def _one(city: CityData):
@@ -227,6 +357,7 @@ class CityRiskCalculator:
                     city.id,
                     force_recalculate=force_recalculate,
                     use_external_data=use_external_data,
+                    use_risk_model_v2=use_risk_model_v2,
                 )
 
         results = await asyncio.gather(*[_one(c) for c in cities])
@@ -284,7 +415,8 @@ class CityRiskCalculator:
                         confidence=0.95,
                     )
             except Exception as e:
-                logger.warning(f"USGS API error for {city.name}: {e}")
+                err_msg = (str(e) or "").strip() or type(e).__name__
+                logger.debug("USGS API error for %s: %s", city.name, err_msg)
         
         # Fallback to known risk factors
         if "earthquake" in city.known_risks:

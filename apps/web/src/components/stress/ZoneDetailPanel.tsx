@@ -10,8 +10,7 @@
  */
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-
-const API_BASE = import.meta.env.VITE_API_URL || ''
+import { getApiV1Base } from '../../config/env'
 
 // Professional SVG Icons
 const OrgIcons: Record<string, JSX.Element> = {
@@ -109,13 +108,13 @@ function formatCurrency(value: number): string {
 function getLevelColors(level: string): { bg: string; text: string; border: string; glow: string } {
   switch (level) {
     case 'critical':
-      return { bg: 'bg-red-500', text: 'text-red-400', border: 'border-red-500/30', glow: 'shadow-red-500/20' }
+      return { bg: 'bg-red-500', text: 'text-red-400/80', border: 'border-red-500/30', glow: 'shadow-red-500/20' }
     case 'high':
-      return { bg: 'bg-orange-500', text: 'text-orange-400', border: 'border-orange-500/30', glow: 'shadow-orange-500/20' }
+      return { bg: 'bg-orange-500', text: 'text-orange-400/80', border: 'border-orange-500/30', glow: 'shadow-orange-500/20' }
     case 'medium':
-      return { bg: 'bg-yellow-500', text: 'text-yellow-400', border: 'border-yellow-500/30', glow: 'shadow-yellow-500/20' }
+      return { bg: 'bg-yellow-500', text: 'text-yellow-400/80', border: 'border-yellow-500/30', glow: 'shadow-yellow-500/20' }
     default:
-      return { bg: 'bg-emerald-500', text: 'text-emerald-400', border: 'border-emerald-500/30', glow: 'shadow-emerald-500/20' }
+      return { bg: 'bg-emerald-500', text: 'text-emerald-400/80', border: 'border-emerald-500/30', glow: 'shadow-emerald-500/20' }
   }
 }
 
@@ -138,7 +137,7 @@ export default function ZoneDetailPanel({
     setExplainLoading(true)
     setZoneExplanation(null)
     try {
-      const res = await fetch(`${API_BASE}/api/v1/generative/explain-zone`, {
+      const res = await fetch(`${getApiV1Base()}/generative/explain-zone`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -183,10 +182,10 @@ export default function ZoneDetailPanel({
         animate={{ opacity: 1, x: 0, scale: 1 }}
         exit={{ opacity: 0, x: 50, scale: 0.95 }}
         transition={{ duration: 0.3 }}
-        className="w-80 max-h-[calc(100vh-7rem)] flex flex-col bg-black/80 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl"
+        className="w-80 max-h-[calc(100vh-7rem)] flex flex-col bg-black/80 border border-zinc-800 rounded-md overflow-hidden shadow-2xl"
       >
         {/* Header — fixed */}
-        <div className={`shrink-0 px-4 py-3 ${colors.border} border-b bg-gradient-to-r from-white/5 to-transparent`}>
+        <div className={`shrink-0 px-4 py-3 ${colors.border} border-b bg-gradient-to-r from-zinc-800 to-transparent`}>
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <div className={`w-2 h-2 rounded-full ${colors.bg} ${zone.level === 'critical' ? 'animate-pulse' : ''}`} />
@@ -196,7 +195,7 @@ export default function ZoneDetailPanel({
             </div>
             <button
               onClick={onClose}
-              className="text-white/40 hover:text-white transition-colors p-1"
+              className="text-zinc-500 hover:text-zinc-100 transition-colors p-1"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -204,57 +203,57 @@ export default function ZoneDetailPanel({
             </button>
           </div>
           
-          <h3 className="text-white text-lg font-light">{zone.name}</h3>
-          <p className="text-white/40 text-xs mt-0.5">{zone.stressTestName}</p>
+          <h3 className="text-zinc-100 text-lg font-light">{zone.name}</h3>
+          <p className="text-zinc-500 text-xs mt-0.5">{zone.stressTestName}</p>
         </div>
 
         {/* Scrollable body: metrics, risk bar, tabs, content */}
-        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10">
+        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-zinc-800">
         {/* Metrics Grid */}
-        <div className="grid grid-cols-2 gap-px bg-white/5 shrink-0">
-          <div className="p-3 bg-[#030810]">
-            <div className="text-white/30 text-[10px] uppercase tracking-wider mb-1">
+        <div className="grid grid-cols-2 gap-px bg-zinc-800 shrink-0">
+          <div className="p-3 bg-[#09090b]">
+            <div className="text-zinc-600 text-[10px] uppercase tracking-wider mb-1">
               Exposure
             </div>
-            <div className="text-white text-lg font-light">
+            <div className="text-zinc-100 text-lg font-light">
               {formatCurrency(zone.metrics.totalExposure)}
             </div>
           </div>
-          <div className="p-3 bg-[#030810]">
-            <div className="text-white/30 text-[10px] uppercase tracking-wider mb-1">
+          <div className="p-3 bg-[#09090b]">
+            <div className="text-zinc-600 text-[10px] uppercase tracking-wider mb-1">
               Expected Loss
             </div>
             <div className={`text-lg font-light ${colors.text}`}>
               {formatCurrency(zone.metrics.expectedLoss)}
             </div>
           </div>
-          <div className="p-3 bg-[#030810]">
-            <div className="text-white/30 text-[10px] uppercase tracking-wider mb-1">
+          <div className="p-3 bg-[#09090b]">
+            <div className="text-zinc-600 text-[10px] uppercase tracking-wider mb-1">
               Recovery
             </div>
-            <div className="text-white text-lg font-light">
-              {zone.metrics.recoveryMonths} <span className="text-xs text-white/40">months</span>
+            <div className="text-zinc-100 text-lg font-light">
+              {zone.metrics.recoveryMonths} <span className="text-xs text-zinc-500">months</span>
             </div>
           </div>
-          <div className="p-3 bg-[#030810]">
-            <div className="text-white/30 text-[10px] uppercase tracking-wider mb-1">
+          <div className="p-3 bg-[#09090b]">
+            <div className="text-zinc-600 text-[10px] uppercase tracking-wider mb-1">
               Affected
             </div>
-            <div className="text-white text-lg font-light">
+            <div className="text-zinc-100 text-lg font-light">
               {zone.metrics.affectedCount}
             </div>
           </div>
         </div>
 
         {/* Risk Score Bar */}
-        <div className="px-4 py-3 border-b border-white/5">
+        <div className="px-4 py-3 border-b border-zinc-800">
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-white/40 text-xs">Risk Score</span>
+            <span className="text-zinc-500 text-xs">Risk Score</span>
             <span className={`text-sm font-mono ${colors.text}`}>
               {(zone.metrics.riskScore * 100).toFixed(0)}%
             </span>
           </div>
-          <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+          <div className="h-1.5 bg-zinc-700 rounded-full overflow-hidden">
             <motion.div
               className={`h-full rounded-full ${colors.bg}`}
               initial={{ width: 0 }}
@@ -265,30 +264,30 @@ export default function ZoneDetailPanel({
         </div>
 
         {/* Explain zone (Generative AI) */}
-        <div className="px-4 py-2 border-b border-white/5">
+        <div className="px-4 py-2 border-b border-zinc-800">
           <button
             type="button"
             onClick={fetchExplainZone}
             disabled={explainLoading}
-            className="text-xs px-2 py-1 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500/30 disabled:opacity-50"
+            className="text-xs px-2 py-1 rounded bg-zinc-700 text-zinc-300 border border-zinc-600 hover:bg-zinc-600 disabled:opacity-50"
           >
             {explainLoading ? 'Explaining…' : 'Explain zone'}
           </button>
           {zoneExplanation && (
-            <div className="mt-2 p-2 bg-white/5 rounded text-[11px] text-white/80 border border-white/10">
+            <div className="mt-2 p-2 bg-zinc-800 rounded text-[11px] text-zinc-200 border border-zinc-700">
               {zoneExplanation}
             </div>
           )}
         </div>
 
         {/* Tab Navigation */}
-        <div className="shrink-0 flex border-b border-white/5">
+        <div className="shrink-0 flex border-b border-zinc-800">
           <button
             onClick={() => setActiveTab('entities')}
             className={`flex-1 px-4 py-2 text-xs transition-all ${
               activeTab === 'entities' 
-                ? 'text-white border-b-2 border-amber-500' 
-                : 'text-white/40 hover:text-white/60'
+                ? 'text-zinc-100 border-b-2 border-zinc-500' 
+                : 'text-zinc-500 hover:text-zinc-400'
             }`}
           >
             Affected Entities
@@ -297,8 +296,8 @@ export default function ZoneDetailPanel({
             onClick={() => setActiveTab('timeline')}
             className={`flex-1 px-4 py-2 text-xs transition-all ${
               activeTab === 'timeline' 
-                ? 'text-white border-b-2 border-amber-500' 
-                : 'text-white/40 hover:text-white/60'
+                ? 'text-zinc-100 border-b-2 border-zinc-500' 
+                : 'text-zinc-500 hover:text-zinc-400'
             }`}
           >
             Impact Timeline
@@ -314,20 +313,20 @@ export default function ZoneDetailPanel({
                   {/* Group Header */}
                   <button
                     onClick={() => setExpandedType(expandedType === group.id ? null : group.id)}
-                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/5 transition-all"
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-zinc-800 transition-all"
                   >
-                    <span className="text-white/50">{group.icon}</span>
-                    <span className="text-white/70 text-xs flex-1 text-left">
+                    <span className="text-zinc-500">{group.icon}</span>
+                    <span className="text-zinc-300 text-xs flex-1 text-left">
                       {group.label}
                     </span>
-                    <span className="text-white/40 text-[10px] font-mono">
+                    <span className="text-zinc-500 text-[10px] font-mono">
                       {group.entities.length}
                     </span>
-                    <span className="text-white/20 text-[10px]">
+                    <span className="text-zinc-700 text-[10px]">
                       {formatCurrency(group.totalExposure)}
                     </span>
                     <svg 
-                      className={`w-3 h-3 text-white/30 transition-transform ${expandedType === group.id ? 'rotate-180' : ''}`}
+                      className={`w-3 h-3 text-zinc-600 transition-transform ${expandedType === group.id ? 'rotate-180' : ''}`}
                       fill="none" 
                       stroke="currentColor" 
                       viewBox="0 0 24 24"
@@ -346,12 +345,12 @@ export default function ZoneDetailPanel({
                         transition={{ duration: 0.2 }}
                         className="overflow-hidden"
                       >
-                        <div className="ml-6 mt-1 space-y-0.5 border-l border-white/10 pl-2">
+                        <div className="ml-6 mt-1 space-y-0.5 border-l border-zinc-800 pl-2">
                           {group.entities.map((entity) => (
                             <button
                               key={entity.id}
                               onClick={() => onEntityClick(entity)}
-                              className="w-full flex items-center gap-2 px-2 py-1 rounded hover:bg-white/5 transition-all text-left group"
+                              className="w-full flex items-center gap-2 px-2 py-1 rounded hover:bg-zinc-800 transition-all text-left group"
                             >
                               <div className={`
                                 w-1 h-1 rounded-full
@@ -359,10 +358,10 @@ export default function ZoneDetailPanel({
                                   entity.impactSeverity > 0.6 ? 'bg-orange-500' : 
                                   entity.impactSeverity > 0.4 ? 'bg-yellow-500' : 'bg-green-500'}
                               `} />
-                              <span className="text-white/60 text-xs group-hover:text-white flex-1 truncate">
+                              <span className="text-zinc-400 text-xs group-hover:text-zinc-100 flex-1 truncate">
                                 {entity.name}
                               </span>
-                              <span className="text-white/30 text-[10px] font-mono">
+                              <span className="text-zinc-600 text-[10px] font-mono">
                                 {formatCurrency(entity.exposure)}
                               </span>
                             </button>
@@ -375,7 +374,7 @@ export default function ZoneDetailPanel({
               ))}
 
               {groupedEntities.length === 0 && (
-                <div className="text-center py-6 text-white/30 text-xs">
+                <div className="text-center py-6 text-zinc-600 text-xs">
                   No affected entities in this zone
                 </div>
               )}
@@ -387,40 +386,40 @@ export default function ZoneDetailPanel({
               {/* Simple timeline visualization */}
               <div className="relative">
                 {/* Timeline line */}
-                <div className="absolute left-2 top-0 bottom-0 w-px bg-white/10" />
+                <div className="absolute left-2 top-0 bottom-0 w-px bg-zinc-700" />
                 
                 {/* Timeline items */}
                 <div className="space-y-4 ml-6">
                   <div className="relative">
                     <div className="absolute -left-[18px] w-2 h-2 rounded-full bg-red-500" />
-                    <div className="text-white/40 text-[10px] uppercase tracking-wider">T+0</div>
-                    <div className="text-white text-xs">Initial Impact</div>
-                    <div className="text-red-400 text-xs font-mono">
+                    <div className="text-zinc-500 text-[10px] uppercase tracking-wider">T+0</div>
+                    <div className="text-zinc-100 text-xs">Initial Impact</div>
+                    <div className="text-red-400/80 text-xs font-mono">
                       -{formatCurrency(zone.metrics.expectedLoss * 0.6)}
                     </div>
                   </div>
                   
                   <div className="relative">
                     <div className="absolute -left-[18px] w-2 h-2 rounded-full bg-orange-500" />
-                    <div className="text-white/40 text-[10px] uppercase tracking-wider">+3 months</div>
-                    <div className="text-white text-xs">Cascade Effects</div>
-                    <div className="text-orange-400 text-xs font-mono">
+                    <div className="text-zinc-500 text-[10px] uppercase tracking-wider">+3 months</div>
+                    <div className="text-zinc-100 text-xs">Cascade Effects</div>
+                    <div className="text-orange-400/80 text-xs font-mono">
                       -{formatCurrency(zone.metrics.expectedLoss * 0.3)}
                     </div>
                   </div>
                   
                   <div className="relative">
                     <div className="absolute -left-[18px] w-2 h-2 rounded-full bg-yellow-500" />
-                    <div className="text-white/40 text-[10px] uppercase tracking-wider">+{Math.floor(zone.metrics.recoveryMonths / 2)} months</div>
-                    <div className="text-white text-xs">Recovery Begins</div>
-                    <div className="text-yellow-400 text-xs font-mono">Stabilizing</div>
+                    <div className="text-zinc-500 text-[10px] uppercase tracking-wider">+{Math.floor(zone.metrics.recoveryMonths / 2)} months</div>
+                    <div className="text-zinc-100 text-xs">Recovery Begins</div>
+                    <div className="text-yellow-400/80 text-xs font-mono">Stabilizing</div>
                   </div>
                   
                   <div className="relative">
                     <div className="absolute -left-[18px] w-2 h-2 rounded-full bg-emerald-500" />
-                    <div className="text-white/40 text-[10px] uppercase tracking-wider">+{zone.metrics.recoveryMonths} months</div>
-                    <div className="text-white text-xs">Full Recovery</div>
-                    <div className="text-emerald-400 text-xs font-mono">Normal operations</div>
+                    <div className="text-zinc-500 text-[10px] uppercase tracking-wider">+{zone.metrics.recoveryMonths} months</div>
+                    <div className="text-zinc-100 text-xs">Full Recovery</div>
+                    <div className="text-emerald-400/80 text-xs font-mono">Normal operations</div>
                   </div>
                 </div>
               </div>
@@ -430,10 +429,10 @@ export default function ZoneDetailPanel({
         </div>
 
         {/* Action Buttons — always visible at bottom */}
-        <div className="shrink-0 p-3 border-t border-white/5 flex flex-wrap gap-2 bg-[#030810]">
+        <div className="shrink-0 p-3 border-t border-zinc-800 flex flex-wrap gap-2 bg-[#09090b]">
           <button
             onClick={onViewReport}
-            className="flex-1 min-w-0 flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-all text-xs text-white/70 hover:text-white"
+            className="flex-1 min-w-0 flex items-center justify-center gap-2 px-3 py-2 rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-800 transition-all text-xs text-zinc-300 hover:text-zinc-100"
           >
             <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -442,7 +441,7 @@ export default function ZoneDetailPanel({
           </button>
           <button
             onClick={onViewActionPlans}
-            className="flex-1 min-w-0 flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 transition-all text-xs text-amber-400 hover:text-amber-300"
+            className="flex-1 min-w-0 flex items-center justify-center gap-2 px-3 py-2 rounded-md bg-zinc-700 hover:bg-zinc-600 border border-zinc-600 transition-all text-xs text-zinc-300 hover:text-zinc-200"
           >
             <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -452,7 +451,7 @@ export default function ZoneDetailPanel({
           {onOpenCascade && eventIdForCascade && (
             <button
               onClick={onOpenCascade}
-              className="flex-1 min-w-0 flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-primary-500/20 hover:bg-primary-500/30 border border-primary-500/30 transition-all text-xs text-primary-300 hover:text-primary-200"
+              className="flex-1 min-w-0 flex items-center justify-center gap-2 px-3 py-2 rounded-md bg-zinc-700 hover:bg-zinc-600 border border-zinc-600 transition-all text-xs text-zinc-300 hover:text-zinc-200"
             >
               <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />

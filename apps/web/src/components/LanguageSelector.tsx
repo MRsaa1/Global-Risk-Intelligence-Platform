@@ -52,10 +52,10 @@ export default function LanguageSelector({
       <div className={`relative ${className}`} ref={dropdownRef}>
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+          className="p-2 rounded-md hover:bg-zinc-700 transition-colors"
           title="Language"
         >
-          <GlobeAltIcon className="w-5 h-5 text-white/60" />
+          <GlobeAltIcon className="w-5 h-5 text-zinc-400" />
         </button>
 
         <AnimatePresence>
@@ -64,14 +64,14 @@ export default function LanguageSelector({
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="absolute right-0 top-full mt-2 bg-[#0a0f18] border border-white/10 rounded-lg overflow-hidden shadow-xl z-50"
+              className="absolute right-0 top-full mt-2 bg-[#09090b] border border-zinc-700 rounded-md overflow-hidden shadow-xl z-50"
             >
               {locales.map((l) => (
                 <button
                   key={l}
                   onClick={() => handleSelect(l)}
-                  className={`w-full px-4 py-2 text-left text-sm hover:bg-white/10 transition-colors flex items-center gap-2 ${
-                    locale === l ? 'text-amber-400' : 'text-white/70'
+                  className={`w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 transition-colors flex items-center gap-2 ${
+                    locale === l ? 'text-zinc-300' : 'text-zinc-300'
                   }`}
                 >
                   <span>{getFlag(l)}</span>
@@ -94,8 +94,8 @@ export default function LanguageSelector({
             onClick={() => handleSelect(l)}
             className={`px-2 py-1 rounded text-xs transition-colors ${
               locale === l
-                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                : 'text-white/50 hover:text-white hover:bg-white/10'
+                ? 'bg-zinc-700 text-zinc-300 border border-zinc-600'
+                : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700'
             }`}
           >
             {l.toUpperCase()}
@@ -110,10 +110,10 @@ export default function LanguageSelector({
     <div className={`relative ${className}`} ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-3 py-2 bg-white/5 hover:bg-white/10 rounded-lg border border-white/10 transition-colors"
+        className="flex items-center gap-2 px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-md border border-zinc-700 transition-colors"
       >
-        <GlobeAltIcon className="w-4 h-4 text-white/60" />
-        <span className="text-white/80 text-sm">{localeNames[locale]}</span>
+        <GlobeAltIcon className="w-4 h-4 text-zinc-400" />
+        <span className="text-zinc-200 text-sm">{localeNames[locale]}</span>
         <span className="text-lg">{getFlag(locale)}</span>
       </button>
 
@@ -123,15 +123,15 @@ export default function LanguageSelector({
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="absolute right-0 top-full mt-2 w-48 bg-[#0a0f18] border border-white/10 rounded-xl overflow-hidden shadow-xl z-50"
+            className="absolute right-0 top-full mt-2 w-48 bg-[#09090b] border border-zinc-700 rounded-md overflow-hidden shadow-xl z-50"
           >
             <div className="p-2">
               {locales.map((l) => (
                 <button
                   key={l}
                   onClick={() => handleSelect(l)}
-                  className={`w-full px-3 py-2 rounded-lg text-left text-sm hover:bg-white/10 transition-colors flex items-center justify-between ${
-                    locale === l ? 'text-amber-400' : 'text-white/70'
+                  className={`w-full px-3 py-2 rounded-md text-left text-sm hover:bg-zinc-700 transition-colors flex items-center justify-between ${
+                    locale === l ? 'text-zinc-300' : 'text-zinc-300'
                   }`}
                 >
                   <div className="flex items-center gap-3">

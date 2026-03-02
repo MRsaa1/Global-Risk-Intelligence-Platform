@@ -59,10 +59,21 @@ class UniversalStressRequest(BaseModel):
     total_exposure: Optional[float] = Field(None, description="Total exposure if entities not provided")
     
     # Configuration
-    monte_carlo_simulations: int = Field(10000, ge=1000, le=100000)
+    monte_carlo_simulations: int = Field(100000, ge=1000, le=100000)
     include_cascade: bool = Field(True, description="Include cascade/contagion analysis")
     include_recovery: bool = Field(True, description="Include recovery timeline")
     use_nim: bool = Field(False, description="Use NVIDIA NIM for narrative generation")
+    
+    # Regime Engine
+    market_regime: Optional[str] = Field(None, description="bull|late_cycle|crisis|stagflation|auto (None=auto)")
+    market_indicators: Optional[Dict[str, Any]] = Field(None, description="vix, inflation, gdp_growth, credit_spread, rate_rising for auto-detection")
+    
+    # Distribution
+    distribution: str = Field("gaussian", description="gaussian|student_t")
+    degrees_of_freedom: int = Field(5, ge=2, le=30, description="DoF for Student-t (lower = fatter tails)")
+    
+    # Historical scenario
+    historical_scenario_id: Optional[str] = Field(None, description="ID from historical scenario library to pre-fill parameters")
     
     class Config:
         json_schema_extra = {
@@ -77,7 +88,7 @@ class UniversalStressRequest(BaseModel):
                 "entities": [
                     {"name": "HQ Building", "value": 500000000, "criticality": "critical"}
                 ],
-                "monte_carlo_simulations": 10000
+                "monte_carlo_simulations": 100000
             }
         }
 
@@ -124,6 +135,11 @@ class UniversalStressResponse(BaseModel):
     sector: str
     scenario_type: str
     severity: float
+    
+    # Regime
+    regime_used: Optional[str] = None
+    regime_parameters: Optional[Dict[str, Any]] = None
+    historical_scenario_id: Optional[str] = None
     
     # Results
     executive_summary: Dict[str, Any]
@@ -236,14 +252,36 @@ async def execute_universal_stress_test(
                 severity=request.severity
             )
         
+        # Historical scenario pre-fill (if provided)
+        effective_severity = request.severity
+        effective_regime = request.market_regime
+        effective_indicators = request.market_indicators
+        historical_scenario_id = request.historical_scenario_id
+        try:
+            if historical_scenario_id:
+                from src.services.historical_scenarios import get_scenario
+                hs = get_scenario(historical_scenario_id)
+                if hs:
+                    effective_severity = max(effective_severity, hs.get("severity_override", effective_severity))
+                    if hs.get("regime") and not effective_regime:
+                        effective_regime = hs["regime"]
+                    if hs.get("vix_level") and not effective_indicators:
+                        effective_indicators = {"vix": hs["vix_level"]}
+        except ImportError:
+            logger.debug("Historical scenarios module not available")
+        
         # Run stress test
         stress_result = run_stress_test(
             exposures=exposures,
             scenario_id=test_id,
             scenario_type=request.scenario_type,
-            severity=request.severity,
+            severity=effective_severity,
             n_simulations=request.monte_carlo_simulations,
-            include_cascade=request.include_cascade
+            include_cascade=request.include_cascade,
+            market_regime=effective_regime,
+            market_indicators=effective_indicators,
+            distribution=request.distribution,
+            degrees_of_freedom=request.degrees_of_freedom,
         )
         
         # Build loss distribution response
@@ -258,7 +296,7 @@ async def execute_universal_stress_test(
             confidence_interval_90=list(mc.confidence_interval_90),
             percentiles=mc.percentiles,
             monte_carlo_runs=mc.simulation_count,
-            methodology="Gaussian copula Monte Carlo"
+            methodology=f"{'Student-t' if request.distribution == 'student_t' else 'Gaussian'} copula Monte Carlo"
         )
         
         # Timeline analysis
@@ -383,12 +421,20 @@ async def execute_universal_stress_test(
         # Predictive indicators
         predictive_indicators = report_v2.get("predictive_indicators")
         
+        # Extract regime info from result metadata
+        result_meta = stress_result.metadata or {}
+        regime_used = result_meta.get("regime_used")
+        regime_parameters = result_meta.get("regime_parameters")
+        
         return UniversalStressResponse(
             test_id=test_id,
             timestamp=datetime.utcnow(),
             sector=request.sector,
             scenario_type=request.scenario_type,
-            severity=request.severity,
+            severity=effective_severity,
+            regime_used=regime_used,
+            regime_parameters=regime_parameters,
+            historical_scenario_id=historical_scenario_id,
             executive_summary=executive_summary,
             loss_distribution=loss_distribution,
             timeline_analysis=timeline_analysis,
@@ -401,11 +447,14 @@ async def execute_universal_stress_test(
                 "model_version": "2.0.0",
                 "methodology": "Universal Stress Testing v1.0",
                 "monte_carlo_simulations": request.monte_carlo_simulations,
+                "distribution": request.distribution,
+                "degrees_of_freedom": request.degrees_of_freedom if request.distribution == "student_t" else None,
                 "engines_used": {
                     "monte_carlo": True,
                     "contagion_matrix": request.include_cascade,
                     "recovery_calculator": request.include_recovery,
-                    "sector_calculators": True
+                    "sector_calculators": True,
+                    "regime_engine": regime_used is not None,
                 }
             }
         )
@@ -422,6 +471,35 @@ async def execute_universal_stress_test(
             status_code=500,
             detail=f"Stress test execution failed: {str(e)}"
         )
+
+
+@router.get("/scenarios")
+async def list_historical_scenarios():
+    """
+    Return the historical scenario library.
+    
+    Each scenario provides pre-filled shock parameters that can be used
+    with the universal stress test endpoint via historical_scenario_id.
+    """
+    from src.services.historical_scenarios import list_scenarios
+    return list_scenarios()
+
+
+@router.get("/scenarios/{scenario_id}")
+async def get_historical_scenario(scenario_id: str):
+    """Return full details for a specific historical scenario."""
+    from src.services.historical_scenarios import get_scenario
+    scenario = get_scenario(scenario_id)
+    if not scenario:
+        raise HTTPException(status_code=404, detail=f"Scenario '{scenario_id}' not found")
+    return scenario
+
+
+@router.get("/regimes")
+async def list_regimes():
+    """Return all market regimes with their parameter sets."""
+    from src.services.regime_engine import get_all_regimes
+    return get_all_regimes()
 
 
 @router.get("/sectors/{sector}/parameters", response_model=SectorParametersResponse)
@@ -676,7 +754,7 @@ async def validate_stress_test_schema(
             "timeline": request.get("timeline", "72h"),
             "entities": entities,
             "total_exposure": request.get("total_exposure"),
-            "monte_carlo_simulations": request.get("monte_carlo_simulations", 10000),
+            "monte_carlo_simulations": request.get("monte_carlo_simulations", 100000),
             "include_cascade": request.get("include_cascade", True),
             "include_recovery": request.get("include_recovery", True)
         }

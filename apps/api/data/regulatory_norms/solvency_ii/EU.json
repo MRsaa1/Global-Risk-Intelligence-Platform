@@ -1,0 +1,14 @@
+{
+  "title": "Solvency II Directive — EU",
+  "source_url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32009L0138",
+  "chunks": [
+    {
+      "article_id": "Art. 100",
+      "content": "Solvency Capital Requirement (SCR). The SCR shall correspond to the 99.5% VaR of the basic own funds of an insurance or reinsurance undertaking over a one-year period. It may be calculated using the Standard Formula or an approved internal model."
+    },
+    {
+      "article_id": "Art. 128-131",
+      "content": "Minimum Capital Requirement (MCR). The MCR shall never fall below 25% of the SCR (or 45% for certain undertakings). Absolute floor: €3.7M for life, €2.5M for non-life. Solvency ratio = (Eligible own funds / SCR) * 100%; must be >= 100%."
+    }
+  ]
+}

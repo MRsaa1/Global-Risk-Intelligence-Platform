@@ -552,6 +552,7 @@ class RivaTTSRequest(BaseModel):
     """Request for Riva text-to-speech (report narration, voice alerts)."""
     text: str = Field(..., min_length=1, max_length=5000)
     language: str = Field(default="en", max_length=10)
+    voice: str = Field(default="", max_length=120, description="Optional voice name, e.g. English-US.Female-1; empty = use config/default female")
 
 
 class RivaSTTRequest(BaseModel):
@@ -600,7 +601,8 @@ async def riva_tts(
     """
     if not riva_service.is_available():
         raise HTTPException(status_code=503, detail="Riva is disabled or not configured (enable_riva, riva_url)")
-    result = await riva_service.tts(request.text, request.language)
+    voice = (request.voice or "").strip() or None
+    result = await riva_service.tts(request.text, request.language, voice_name=voice)
     if not result:
         raise HTTPException(status_code=503, detail="Riva TTS unavailable or failed")
     return {

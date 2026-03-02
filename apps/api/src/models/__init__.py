@@ -15,14 +15,56 @@ from .stress_test import (
     OrganizationType,
     ImpactType,
 )
+from .recovery_plan import RecoveryPlan, RecoveryIndicator, RecoveryMeasure
 from .historical_event import HistoricalEvent
 from .bim import BIMModel, BIMFloor, BIMElement, BIMSite, BIMBuilding
 from .spatial_data import PointCloudCapture, SatelliteImage, PointCloudSource, SatelliteProvider
 from .project import Project, ProjectPhase, ProjectType, ProjectStatus, PhaseType
 from .portfolio import Portfolio, PortfolioAsset, PortfolioType
-from .fraud import DamageClaim, DamageClaimEvidence, ClaimType, ClaimStatus, DamageType, EvidenceType
+from .fraud import DamageClaim, DamageClaimEvidence, ClaimType, ClaimStatus, DamageType, EvidenceType, FraudDetectionRule
 from .annotation import SceneAnnotation, AnnotationComment, AnnotationType, AnnotationStatus
+from .grant_payout import GrantPayout
+from .municipal_subscription import MunicipalSubscription
 from .twin_asset_library import TwinAssetLibraryItem
+from .decision_object import (
+    DecisionObject,
+    AgentAssessment,
+    ConsensusResult,
+    DissentRecord,
+    Verdict,
+    Provenance,
+)
+from .ethicist_audit import EthicistAuditLog
+from .human_review import HumanReviewRequest
+from .client_finetune import ClientFinetuneDataset, ClientFinetuneRun
+from .agent_audit_log import AgentAuditLog
+from .module_audit_log import ModuleAuditLog
+from .regulatory_document import RegulatoryDocument, RegulatoryDocumentChunk
+from .compliance_verification import ComplianceVerification
+from .field_observation import FieldObservation, CalibrationResult
+from .ingestion_source import IngestionSource
+from .backtest_run import BacktestRun
+from .alert_trigger import AlertTrigger
+from .fat_tail_event import FatTailEvent
+from .lpr import LprEntity, LprAppearance, LprMetrics
+from .disinformation import DisinformationSource, DisinformationPost, DisinformationCampaign
+from .hitl_approval import HitlApprovalRequest
+from .agent_message_log import AgentMessageLog
+from .resolved_alert_key import ResolvedAlertKey
+from .external_risk_events import (
+    RawSourceRecord,
+    NormalizedEvent,
+    EventEntity,
+    EventLoss,
+    EventImpact,
+    EventRecovery,
+    SourceRegistry,
+    FxRate,
+    CpiIndex,
+    ProcessingRun,
+    DataQualityScore,
+)
+from .market_data_snapshot import MarketDataSnapshot
 # Foundry-style Ontology (Institutional-grade)
 from .ontology import (
     HazardType,
@@ -75,6 +117,10 @@ __all__ = [
     "ActionPlan",
     "OrganizationType",
     "ImpactType",
+    # Recovery Plans (BCP)
+    "RecoveryPlan",
+    "RecoveryIndicator",
+    "RecoveryMeasure",
     # Historical Event
     "HistoricalEvent",
     # BIM
@@ -101,6 +147,7 @@ __all__ = [
     # Fraud Detection
     "DamageClaim",
     "DamageClaimEvidence",
+    "FraudDetectionRule",
     "ClaimType",
     "ClaimStatus",
     "DamageType",
@@ -110,8 +157,54 @@ __all__ = [
     "AnnotationComment",
     "AnnotationType",
     "AnnotationStatus",
+    # Grant payouts (CADAPT commissions)
+    "GrantPayout",
+    "MunicipalSubscription",
     # Digital Twin Asset Library
     "TwinAssetLibraryItem",
+    # Decision Object (Risk & Intelligence OS)
+    "DecisionObject",
+    "AgentAssessment",
+    "ConsensusResult",
+    "DissentRecord",
+    "Verdict",
+    "Provenance",
+    "EthicistAuditLog",
+    "HumanReviewRequest",
+    "ClientFinetuneDataset",
+    "ClientFinetuneRun",
+    "AgentAuditLog",
+    "ModuleAuditLog",
+    "RegulatoryDocument",
+    "RegulatoryDocumentChunk",
+    "ComplianceVerification",
+    "FieldObservation",
+    "CalibrationResult",
+    "IngestionSource",
+    "BacktestRun",
+    "AlertTrigger",
+    "FatTailEvent",
+    "LprEntity",
+    "LprAppearance",
+    "LprMetrics",
+    "DisinformationSource",
+    "DisinformationPost",
+    "DisinformationCampaign",
+    "HitlApprovalRequest",
+    "AgentMessageLog",
+    "ResolvedAlertKey",
+    "RawSourceRecord",
+    "NormalizedEvent",
+    "EventEntity",
+    "EventLoss",
+    "EventImpact",
+    "EventRecovery",
+    "SourceRegistry",
+    "FxRate",
+    "CpiIndex",
+    "ProcessingRun",
+    "DataQualityScore",
+    "MarketDataSnapshot",
     # Foundry-style Ontology
     "HazardType",
     "RiskCategory",

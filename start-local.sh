@@ -27,12 +27,22 @@ if ! docker info &> /dev/null; then
     exit 1
 fi
 
+# Prefer docker compose (v2) if available, else docker-compose (v1)
+if docker compose version &> /dev/null; then
+    DOCKER_COMPOSE="docker compose"
+elif command -v docker-compose &> /dev/null; then
+    DOCKER_COMPOSE="docker-compose"
+else
+    echo -e "${RED}❌ docker compose or docker-compose not found. Install Docker Desktop or docker-compose.${NC}"
+    exit 1
+fi
+
 echo -e "${GREEN}✓${NC} Docker is running"
 
 # Start infrastructure
 echo ""
 echo "🐳 Starting infrastructure..."
-docker-compose up -d postgres redis neo4j minio
+$DOCKER_COMPOSE up -d postgres redis neo4j minio
 
 echo ""
 echo "⏳ Waiting for services to be ready..."
@@ -42,25 +52,25 @@ sleep 10
 echo ""
 echo "📊 Checking services:"
 
-if docker-compose ps postgres | grep -q "Up"; then
+if $DOCKER_COMPOSE ps postgres | grep -q "Up"; then
     echo -e "   ${GREEN}✓${NC} PostgreSQL + PostGIS"
 else
     echo -e "   ${YELLOW}⚠${NC} PostgreSQL starting..."
 fi
 
-if docker-compose ps redis | grep -q "Up"; then
+if $DOCKER_COMPOSE ps redis | grep -q "Up"; then
     echo -e "   ${GREEN}✓${NC} Redis"
 else
     echo -e "   ${YELLOW}⚠${NC} Redis starting..."
 fi
 
-if docker-compose ps neo4j | grep -q "Up"; then
+if $DOCKER_COMPOSE ps neo4j | grep -q "Up"; then
     echo -e "   ${GREEN}✓${NC} Neo4j (Knowledge Graph)"
 else
     echo -e "   ${YELLOW}⚠${NC} Neo4j starting..."
 fi
 
-if docker-compose ps minio | grep -q "Up"; then
+if $DOCKER_COMPOSE ps minio | grep -q "Up"; then
     echo -e "   ${GREEN}✓${NC} MinIO (Object Storage)"
 else
     echo -e "   ${YELLOW}⚠${NC} MinIO starting..."
@@ -90,7 +100,7 @@ echo "      npm run dev"
 echo ""
 echo "   3. Open in browser:"
 echo "      API:  http://localhost:9002/docs"
-echo "      Web:  http://localhost:5173"
+echo "      Web:  http://localhost:5180   (this project uses port 5180, not 5173)"
 echo ""
 echo "   4. (Optional) Seed demo data after API is running:"
 echo "      POST /api/v1/seed/seed (requires admin auth)"

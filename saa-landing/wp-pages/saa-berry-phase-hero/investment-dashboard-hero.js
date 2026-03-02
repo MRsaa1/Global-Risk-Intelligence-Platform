@@ -1,0 +1,52 @@
+/**
+ * Investment Dashboard hero: Phase Clocks. Enqueued only on Investment Dashboard page.
+ * Expects: <canvas id="heroCanvasInvest"> inside .module-hero-canvas
+ */
+(function(){
+function run(){
+var c=document.getElementById('heroCanvasInvest');
+if(!c||!c.parentElement){setTimeout(run,50);return;}
+var x=c.getContext('2d');if(!x)return;
+var dpr=window.devicePixelRatio||1;
+function phaseColor(phi,a){var h=42+145*(0.5+0.5*Math.sin(phi));return'hsla('+h+',55%,52%,'+a+')'}
+function neonGlow(px,py,r,phi){var g=x.createRadialGradient(px,py,0,px,py,r);g.addColorStop(0,phaseColor(phi,0.7));g.addColorStop(0.35,phaseColor(phi,0.25));g.addColorStop(1,phaseColor(phi,0));x.fillStyle=g;x.beginPath();x.arc(px,py,r,0,Math.PI*2);x.fill()}
+var CLOCKS=['Equity','Fixed Inc','Altern','Crypto','Derivs','REIT'];
+var NC=6,speeds=[0.0007,0.0004,0.0005,0.0012,0.0008,0.0006];
+var phases=[];for(var ci=0;ci<NC;ci++)phases.push(Math.random()*Math.PI*2);
+function sz(){if(!c.parentElement)return;var r=c.parentElement.getBoundingClientRect();if(r.width<1||r.height<1){setTimeout(sz,200);return}c.width=r.width*dpr;c.height=r.height*dpr;x.setTransform(dpr,0,0,dpr,0,0)}
+function draw(now){
+if(!now)now=0;
+var w=c.width/dpr,h=c.height/dpr;x.clearRect(0,0,w,h);
+var marginX=w*0.06,spacing=(w-marginX*2)/NC;
+var clockR=Math.min(spacing*0.35,h*0.28);
+var clockY=h*0.42;
+for(var ci2=0;ci2<NC;ci2++)phases[ci2]+=speeds[ci2];
+var positions=[];
+for(var ci3=0;ci3<NC;ci3++){
+var cx2=marginX+spacing*ci3+spacing/2;
+positions.push({x:cx2,y:clockY});
+var phi=phases[ci3];
+x.strokeStyle=phaseColor(phi,0.12);x.lineWidth=1;x.beginPath();x.arc(cx2,clockY,clockR,0,Math.PI*2);x.stroke();
+var ambG=x.createRadialGradient(cx2,clockY,clockR*0.3,cx2,clockY,clockR*1.1);ambG.addColorStop(0,phaseColor(phi,0.04));ambG.addColorStop(1,phaseColor(phi,0));x.fillStyle=ambG;x.beginPath();x.arc(cx2,clockY,clockR*1.1,0,Math.PI*2);x.fill();
+for(var tk=0;tk<12;tk++){var ta=tk/12*Math.PI*2;var tx1=cx2+Math.cos(ta)*clockR*0.88;var ty1=clockY+Math.sin(ta)*clockR*0.88;var tx2=cx2+Math.cos(ta)*clockR*0.95;var ty2=clockY+Math.sin(ta)*clockR*0.95;x.strokeStyle=phaseColor(phi,tk%3===0?0.25:0.1);x.lineWidth=tk%3===0?1.2:0.6;x.beginPath();x.moveTo(tx1,ty1);x.lineTo(tx2,ty2);x.stroke()}
+var vx=cx2+Math.cos(phi-Math.PI/2)*clockR*0.75;var vy=clockY+Math.sin(phi-Math.PI/2)*clockR*0.75;
+var vg=x.createLinearGradient(cx2,clockY,vx,vy);vg.addColorStop(0,phaseColor(phi,0.3));vg.addColorStop(1,phaseColor(phi,0.9));x.strokeStyle=vg;x.lineWidth=2;x.beginPath();x.moveTo(cx2,clockY);x.lineTo(vx,vy);x.stroke();
+neonGlow(vx,vy,10,phi);x.fillStyle=phaseColor(phi,0.9);x.beginPath();x.arc(vx,vy,3,0,Math.PI*2);x.fill();
+x.fillStyle=phaseColor(phi,0.4);x.beginPath();x.arc(cx2,clockY,2,0,Math.PI*2);x.fill();
+x.font='500 9px "JetBrains Mono",monospace';x.textAlign='center';x.textBaseline='top';x.fillStyle=phaseColor(phi,0.55);x.fillText(CLOCKS[ci3],cx2,clockY+clockR+8);
+var barW=clockR*1.4,barH=4,barX=cx2-barW/2,barY=clockY+clockR+22;
+var prob0=0.5+0.08*Math.sin(phi);x.fillStyle=phaseColor(0,0.08);x.fillRect(barX,barY,barW,barH);x.fillStyle=phaseColor(phi,0.3);x.fillRect(barX,barY,barW*prob0,barH);
+x.font='400 6px "JetBrains Mono",monospace';x.fillStyle=phaseColor(phi,0.3);x.textBaseline='top';x.textAlign='left';x.fillText('|0\u27E9',barX,barY+barH+1);x.textAlign='right';x.fillText('|1\u27E9',barX+barW,barY+barH+1);
+}
+for(var ci4=0;ci4<NC;ci4++){for(var cj=ci4+1;cj<NC;cj++){var pDiff=Math.cos(phases[ci4]-phases[cj]);var corrA=Math.abs(pDiff)*0.15;var corrPhi=pDiff>0?phases[ci4]:phases[ci4]+Math.PI;x.strokeStyle=phaseColor(corrPhi,corrA);x.lineWidth=0.8;x.setLineDash([3,4]);var p1=positions[ci4],p2=positions[cj];var midY2=clockY-clockR*1.4-Math.abs(ci4-cj)*8;x.beginPath();x.moveTo(p1.x,p1.y-clockR);x.quadraticCurveTo((p1.x+p2.x)/2,midY2,p2.x,p2.y-clockR);x.stroke();x.setLineDash([])}}
+var aggPhi=0;for(var ci5=0;ci5<NC;ci5++)aggPhi+=phases[ci5];aggPhi/=NC;var aggX=w/2,aggY=h*0.08;
+x.font='500 8px "JetBrains Mono",monospace';x.textAlign='center';x.textBaseline='middle';x.fillStyle=phaseColor(aggPhi,0.4);x.fillText('Portfolio Phase: '+(aggPhi%(Math.PI*2)).toFixed(2)+' rad',aggX,aggY);
+neonGlow(aggX-70,aggY,5,aggPhi);neonGlow(aggX+70,aggY,5,aggPhi);
+requestAnimationFrame(draw);
+}
+sz();window.addEventListener('resize',sz);requestAnimationFrame(draw);
+document.addEventListener('visibilitychange',function(){if(!document.hidden)requestAnimationFrame(draw)});
+window.addEventListener('pageshow',function(e){if(e.persisted){sz();requestAnimationFrame(draw)}});
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',run);}else{setTimeout(run,0);}
+})();
