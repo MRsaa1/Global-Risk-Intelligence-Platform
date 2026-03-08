@@ -38,7 +38,7 @@ jobs:
 
       - name: Run integration tests
         run: |
-          pytest tests/integration/ tests/security/ -v --tb=short --timeout=60 -q
+          pytest tests/ -v --tb=short --timeout=60 -q
         env:
           USE_SQLITE: "true"
           SECRET_KEY: "nightly-test-secret-key-do-not-use-in-production"
